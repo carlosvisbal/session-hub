@@ -1,0 +1,98 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later · Copyright (C) 2026 Los autores de Session Hub (ver AUTHORS) */
+* { box-sizing: border-box }
+body { margin: 0; padding: 0; font-family: var(--vscode-font-family); font-size: var(--vscode-font-size); color: var(--vscode-foreground); background: var(--vscode-editor-background) }
+button { font: inherit; color: var(--vscode-button-secondaryForeground); background: var(--vscode-button-secondaryBackground); border: 0; border-radius: 4px; padding: 4px 10px; cursor: pointer }
+button:hover { background: var(--vscode-button-secondaryHoverBackground) }
+button.primary { color: var(--vscode-button-foreground); background: var(--vscode-button-background) }
+button.primary:hover { background: var(--vscode-button-hoverBackground) }
+button.icon { background: none; padding: 2px 4px; color: var(--vscode-descriptionForeground) }
+button.icon.on { color: var(--vscode-charts-yellow, #d7ba7d) }
+input, select { font: inherit; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border, transparent); border-radius: 4px; padding: 4px 8px }
+.muted { color: var(--vscode-descriptionForeground) }
+.small { font-size: 12px }
+.pad { padding: 16px }
+
+header { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--vscode-panel-border) }
+header h1 { font-size: 15px; margin: 0 }
+header .me { display: flex; align-items: center; gap: 6px }
+header .spacer { flex: 1 }
+.pill { font-size: 11px; padding: 1px 7px; border-radius: 10px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); white-space: nowrap }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; background: var(--vscode-disabledForeground, #888); flex: none }
+.dot.on { background: var(--vscode-testing-iconPassed, #3fb950) }
+
+main { display: grid; grid-template-columns: 270px 380px 1fr; height: calc(100vh - 50px) }
+main > section { overflow: auto; border-right: 1px solid var(--vscode-panel-border) }
+main > section:last-child { border-right: 0 }
+h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--vscode-descriptionForeground); margin: 16px 14px 6px }
+
+.person { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px; align-items: center; padding: 8px 14px }
+.person:hover { background: var(--vscode-list-hoverBackground) }
+.person .name { font-weight: 600 }
+.person .sub { grid-column: 2 / 4 }
+.person.clickable { cursor: pointer }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px }
+.chip { font-size: 11px; padding: 0 6px; border-radius: 3px; border: 1px solid var(--vscode-panel-border); color: var(--vscode-descriptionForeground) }
+
+.read { padding: 7px 14px; border-left: 2px solid transparent }
+.read.fresh { border-left-color: var(--vscode-focusBorder) }
+.read b { font-weight: 600 }
+
+.tabs { display: flex; gap: 2px; padding: 10px 12px 0; border-bottom: 1px solid var(--vscode-panel-border); position: sticky; top: 0; background: var(--vscode-editor-background); z-index: 1 }
+.tab { background: none; border-radius: 0; padding: 6px 10px; color: var(--vscode-descriptionForeground); border-bottom: 2px solid transparent }
+.tab.sel { color: var(--vscode-foreground); border-bottom-color: var(--vscode-focusBorder) }
+.filters { display: flex; gap: 6px; padding: 8px 12px; position: sticky; top: 37px; background: var(--vscode-editor-background); z-index: 1 }
+.filters input { flex: 1; min-width: 0 }
+
+.card { padding: 9px 14px; border-bottom: 1px solid var(--vscode-panel-border); cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 2px 6px }
+.card:hover { background: var(--vscode-list-hoverBackground) }
+.card.sel { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground) }
+.card .t { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.card .meta { grid-column: 1 / 3 }
+.src { font-size: 10px; padding: 0 5px; border-radius: 3px; color: #fff }
+.src.cursor { background: #6e56cf } .src.claude-code { background: #c15f3c }
+.seen { color: var(--vscode-textLink-foreground) }
+
+.detail { padding: 14px 22px 40px }
+.detail h2 { margin: 0 0 4px; font-size: 17px }
+.actions { display: flex; gap: 6px; margin: 10px 0 }
+.msg { border: 1px solid var(--vscode-panel-border); border-radius: 6px; padding: 9px 13px; margin: 9px 0; white-space: pre-wrap; word-break: break-word; line-height: 1.5 }
+.msg.user { background: var(--vscode-textBlockQuote-background); border-left: 3px solid var(--vscode-textLink-foreground) }
+.acts { margin-top: 6px; font-family: var(--vscode-editor-font-family); font-size: 12px; color: var(--vscode-descriptionForeground) }
+pre { font-family: var(--vscode-editor-font-family); font-size: 12px; background: var(--vscode-textCodeBlock-background); padding: 8px; border-radius: 4px; overflow-x: auto }
+.empty { padding: 30px 16px; text-align: center; color: var(--vscode-descriptionForeground) }
+.err { color: var(--vscode-errorForeground) }
+
+@media (max-width: 1000px) {
+  main { grid-template-columns: 1fr; height: auto }
+  main > section { border-right: 0; border-bottom: 1px solid var(--vscode-panel-border); max-height: none }
+  .tabs, .filters { position: static }
+}
+
+/* Controles de compartir, bienvenida y estado */
+button.warn { color: var(--vscode-button-foreground); background: var(--vscode-statusBarItem-warningBackground, #b58900) }
+button.link { background: none; color: var(--vscode-textLink-foreground); padding: 4px 6px }
+.banner { margin: 0; padding: 8px 16px; border-bottom: 1px solid var(--vscode-panel-border) }
+.warnbg { background: color-mix(in srgb, var(--vscode-statusBarItem-warningBackground, #b58900) 25%, transparent) }
+.warn-txt { color: var(--vscode-editorWarning-foreground, #cca700) }
+.ok-txt { color: var(--vscode-testing-iconPassed, #3fb950) }
+.hint { margin: 0; padding: 6px 14px; font-size: 12px; color: var(--vscode-descriptionForeground) }
+.dim { opacity: .55 }
+.share { margin: 6px 12px; padding: 8px 10px; border: 1px solid var(--vscode-panel-border); border-radius: 6px }
+.share .actions { margin: 6px 0 0 }
+.offer { margin: 6px 12px; padding: 8px 10px; border: 1px dashed var(--vscode-focusBorder); border-radius: 6px }
+.offer button { margin-top: 6px }
+.read.denied { border-left-color: var(--vscode-errorForeground) }
+.checks { margin: 0 0 12px }
+.checks summary { padding: 0 14px; cursor: pointer }
+.check { display: flex; gap: 8px; padding: 5px 14px; align-items: flex-start }
+.check .ic { width: 14px; flex: none; text-align: center; font-weight: 700 }
+.check.ok .ic { color: var(--vscode-testing-iconPassed, #3fb950) }
+.check.warn .ic { color: var(--vscode-editorWarning-foreground, #cca700) }
+.check.error .ic { color: var(--vscode-errorForeground) }
+.welcome { max-width: 620px; margin: 48px auto; padding: 0 20px; line-height: 1.6 }
+.welcome h1 { font-size: 22px; margin-bottom: 8px }
+.welcome ol { padding-left: 20px }
+.welcome .actions { margin: 18px 0 }
+.person-actions { margin: 2px 0 0 }
+.person-actions button { padding: 0 6px 0 0; font-size: 12px }
+button.danger { color: var(--vscode-errorForeground) }

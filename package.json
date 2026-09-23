@@ -1,0 +1,464 @@
+{
+  "name": "session-hub",
+  "displayName": "Session Hub",
+  "version": "0.6.1",
+  "description": "Comparte con tu equipo las sesiones de Claude Code y Cursor: de igual a igual, cifrado, con identidad firmada y listo para MCP. · Share Claude Code & Cursor AI sessions with your team — peer-to-peer, encrypted, MCP-ready.",
+  "publisher": "carlosvisbal",
+  "author": {
+    "name": "Carlos Visbal",
+    "email": "carlosvisbal66@gmail.com",
+    "url": "https://github.com/carlosvisbal"
+  },
+  "license": "AGPL-3.0-or-later",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/carlosvisbal/session-hub.git"
+  },
+  "homepage": "https://github.com/carlosvisbal/session-hub#readme",
+  "bugs": {
+    "url": "https://github.com/carlosvisbal/session-hub/issues"
+  },
+  "keywords": [
+    "mcp",
+    "claude-code",
+    "cursor",
+    "ai",
+    "collaboration",
+    "p2p",
+    "hyperswarm",
+    "team",
+    "sessions"
+  ],
+  "categories": [
+    "AI",
+    "Other"
+  ],
+  "icon": "media/logo.png",
+  "galleryBanner": {
+    "color": "#0d1b3e",
+    "theme": "dark"
+  },
+  "engines": {
+    "vscode": "^1.90.0",
+    "node": ">=22.5"
+  },
+  "main": "./extension/extension.cjs",
+  "type": "module",
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "scripts": {
+    "setup": "node src/setup.js",
+    "start": "node --disable-warning=ExperimentalWarning src/server.js",
+    "package": "vsce package",
+    "licenses": "node scripts/third-party-notices.mjs",
+    "test": "node --test test/*.test.js",
+    "test:e2e": "node test/e2e/two-hubs.mjs"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "sessionHub.start",
+        "title": "Iniciar hub",
+        "category": "Session Hub",
+        "icon": "$(play)"
+      },
+      {
+        "command": "sessionHub.stop",
+        "title": "Detener hub",
+        "category": "Session Hub",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "sessionHub.createTeam",
+        "title": "Crear equipo",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.joinTeam",
+        "title": "Unirme a un equipo (pegar invitación)",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.copyInvite",
+        "title": "Invitar a una persona (copiar invitación)",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.shareWorkspace",
+        "title": "Compartir este proyecto",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.unshareProject",
+        "title": "Dejar de compartir un proyecto",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.refresh",
+        "title": "Refrescar",
+        "category": "Session Hub",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "sessionHub.whatChanged",
+        "title": "¿Qué hay nuevo?",
+        "category": "Session Hub",
+        "icon": "$(sparkle)"
+      },
+      {
+        "command": "sessionHub.copyClaudeCommand",
+        "title": "Conectar Claude Code (copiar comando)",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.openWebViewer",
+        "title": "Abrir visor web",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.openSession",
+        "title": "Abrir sesión",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.openDashboard",
+        "title": "Abrir panel",
+        "category": "Session Hub",
+        "icon": "$(layout)"
+      },
+      {
+        "command": "sessionHub.openSource",
+        "title": "Ver código fuente y licencia (AGPL-3.0)",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.togglePause",
+        "title": "Pausar / reanudar compartir",
+        "category": "Session Hub",
+        "icon": "$(debug-pause)"
+      },
+      {
+        "command": "sessionHub.editProjectAccess",
+        "title": "Quién puede ver un proyecto…",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.toggleSessionVisibility",
+        "title": "Ocultar / mostrar sesión al equipo",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.doctor",
+        "title": "Diagnóstico",
+        "category": "Session Hub",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "sessionHub.leaveTeam",
+        "title": "Salir del equipo",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.blockMember",
+        "title": "Bloquear / desbloquear a una persona (solo para mí)",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.revokeMember",
+        "title": "Expulsar del equipo",
+        "category": "Session Hub"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "sessionHub.openSession",
+          "when": "false"
+        },
+        {
+          "command": "sessionHub.toggleSessionVisibility",
+          "when": "false"
+        },
+        {
+          "command": "sessionHub.blockMember",
+          "when": "false"
+        },
+        {
+          "command": "sessionHub.revokeMember",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "sessionHub.openDashboard",
+          "when": "view == sessionHub.team",
+          "group": "navigation@0"
+        },
+        {
+          "command": "sessionHub.whatChanged",
+          "when": "view == sessionHub.team",
+          "group": "navigation@1"
+        },
+        {
+          "command": "sessionHub.refresh",
+          "when": "view == sessionHub.team",
+          "group": "navigation@2"
+        },
+        {
+          "command": "sessionHub.shareWorkspace",
+          "when": "view == sessionHub.team",
+          "group": "1_setup@1"
+        },
+        {
+          "command": "sessionHub.unshareProject",
+          "when": "view == sessionHub.team",
+          "group": "1_setup@2"
+        },
+        {
+          "command": "sessionHub.createTeam",
+          "when": "view == sessionHub.team",
+          "group": "2_team@1"
+        },
+        {
+          "command": "sessionHub.joinTeam",
+          "when": "view == sessionHub.team",
+          "group": "2_team@2"
+        },
+        {
+          "command": "sessionHub.copyInvite",
+          "when": "view == sessionHub.team",
+          "group": "2_team@3"
+        },
+        {
+          "command": "sessionHub.copyClaudeCommand",
+          "when": "view == sessionHub.team",
+          "group": "3_tools@1"
+        },
+        {
+          "command": "sessionHub.openWebViewer",
+          "when": "view == sessionHub.team",
+          "group": "3_tools@2"
+        },
+        {
+          "command": "sessionHub.start",
+          "when": "view == sessionHub.team",
+          "group": "4_hub@1"
+        },
+        {
+          "command": "sessionHub.stop",
+          "when": "view == sessionHub.team",
+          "group": "4_hub@2"
+        },
+        {
+          "command": "sessionHub.togglePause",
+          "when": "view == sessionHub.team",
+          "group": "1_setup@3"
+        },
+        {
+          "command": "sessionHub.editProjectAccess",
+          "when": "view == sessionHub.team",
+          "group": "1_setup@4"
+        },
+        {
+          "command": "sessionHub.doctor",
+          "when": "view == sessionHub.team",
+          "group": "3_tools@0"
+        },
+        {
+          "command": "sessionHub.leaveTeam",
+          "when": "view == sessionHub.team",
+          "group": "2_team@9"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "sessionHub.whatChanged",
+          "when": "view == sessionHub.team && viewItem == member",
+          "group": "inline"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "sessionHub",
+          "title": "Session Hub",
+          "icon": "media/icon.svg"
+        }
+      ]
+    },
+    "views": {
+      "sessionHub": [
+        {
+          "id": "sessionHub.team",
+          "name": "Equipo"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "sessionHub.team",
+        "contents": "Comparte tus sesiones de Claude Code y Cursor con tu equipo en la red local.\n[Crear equipo](command:sessionHub.createTeam)\n[Unirme con una invitación](command:sessionHub.joinTeam)\nSi ya tienes equipo: [Iniciar hub](command:sessionHub.start) · [Abrir panel](command:sessionHub.openDashboard) · [Diagnóstico](command:sessionHub.doctor)"
+      }
+    ],
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "sessionHub.mcp",
+        "label": "Session Hub"
+      }
+    ],
+    "configuration": {
+      "title": "Session Hub",
+      "properties": {
+        "sessionHub.name": {
+          "type": "string",
+          "default": "",
+          "description": "Tu nombre visible para el equipo (va firmado con tu clave)."
+        },
+        "sessionHub.role": {
+          "type": "string",
+          "default": "",
+          "description": "Tu rol: backend, frontend, QA…"
+        },
+        "sessionHub.sharedProjects": {
+          "type": "array",
+          "default": [],
+          "description": "Proyectos cuyas sesiones compartes. Usa el comando 'Compartir este proyecto'.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "allow": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": [
+                  "*"
+                ],
+                "description": "Quién lo ve: [\"*\"] = todo el equipo, o ids de personas."
+              }
+            },
+            "required": [
+              "path"
+            ]
+          }
+        },
+        "sessionHub.port": {
+          "type": "number",
+          "default": 7420,
+          "description": "Puerto HTTP del hub (API + MCP)."
+        },
+        "sessionHub.peers": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Direcciones extra \"host:puerto\" (UDP) de compañeros, por si la red no los encuentra sola."
+        },
+        "sessionHub.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Iniciar el hub al abrir el editor."
+        },
+        "sessionHub.notifyUpdates": {
+          "type": "boolean",
+          "default": true,
+          "description": "Avisar cuando un compañero avanza en una sesión."
+        },
+        "sessionHub.listSince": {
+          "type": "string",
+          "default": "all",
+          "enum": [
+            "all",
+            "24h",
+            "3d",
+            "7d",
+            "30d"
+          ],
+          "enumDescriptions": [
+            "Todo el historial",
+            "Último día",
+            "Últimos 3 días",
+            "Última semana",
+            "Último mes"
+          ],
+          "description": "Qué sesiones se listan en el panel."
+        },
+        "sessionHub.nodePath": {
+          "type": "string",
+          "default": "",
+          "description": "Vacío = usar el runtime del editor (recomendado). O la ruta a un Node 22.5 o superior."
+        },
+        "sessionHub.redactExtra": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "Expresiones regulares extra a ocultar (nombres de clientes, etc.)."
+        },
+        "sessionHub.notifyReads": {
+          "type": "boolean",
+          "default": true,
+          "description": "Avisar cuando un compañero lee tus sesiones (quién, qué sesión, proyecto y herramienta)."
+        },
+        "sessionHub.paused": {
+          "type": "boolean",
+          "default": false,
+          "description": "Pausa global: mientras esté activa, nadie del equipo ve tus sesiones."
+        },
+        "sessionHub.excludedSessions": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Sesiones ocultas al equipo aunque su proyecto esté compartido. Se gestiona desde el panel."
+        },
+        "sessionHub.network": {
+          "type": "string",
+          "enum": [
+            "lan",
+            "private",
+            "public"
+          ],
+          "default": "lan",
+          "enumDescriptions": [
+            "Red local: los propios hubs forman la red; no necesita internet.",
+            "Nodos de arranque propios (sessionHub.bootstrap): remoto o VPN controlados.",
+            "Red pública de HyperDHT: remoto sin montar nada."
+          ],
+          "description": "Cómo se conectan los hubs del equipo entre sí (siempre cifrado y autenticado)."
+        },
+        "sessionHub.dhtPort": {
+          "type": "number",
+          "default": 49737,
+          "description": "Puerto UDP del hub en modo lan."
+        },
+        "sessionHub.bootstrap": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Modo private: nodos de arranque propios \"host:puerto\"."
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "b4a": "^1.9.0",
+    "hyperdht": "^6.34.0",
+    "hyperswarm": "^4.17.2",
+    "zod": "^4.6.5"
+  }
+}

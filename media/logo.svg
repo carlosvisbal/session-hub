@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" fill="none" stroke-linecap="round">
+  <!-- SPDX-License-Identifier: AGPL-3.0-or-later · Copyright (C) 2026 Los autores de Session Hub (ver AUTHORS) -->
+  <path d="M87 87a58 58 0 0 0 0 82M169 87a58 58 0 0 1 0 82" stroke="#1f5fd6" stroke-width="16"/>
+  <path d="M52 52a107 107 0 0 0 0 152M204 52a107 107 0 0 1 0 152" stroke="#7aa7f0" stroke-width="16"/>
+  <circle cx="128" cy="128" r="22" fill="#1f5fd6"/>
+</svg>

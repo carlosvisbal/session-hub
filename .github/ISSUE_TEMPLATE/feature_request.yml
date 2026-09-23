@@ -1,0 +1,21 @@
+name: 💡 Feature request / Propuesta
+description: Suggest an idea · Propón una mejora
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does it solve? · ¿Qué problema resuelve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal · Propuesta
+    validations:
+      required: true
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy impact · Impacto en privacidad
+      description: Does it share more data, or change who can see what? · ¿Comparte más datos o cambia quién ve qué?

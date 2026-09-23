@@ -1,0 +1,15 @@
+config.json
+*.vsix
+.gitignore
+**/*.map
+node_modules/**/*.d.ts
+node_modules/**/*.d.cts
+node_modules/**/*.md
+node_modules/@modelcontextprotocol/sdk/dist/cjs/**
+test/**
+.github/**
+docs/**
+README.es.md
+CODE_OF_CONDUCT.md
+CONTRIBUTING.md
+media/screenshot.png

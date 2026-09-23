@@ -1,0 +1,117 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later · Copyright (C) 2026 Los autores de Session Hub (ver AUTHORS) -->
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session Hub</title>
+<style>
+  :root { --bg:#f7f7f5; --panel:#fff; --text:#1d1d1b; --muted:#6b6b66; --line:#e3e3de; --accent:#2f6fdb; --user:#eef3fc; --cursor:#7a4fd6; --claude:#c8622d; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161615; --panel:#1f1f1d; --text:#ecece8; --muted:#9a9a93; --line:#33332f; --accent:#6c9cf0; --user:#22293a; } }
+  * { box-sizing:border-box }
+  body { margin:0; font:14px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--text) }
+  header { display:flex; gap:12px; align-items:center; padding:12px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap }
+  header h1 { font-size:16px; margin:0 }
+  select, input, button { font:inherit; padding:6px 10px; border:1px solid var(--line); border-radius:6px; background:var(--panel); color:var(--text) }
+  button { cursor:pointer }
+  main { display:grid; grid-template-columns:minmax(260px,360px) 1fr; height:calc(100vh - 58px) }
+  #list { overflow:auto; border-right:1px solid var(--line) }
+  .item { padding:10px 16px; border-bottom:1px solid var(--line); cursor:pointer }
+  .item:hover, .item.sel { background:var(--panel) }
+  .item .t { font-weight:600 }
+  .meta { color:var(--muted); font-size:12px }
+  .badge { font-size:11px; padding:1px 6px; border-radius:4px; color:#fff }
+  .badge.cursor { background:var(--cursor) } .badge.claude-code { background:var(--claude) }
+  .new { outline:2px solid var(--accent); outline-offset:-2px }
+  #detail { overflow:auto; padding:16px 24px }
+  .msg { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 14px; margin:10px 0; white-space:pre-wrap; word-break:break-word }
+  .msg.user { background:var(--user) }
+  .acts { margin-top:6px; font:12px ui-monospace, monospace; color:var(--muted) }
+  code { font:12px ui-monospace, monospace }
+  @media (max-width: 700px) { main { grid-template-columns:1fr; height:auto } #list { max-height:40vh } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Session Hub</h1>
+  <select id="project"><option value="">Todos los proyectos</option></select>
+  <select id="since"><option value="">Todo</option><option value="2h">2 h</option><option value="24h" selected>24 h</option><option value="7d">7 días</option></select>
+  <button id="changes">¿Qué hay nuevo?</button>
+  <span class="meta" id="status"></span>
+  <a class="meta" href="/source" target="_blank" style="margin-left:auto">Código fuente · AGPL-3.0</a>
+</header>
+<main>
+  <div id="list"></div>
+  <div id="detail"><p class="meta">Selecciona una sesión.</p></div>
+</main>
+<script>
+const params = new URLSearchParams(location.search);
+let token = params.get('token') || (() => { try { return localStorage.getItem('hubToken') } catch { return null } })();
+if (!token) token = prompt('Token del session-hub:');
+try { localStorage.setItem('hubToken', token) } catch {}
+history.replaceState(null, '', location.pathname);
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]));
+const when = (s) => s ? new Date(s).toLocaleString() : '';
+const api = async (p) => {
+  const r = await fetch(p, { headers: { authorization: 'Bearer ' + token } });
+  if (!r.ok) throw new Error((await r.json()).error);
+  return r.json();
+};
+let selected = null;
+
+async function loadList() {
+  const q = new URLSearchParams({ project: $('project').value, since: $('since').value });
+  const sessions = await api('/api/sessions?' + q);
+  $('list').innerHTML = sessions.map((s) => `
+    <div class="item ${s.id === selected ? 'sel' : ''}" data-id="${esc(s.id)}">
+      <div class="t">${esc(s.title)}</div>
+      <div class="meta"><span class="badge ${s.source}">${s.source}</span> ${esc(s.project)} · ${when(s.updatedAt)} · ${s.filesChanged.length} archivos</div>
+    </div>`).join('') || '<p class="meta" style="padding:16px">Sin sesiones en este rango.</p>';
+}
+
+async function showSession(id) {
+  selected = id;
+  document.querySelectorAll('.item').forEach((e) => e.classList.toggle('sel', e.dataset.id === id));
+  const s = await api('/api/sessions/' + encodeURIComponent(id));
+  $('detail').innerHTML = `<h2>${esc(s.title)}</h2>
+    <p class="meta"><span class="badge ${s.source}">${s.source}</span> ${esc(s.project)} ${s.branch ? '· rama <code>' + esc(s.branch) + '</code>' : ''} · ${s.messages} mensajes</p>
+    ${s.filesChanged.length ? '<details><summary>Archivos modificados (' + s.filesChanged.length + ')</summary><pre>' + s.filesChanged.map(esc).join('\n') + '</pre></details>' : ''}
+    ${s.omittedMessages ? `<p class="meta">(${s.omittedMessages} mensajes anteriores omitidos)</p>` : ''}
+    ${s.conversation.map((m) => `<div class="msg ${m.role}"><div class="meta">${m.role === 'user' ? 'Usuario' : 'IA'} · ${when(m.at)}</div>${esc(m.text)}${
+      m.actions.length ? '<div class="acts">' + m.actions.map((a) => (a.kind === 'edit' ? '✎ ' : '$ ') + esc(a.target)).join('<br>') + '</div>' : ''}</div>`).join('')}`;
+}
+
+async function showChanges() {
+  selected = null;
+  const c = await api('/api/changes?' + new URLSearchParams({ project: $('project').value, since: $('since').value || '7d' }));
+  $('detail').innerHTML = `<h2>Novedades desde ${when(c.since)}</h2>` + (c.sessions.map((s) => `
+    <div class="msg"><b>${esc(s.title)}</b> <span class="badge ${s.source}">${s.source}</span>
+      <div class="meta">${esc(s.project)} · ${when(s.updatedAt)}</div>
+      ${s.requests.length ? '<p><b>Se pidió:</b></p><ul>' + s.requests.map((r) => '<li>' + esc(r) + '</li>').join('') + '</ul>' : ''}
+      ${s.filesChanged.length ? '<p><b>Archivos:</b></p><pre>' + s.filesChanged.map(esc).join('\n') + '</pre>' : ''}
+      ${s.lastAssistantMessage ? '<p><b>Último estado:</b></p>' + esc(s.lastAssistantMessage) : ''}
+    </div>`).join('') || '<p class="meta">Nada nuevo.</p>');
+}
+
+$('list').addEventListener('click', (e) => { const it = e.target.closest('.item'); if (it) showSession(it.dataset.id) });
+$('project').onchange = $('since').onchange = loadList;
+$('changes').onclick = showChanges;
+
+api('/api/projects').then((ps) => {
+  $('project').innerHTML += ps.map((p) => `<option>${esc(p.name)}</option>`).join('');
+  loadList();
+}).catch((e) => $('status').textContent = e.message);
+
+const es = new EventSource('/api/events?token=' + encodeURIComponent(token));
+es.addEventListener('sessions', async (e) => {
+  const changed = JSON.parse(e.data);
+  $('status').textContent = 'Actualizado ' + new Date().toLocaleTimeString();
+  await loadList();
+  changed.forEach((s) => document.querySelector(`[data-id="${CSS.escape(s.id)}"]`)?.classList.add('new'));
+  if (changed.some((s) => s.id === selected)) showSession(selected);
+});
+</script>
+</body>
+</html>

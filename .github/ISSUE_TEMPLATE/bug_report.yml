@@ -1,0 +1,55 @@
+name: 🐞 Bug report / Reporte de error
+description: Something doesn't work as expected · Algo no funciona como debería
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Security issues:** don't open a public issue — email carlosvisbal66@gmail.com (see SECURITY.md).
+        **Problemas de seguridad:** no abras un issue público; escribe a carlosvisbal66@gmail.com (ver SECURITY.md).
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened? · ¿Qué pasó?
+      description: Include the exact message you saw · Incluye el mensaje exacto que viste
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce · Pasos para reproducirlo
+      placeholder: "1. …\n2. …\n3. …"
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics · Diagnóstico
+      description: Output of "Session Hub: Diagnóstico" (remove anything private) · Salida de "Session Hub: Diagnóstico" (quita lo privado)
+      render: text
+  - type: input
+    id: version
+    attributes:
+      label: Session Hub version · Versión
+      placeholder: "0.6.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: editor
+    attributes:
+      label: Editor
+      options: [Cursor, VS Code, CLI]
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS · Sistema
+      options: [Linux, macOS, Windows]
+    validations:
+      required: true
+  - type: dropdown
+    id: network
+    attributes:
+      label: Network mode · Modo de red
+      options: [lan, private, public]

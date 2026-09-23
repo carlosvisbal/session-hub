@@ -1,0 +1,125 @@
+<div align="center">
+
+<img src="media/logo.png" alt="Session Hub" width="112">
+
+# Session Hub
+
+**Mira lo que tus compañeros hicieron con su IA, y deja que tu IA les pregunte.**
+Comparte las sesiones de Claude Code y Cursor con tu equipo: de igual a igual, cifrado de extremo a extremo, con identidades firmadas y un servidor MCP incluido.
+
+[![Licencia: AGPL-3.0-or-later](https://img.shields.io/badge/licencia-AGPL--3.0--or--later-blue.svg)](LICENSE)
+[![Versión](https://img.shields.io/github/v/release/carlosvisbal/session-hub?color=1f5fd6&label=versi%C3%B3n)](https://github.com/carlosvisbal/session-hub/releases)
+[![CI](https://github.com/carlosvisbal/session-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/carlosvisbal/session-hub/actions/workflows/ci.yml)
+![VS Code](https://img.shields.io/badge/VS%20Code-%E2%9C%93-007ACC?logo=visualstudiocode&logoColor=white)
+![Cursor](https://img.shields.io/badge/Cursor-%E2%9C%93-000000)
+![MCP](https://img.shields.io/badge/MCP-servidor-7aa7f0)
+
+[English](README.md) · **Español**
+
+<img src="media/screenshot.png" alt="Panel de Session Hub: personas del equipo, quién leyó mis sesiones y la sesión completa de un compañero" width="900">
+
+<sub>Datos de demostración.</sub>
+
+</div>
+
+---
+
+## Para qué
+
+Tu compañero del backend pasó la mañana con Claude Code cambiando una API. Tú, en el frontend, te enteras horas después, o nunca. **Session Hub** convierte esas conversaciones con la IA en contexto compartido y fácil de buscar para todo el equipo:
+
+> *"¿Qué cambió Carlos hoy en el backend?"*: se lo preguntas a tu propia IA y te responde con sus sesiones reales.
+
+## Qué ofrece
+
+| | |
+|---|---|
+| 🤝 **Vista de equipo** | Las sesiones de Claude Code y Cursor de todos en un panel: quién pidió qué, qué archivos cambiaron y en qué quedó. |
+| 🧠 **MCP incluido** | Tu IA (Cursor, VS Code en modo agente, Claude Code) puede listar, buscar y leer sesiones **completas** de tus compañeros. |
+| 🔐 **Identidad firmada** | Cada instalación tiene una clave Ed25519. Nadie puede hacerse pasar por otro, ni con un certificado robado. |
+| 🛰️ **Sin servidor central** | Cada persona tiene su propio hub; los hubs hablan directo por Hyperswarm, cifrado con Noise. Funciona en la red local sin internet. |
+| 🎛️ **Control personal** | Eliges qué proyectos compartes y con quién, ocultas sesiones sueltas, pausas todo o bloqueas a alguien solo para ti. |
+| 👁️ **Transparencia** | Te avisa cuando alguien lee tu sesión: quién, cuál, de qué proyecto y desde qué herramienta. Auditoría de 90 días. |
+| 🧹 **Oculta secretos** | Tokens, contraseñas, llaves y URLs con credenciales salen de tu máquina como `[REDACTED]`. |
+| 📜 **Software libre** | AGPL‑3.0‑or‑later. El hub en ejecución sirve su propio código en `/source`. |
+
+## Empezar
+
+```bash
+cursor --install-extension session-hub.vsix     # o: code --install-extension session-hub.vsix
+```
+
+Descarga `session-hub.vsix` desde la [última versión](https://github.com/carlosvisbal/session-hub/releases/latest). No hace falta instalar Node.js: el hub usa el runtime del propio editor.
+
+1. **Crea un equipo** en la barra lateral de Session Hub (solo la primera persona).
+2. **Invita:** copia un código `SH2-…` de un solo uso (vale 48 h). Cualquier miembro puede invitar.
+3. **Únete:** pega el código. El hub de quien te invitó te confirma solo cuando los dos están conectados.
+4. **Comparte un proyecto** y elige quién lo ve.
+
+📘 Guía completa para personas no técnicas: **[docs/MANUAL.es.md](docs/MANUAL.es.md)**
+
+## Cómo funciona
+
+```mermaid
+flowchart LR
+  subgraph A["PC de Carlos"]
+    AI1["IA · Cursor"] -->|MCP · 127.0.0.1| H1["Hub"]
+  end
+  subgraph B["PC de Ana"]
+    AI2["IA · Claude Code"] -->|MCP · 127.0.0.1| H2["Hub"]
+  end
+  subgraph C["PC de Pedro"]
+    AI3["IA · VS Code"] -->|MCP · 127.0.0.1| H3["Hub"]
+  end
+  H1 <-->|"cifrado · autenticado"| H2
+  H2 <-->|"cifrado · autenticado"| H3
+  H1 <-->|"cifrado · autenticado"| H3
+```
+
+- La API y el MCP de cada persona escuchan **solo en 127.0.0.1**. Tu IA habla solo con tu propio hub.
+- Cada hub es el **orquestador de su dueño**: consulta en paralelo a los demás, junta las respuestas e indica de quién es cada una. Un compañero lento no bloquea al resto (10 s por consulta).
+- Cada hub responde **solo por lo suyo, con sus propias reglas**, y registra cada lectura.
+- La pertenencia al equipo es una **cadena de certificados** que empieza en el fundador: invitación → miembro → admisión. Una invitación filtrada no sirve para una segunda persona.
+
+| Modo de red (`sessionHub.network`) | Para qué | Requiere |
+|---|---|---|
+| `lan` *(por defecto)* | Red de la oficina; los propios hubs forman la red | UDP `49737` permitido |
+| `private` | Remoto o VPN con nodos de arranque propios | `sessionHub.bootstrap` |
+| `public` | Remoto sin montar nada | Salida UDP |
+
+## Herramientas MCP
+
+| Herramienta | Qué hace |
+|---|---|
+| `list_peers` | Miembros del equipo, quién está en línea, qué comparte contigo y estado de la red |
+| `what_changed` | Qué hizo cada compañero desde una fecha: peticiones, archivos, comandos y estado final |
+| `list_sessions` | Sesiones por persona, proyecto, fuente y fecha |
+| `get_session` | Una sesión **completa**: todos los mensajes, sin recortar |
+| `search_sessions` | Búsqueda de texto en lo que tu equipo comparte contigo |
+
+Todas aceptan `peer` (nombre, huella, `"yo"` o `"todos"`). Si no hay resultados, explican *por qué* (nadie en línea o nada compartido).
+
+## Línea de comandos (sin editor)
+
+```bash
+npm install
+npm run setup -- --name Ana --role frontend /ruta/al/proyecto=mi-api
+npm run setup -- team create "equipo-dev"     # o: npm run setup -- team join SH2-…
+npm start
+npm test
+```
+
+## Seguridad
+
+Modelo de amenazas y limitaciones conocidas: **[SECURITY.md](SECURITY.md)**. Reporta vulnerabilidades en privado a **carlosvisbal66@gmail.com**.
+
+## Contribuir
+
+Se aceptan pull requests con [DCO](CONTRIBUTING.md) (`git commit -s`), sin cesión de derechos. Ver [CHANGELOG.md](CHANGELOG.md).
+
+## Licencia
+
+Session Hub es software libre bajo la [GNU Affero General Public License v3.0 o posterior](LICENSE). © 2026 Carlos Visbal y los autores de Session Hub ([AUTHORS](AUTHORS)).
+Si lo modificas y otras personas lo usan por la red, debes ofrecerles tu código (AGPL §13); el hub lo hace solo en `/source`.
+
+No está afiliado con Anysphere (Cursor) ni con Anthropic (Claude Code). Ver [NOTICE](NOTICE).

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔒 Security report / Reporte de seguridad
+    url: https://github.com/carlosvisbal/session-hub/security/policy
+    about: Report vulnerabilities privately · Reporta vulnerabilidades en privado
+  - name: 📘 User guide / Manual
+    url: https://github.com/carlosvisbal/session-hub/blob/main/docs/MANUAL.md
+    about: Start here · Empieza aquí

@@ -1,0 +1,21 @@
+Session Hub
+Copyright (C) 2026 Carlos Visbal <carlosvisbal66@gmail.com> y los autores de Session Hub (ver AUTHORS)
+
+Este programa es software libre: puede redistribuirlo y/o modificarlo bajo los
+términos de la Licencia Pública General Affero de GNU publicada por la Free
+Software Foundation, ya sea la versión 3 de la Licencia o (a su elección)
+cualquier versión posterior (AGPL-3.0-or-later).
+
+Este programa se distribuye con la esperanza de que sea útil, pero SIN NINGUNA
+GARANTÍA; ni siquiera la garantía implícita de COMERCIABILIDAD o IDONEIDAD PARA
+UN PROPÓSITO PARTICULAR. Consulte el archivo LICENSE para más detalles.
+
+Uso en red (sección 13 de la AGPL): si modifica Session Hub y otras personas lo
+usan a través de una red, debe ofrecerles el código fuente de su versión. El hub
+lo hace de forma automática en la ruta /source; si publica un repositorio,
+configure `sourceUrl`.
+
+Session Hub no está afiliado con Anysphere (Cursor) ni con Anthropic (Claude
+Code). Los nombres de esos productos se usan solo para indicar compatibilidad.
+
+Las dependencias de terceros y sus licencias se listan en THIRD_PARTY_NOTICES.md.
