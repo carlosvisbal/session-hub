@@ -1,7 +1,7 @@
 {
   "name": "session-hub",
   "displayName": "Session Hub",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Comparte con tu equipo las sesiones de Claude Code y Cursor: de igual a igual, cifrado, con identidad firmada y listo para MCP. · Share Claude Code & Cursor AI sessions with your team — peer-to-peer, encrypted, MCP-ready.",
   "publisher": "carlosvisbal",
   "author": {

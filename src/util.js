@@ -16,10 +16,11 @@ export function parseSince(since, fallback = '24h') {
   return t;
 }
 
+// Ruta relativa al proyecto, siempre con "/" para que un equipo con Windows, macOS y Linux vea lo mismo.
 export function relPath(file, project) {
   if (!file) return file;
-  if (project && file.startsWith(project + path.sep)) return file.slice(project.length + 1);
-  return file;
+  const rel = project && file.startsWith(project + path.sep) ? file.slice(project.length + 1) : file;
+  return rel.split(path.sep).join('/');
 }
 
 export function truncate(text, max) {

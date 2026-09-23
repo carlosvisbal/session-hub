@@ -2,6 +2,11 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versiones con [SemVer](https://semver.org/lang/es/).
 
+## [0.6.2] — 2026-09-23
+
+### Corregido
+- En Windows, las rutas de archivos modificados salían con `\`; ahora siempre con `/`, igual para todo el equipo (lo detectó la integración continua).
+
 ## [0.6.1] — 2026-09-23
 
 ### Corregido
