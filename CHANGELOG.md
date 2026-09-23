@@ -2,6 +2,16 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versiones con [SemVer](https://semver.org/lang/es/).
 
+## [0.7.0] — 2026-09-23
+
+### Añadido
+- **Trabajo remoto completo:** relay ciego de respaldo cuando la conexión directa no es posible; marcado directo también en los modos `public` y `private`; detección y anuncio automático de direcciones VPN (WireGuard, Tailscale, tun/tap…).
+- **`npm run infra`:** levanta 3 nodos de arranque y un relay con clave estable, e imprime los ajustes para el equipo.
+- **Diagnóstico de red con causa:** UDP bloqueado, arranque inalcanzable, NAT estricto, fallo de perforación, relay caído, modo de red distinto… con aviso y **"Copiar informe de conexión"** listo para enviar a TI.
+- **Paginación** en "Quién ha leído lo mío", Equipo, Siguiendo y Mis sesiones.
+- **Interfaz en español e inglés** (panel, avisos, diagnóstico, informe, hub y MCP), según el idioma del editor o `sessionHub.language`; comandos y ajustes con `package.nls`.
+- Pruebas: diagnóstico de red (11) y extremo a extremo con relay e infraestructura propia.
+
 ## [0.6.2] — 2026-09-23
 
 ### Corregido

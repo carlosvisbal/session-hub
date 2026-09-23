@@ -9,6 +9,8 @@ export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '
 export const CONFIG_PATH = process.env.SESSION_HUB_CONFIG || path.join(ROOT, 'config.json');
 
 const defaults = {
+  // Idioma de los mensajes: 'auto' (el del sistema), 'es' o 'en'.
+  language: 'auto',
   // Cómo me ven mis compañeros (va firmado con mi clave).
   owner: { name: os.userInfo().username, role: '' },
   // API local (extensión, MCP, visor): solo en esta máquina, protegida con este token.
@@ -19,6 +21,8 @@ const defaults = {
   dhtPort: 49737, // UDP; en modo lan cada hub es un nodo de la red del equipo
   bootstrap: [], // modo private: ["host:puerto", …]
   peers: [], // direcciones extra "host:puerto" de compañeros, por si la red no los encuentra sola
+  relay: '', // clave pública (hex) de un relay ciego, para cuando la conexión directa no es posible
+  forceRelay: false, // usar siempre el relay (pruebas o redes muy restrictivas)
   // Proyectos que se comparten: { path, name, allow }. Nada fuera de esta lista se expone.
   // allow: ["*"] = todo el equipo, o claves públicas de personas concretas.
   projects: [],
@@ -67,7 +71,7 @@ export function saveConfig(cfg) {
 }
 
 // Se recarga en caliente al cambiar el archivo. Las claves de red reinician solo la conexión entre hubs.
-export const HOT_RELOAD_KEYS = ['owner', 'projects', 'paused', 'excludedSessions', 'redactExtra', 'peers', 'auditRetentionDays', 'network', 'dhtPort', 'bootstrap'];
-export const NETWORK_KEYS = ['network', 'dhtPort', 'bootstrap'];
+export const HOT_RELOAD_KEYS = ['language', 'owner', 'projects', 'paused', 'excludedSessions', 'redactExtra', 'peers', 'auditRetentionDays', 'network', 'dhtPort', 'bootstrap', 'relay', 'forceRelay'];
+export const NETWORK_KEYS = ['network', 'dhtPort', 'bootstrap', 'relay', 'forceRelay'];
 
 export { defaults };

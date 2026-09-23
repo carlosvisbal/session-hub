@@ -9,7 +9,7 @@ const ME = new Set(['yo', 'me', 'mi', 'mío', 'mio', 'self']);
 const ALL = new Set(['todos', 'all', '*']);
 const PAGE = 100;
 
-export function createTeam(cfg, hub, transport, teamState) {
+export function createTeam(cfg, hub, transport, teamState, t = (s) => s) {
   const self = () => ({ ...hub.whoami(), fingerprint: fingerprint(teamState.me()), self: true, online: true });
 
   const members = () => [self(), ...transport.list()];
@@ -23,7 +23,7 @@ export function createTeam(cfg, hub, transport, teamState) {
     if (ME.has(q)) return [self()];
     if (ALL.has(q)) return online;
     const found = members().filter((m) => m.id === q || m.name.toLowerCase() === q || m.fingerprint.toLowerCase() === q);
-    if (!found.length) throw new Error(`No conozco a "${peer}". Equipo: ${members().map(label).join(', ')}`);
+    if (!found.length) throw new Error(t('No conozco a "{v1}". Equipo: {v2}', { v1: peer, v2: members().map(label).join(', ') }));
     return found;
   }
 
@@ -40,7 +40,7 @@ export function createTeam(cfg, hub, transport, teamState) {
         try {
           return { member: label(m), memberId: m.id, data: await fn(m) };
         } catch (err) {
-          return { member: label(m), memberId: m.id, error: err.message };
+          return { member: label(m), memberId: m.id, error: t(err.message) };
         }
       }),
     );
@@ -135,7 +135,7 @@ export function createTeam(cfg, hub, transport, teamState) {
           ),
         );
       } catch {
-        throw new Error(`Sesión ${id} no encontrada. ${errors.join(' | ')}`);
+        throw new Error(t('Sesión {v1} no encontrada. {v2}', { v1: id, v2: errors.map(t).join(' | ') }));
       }
     },
 

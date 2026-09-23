@@ -13,7 +13,7 @@ import crypto from 'node:crypto';
 import Hyperswarm from 'hyperswarm';
 import DHT from 'hyperdht';
 import { fingerprint, keyPairBuffers, signProfile, toHex, verifyProfile } from '../identity.js';
-import { parseAddr, reachableAddresses, withTimeout } from '../net.js';
+import { lanAddresses, parseAddr, reachableAddresses, vpnAddresses, withTimeout } from '../net.js';
 import { createRpc } from './rpc.js';
 
 const HELLO_TIMEOUT_MS = 10_000;
@@ -34,6 +34,27 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
   let timers = [];
   let startedAt = null;
   let lastError = null;
+  const connIssues = []; // errores de conexión recientes, con su código, para explicar por qué falla
+  let dialedWithAddrs = 0;
+
+  // Relay ciego (sessionHub.relay): reenvía bytes cifrados cuando la conexión directa no es posible.
+  const relayKey = () => (/^[0-9a-f]{64}$/.test(cfg.relay || '') ? Buffer.from(cfg.relay, 'hex') : null);
+  // Con forceRelay se usa siempre (pruebas); si no, solo cuando hace falta (lo decide Hyperswarm).
+  const relayThrough = () => {
+    const key = relayKey();
+    if (!key) return undefined;
+    return cfg.forceRelay ? () => key : key;
+  };
+
+  function recordIssue(pub, code) {
+    if (!code) return;
+    const who = teamState.profileOf(pub)?.name || fingerprint(pub);
+    const last = connIssues[0];
+    if (last && last.code === code && last.peer === who && Date.now() - Date.parse(last.at) < 60_000) return;
+    connIssues.unshift({ at: new Date().toISOString(), peer: who, code });
+    connIssues.length = Math.min(connIssues.length, 30);
+    onEvent('conn-issue', { peer: who, code });
+  }
 
   const myAddrs = () => reachableAddresses().map((ip) => `${ip}:${cfg.dhtPort}`);
   const profile = () => signProfile(teamState.keyPair(), { name: cfg.owner.name, role: cfg.owner.role });
@@ -56,22 +77,43 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
 
   // Marca directo a los miembros conocidos que no están conectados, usando su última dirección.
   function dialKnown() {
-    if (!dht || cfg.network === 'public') return;
+    if (!dht) return;
+    dialedWithAddrs = 0;
     for (const m of teamState.roster()) {
       const pub = m.id;
-      const addrs = teamState.addrsOf(pub).map(parseAddr).filter(Boolean);
-      if (pub === teamState.me() || peers.has(pub) || dialing.has(pub) || isBanned(pub) || !addrs.length) continue;
-      dialing.add(pub);
-      const sock = dht.connect(Buffer.from(pub, 'hex'), { keyPair: keyPairBuffers(teamState.keyPair()), relayAddresses: addrs });
-      const done = () => dialing.delete(pub);
-      sock.once('open', () => {
-        done();
-        onConnection(sock);
-      });
-      sock.once('error', done);
-      sock.once('close', done);
-      setTimeout(() => dialing.has(pub) && (sock.destroy(), done()), 10_000);
+      if (pub === teamState.me() || peers.has(pub) || dialing.has(pub) || isBanned(pub)) continue;
+      const addrs = cfg.network === 'lan' ? teamState.addrsOf(pub).map(parseAddr).filter(Boolean) : [];
+      if (cfg.network === 'lan' && !addrs.length) continue;
+      if (addrs.length) dialedWithAddrs++;
+      dial(pub, addrs, false);
     }
+  }
+
+  function dial(pub, addrs, viaRelay) {
+    dialing.add(pub);
+    const opts = { keyPair: keyPairBuffers(teamState.keyPair()) };
+    if (addrs.length) opts.relayAddresses = addrs;
+    const rk = relayKey();
+    if (rk && (viaRelay || cfg.forceRelay)) opts.relayThrough = rk;
+    const sock = dht.connect(Buffer.from(pub, 'hex'), opts);
+    const done = () => dialing.delete(pub);
+    const timer = setTimeout(() => dialing.has(pub) && (sock.destroy(), done()), 20_000);
+    sock.once('open', () => {
+      clearTimeout(timer);
+      done();
+      onConnection(sock);
+    });
+    sock.once('error', (err) => {
+      clearTimeout(timer);
+      done();
+      recordIssue(pub, err.code);
+      // La conexión directa no fue posible: reintento una vez por el relay, si hay uno.
+      if (!viaRelay && rk && /HOLEPUNCH|CANNOT_HOLEPUNCH/.test(err.code || '')) setTimeout(() => dht && !peers.has(pub) && dial(pub, addrs, true), 500);
+    });
+    sock.once('close', () => {
+      clearTimeout(timer);
+      done();
+    });
   }
 
   // Si hay dos conexiones con la misma persona, gana siempre la que inició la clave menor.
@@ -189,7 +231,7 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
       try {
         const keyPair = keyPairBuffers(teamState.keyPair());
         dht = makeDht(keyPair);
-        swarm = new Hyperswarm({ keyPair, dht, firewall: (remote) => isBanned(toHex(remote)) });
+        swarm = new Hyperswarm({ keyPair, dht, relayThrough: relayThrough(), firewall: (remote) => isBanned(toHex(remote)) });
         swarm.on('connection', onConnection);
         discovery = swarm.join(topic(), { server: true, client: true });
         startedAt = new Date().toISOString();
@@ -260,8 +302,18 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
         startedAt,
         lastError,
         connected: peers.size,
+        knownMembers: teamState.roster().filter((m) => m.id !== teamState.me() && !m.revoked).length,
+        dialedWithAddrs,
         myAddrs: myAddrs(),
+        lanAddrs: lanAddresses(),
+        vpnAddrs: vpnAddresses(),
         bootstrap: bootstrapList().map((b) => `${b.host}:${b.port}`),
+        bootstrapped: !!dht?.bootstrapped,
+        dhtNodes: dht ? dht.table.size : null,
+        nat: dht ? { firewalled: !!dht.firewalled, randomized: !!dht.randomized, host: dht.host || null } : null,
+        relay: relayKey() ? fingerprint(cfg.relay) : null,
+        teamNetwork: teamState.team()?.network || null,
+        connIssues: connIssues.slice(0, 20),
         rejections: rejections.slice(0, 10),
       };
     },

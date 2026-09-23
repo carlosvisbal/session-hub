@@ -4,7 +4,7 @@
 
 Session Hub lets you see, from your editor, what your teammates did with their AI (Claude Code or Cursor) — and lets them see yours. Only what each person chooses to share.
 
-> The extension's interface is currently in Spanish. Button names are shown as they appear on screen, with a translation: **Invitar** (*Invite*).
+> The interface follows your editor's language (English or Spanish). To force one: Settings → `sessionHub.language`. Button names below are the English ones, with the Spanish label in parentheses when useful.
 
 - [What it is, in one minute](#what-it-is-in-one-minute)
 - [Before you start](#before-you-start)
@@ -166,7 +166,7 @@ Opening the port — **Windows:** allow on *Private networks* when prompted. **m
 
 **Can they change my code?** No. Session Hub only reads.
 
-**Does it work from home?** Yes: in Settings set `sessionHub.network` to **private** (your own bootstrap server) or **public** (over the internet, encrypted).
+**Does it work from home?** Yes. With a company VPN it works as in the office. Without VPN, set `sessionHub.network` to **public** (over the internet, encrypted) or **private** (your own server, started with `npm run infra`). If something fails because of a network policy, click **Copy connection report** in the panel's *Status* section and send it to IT: it says what's failing, why and what to allow.
 
 **Cursor and VS Code at the same time?** Better just one — each editor has its own identity.
 

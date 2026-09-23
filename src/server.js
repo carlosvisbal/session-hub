@@ -18,6 +18,8 @@ import { fingerprint } from './identity.js';
 import { openTeamState } from './teamstate.js';
 import { createSwarmTransport } from './transport/swarm.js';
 import { reachableAddresses } from './net.js';
+import { diagnoseNetwork, networkReport } from './netdiag.js';
+import { makeT } from './i18n.js';
 
 const POLL_MS = 5000;
 const MAX_BODY = 1_000_000;
@@ -34,12 +36,13 @@ const readOpts = (a) => ({
 });
 
 export function startServer(cfg, { log = console.log } = {}) {
+  const t = makeT(cfg); // idioma de los mensajes (sigue a cfg.language en caliente)
   const teamState = openTeamState(cfg.stateFile);
   cfg.id = teamState.me(); // mi identidad es mi clave pública
   const hub = createHub(cfg);
   const access = createAccessLog({ file: cfg.auditFile, retentionDays: cfg.auditRetentionDays });
   const transport = createSwarmTransport({ cfg, teamState, onRequest: serveRemote, onEvent, log });
-  const team = createTeam(cfg, hub, transport, teamState);
+  const team = createTeam(cfg, hub, transport, teamState, t);
   const panelOrigin = { via: 'panel', client: process.env.SESSION_HUB_EDITOR || 'visor web' };
   const mcpClients = new Map(); // en modo sin estado, clientInfo solo llega en "initialize"
   const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'));
@@ -81,6 +84,7 @@ export function startServer(cfg, { log = console.log } = {}) {
 
   function onEvent(type, data) {
     if (type === 'rejected') access.record({ id: `key:${data.id}`, name: `Clave desconocida ${data.fingerprint}`, via: 'red' }, 'rejected', { reason: data.reason });
+    if (type === 'conn-issue') log(`[red] no se pudo conectar con ${data.peer}: ${data.code}`);
     if (type === 'revoked') log(`[equipo] ${fingerprint(data.member)} fue expulsado por ${fingerprint(data.by)}`);
   }
 
@@ -102,6 +106,7 @@ export function startServer(cfg, { log = console.log } = {}) {
       runtime: { node: process.versions.node, electron: process.versions.electron || null, sqlite: !cursorUnavailable, sqliteError: cursorUnavailable },
       api: { port: cfg.port, host: cfg.host },
       network: transport.status(),
+      networkIssues: diagnoseNetwork(transport.status()).map((i) => ({ ...i, title: t(i.title), cause: t(i.cause), fix: t(i.fix), it: i.it && t(i.it) })),
       team: { ...teamInfo(), peersOnline: peersInfo.filter((m) => !m.self && m.online).length, members: peersInfo.length - 1 },
       sharing: { paused: !!cfg.paused, projects: hub.diagnostics(), staleAllow: cfg.projects.filter((p) => p.allow.some((a) => a !== '*' && !/^[0-9a-f]{64}$/.test(a))).map((p) => p.name) },
       audit: { file: cfg.auditFile, retentionDays: cfg.auditRetentionDays, entries: access.snapshot().reads.length },
@@ -133,6 +138,12 @@ export function startServer(cfg, { log = console.log } = {}) {
     'GET /api/access': () => access.snapshot(),
     'GET /api/sharing': () => hub.sharing(),
     'GET /api/diagnostics': () => diagnostics(),
+    'GET /api/netreport': () => {
+      const st = transport.status();
+      const issues = diagnoseNetwork(st);
+      const me = { name: cfg.owner.name, role: cfg.owner.role, fingerprint: fingerprint(teamState.me()) };
+      return { issues: issues.map((i) => ({ ...i, title: t(i.title), cause: t(i.cause), fix: t(i.fix), it: i.it && t(i.it) })), text: networkReport({ st, issues, me, team: teamState.team()?.name, version: sourceInfo(cfg).version, t }) };
+    },
     'GET /api/team/sessions': (q) => team.listSessions({ ...q, limit: lim(q.limit) }, panelOrigin),
     'GET /api/team/changes': (q) => team.whatChanged(q, panelOrigin),
 
@@ -211,7 +222,7 @@ export function startServer(cfg, { log = console.log } = {}) {
       if (url.pathname === '/mcp') return await handleMcp(req, res);
       await handleApi(req, res, url);
     } catch (err) {
-      send(res, err.code === 'offline' ? 503 : err.code === 'timeout' ? 504 : 400, { error: err.message, code: err.code });
+      send(res, err.code === 'offline' ? 503 : err.code === 'timeout' ? 504 : 400, { error: t(err.message), code: err.code });
     }
   });
   server.requestTimeout = REQUEST_TIMEOUT_MS;
@@ -227,7 +238,7 @@ export function startServer(cfg, { log = console.log } = {}) {
     const key = `${req.socket.remoteAddress}|${req.headers['user-agent'] || ''}`;
     if (body?.method === 'initialize') mcpClients.set(key, friendlyClient(body.params?.clientInfo?.name));
     const software = { ...sourceInfo(cfg), source: cfg.sourceUrl || `http://127.0.0.1:${cfg.port}/source` };
-    const mcp = createMcpServer(team, software, { via: 'mcp', client: mcpClients.get(key) || friendlyClient(req.headers['user-agent']) });
+    const mcp = createMcpServer(team, software, { via: 'mcp', client: mcpClients.get(key) || friendlyClient(req.headers['user-agent']) }, t);
     const t = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on('close', () => {
       t.close();

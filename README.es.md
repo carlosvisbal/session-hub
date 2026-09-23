@@ -87,6 +87,17 @@ flowchart LR
 | `private` | Remoto o VPN con nodos de arranque propios | `sessionHub.bootstrap` |
 | `public` | Remoto sin montar nada | Salida UDP |
 
+**Remoto, paso a paso.** La infraestructura propia (nodos de arranque + un relay ciego que solo reenvía bytes cifrados) se levanta con un comando:
+
+```bash
+npm run infra -- --host 203.0.113.10     # imprime los ajustes que pega cada compañero
+npm run infra -- --public                # solo relay, sobre la red pública
+```
+
+Las VPN (WireGuard, Tailscale, la de la empresa) se detectan y anuncian solas. Si una conexión falla por una política de red (UDP bloqueado, NAT estricto, relay inalcanzable…), Session Hub te dice **por qué** y **Copiar informe de conexión** genera un mensaje listo para enviar a TI.
+
+**Idioma:** la interfaz sigue el idioma del editor (español o inglés); se puede fijar con `sessionHub.language`.
+
 ## Herramientas MCP
 
 | Herramienta | Qué hace |

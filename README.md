@@ -18,7 +18,7 @@ Share Claude Code and Cursor sessions across your team: peer‑to‑peer, end‑
 
 <img src="media/screenshot.png" alt="Session Hub panel: team members, who read my sessions, and a teammate's complete AI session" width="900">
 
-<sub>Demo data. The interface is currently in Spanish.</sub>
+<sub>Demo data. Interface in English and Spanish.</sub>
 
 </div>
 
@@ -86,6 +86,17 @@ flowchart LR
 | `lan` *(default)* | Office network; the hubs themselves form the network | UDP `49737` allowed |
 | `private` | Remote/VPN with your own bootstrap nodes | `sessionHub.bootstrap` |
 | `public` | Remote with zero setup | Outbound UDP |
+
+**Remote, step by step.** Your own infrastructure (bootstrap nodes + a blind relay that only forwards encrypted bytes) starts with one command:
+
+```bash
+npm run infra -- --host 203.0.113.10     # prints the settings every teammate pastes
+npm run infra -- --public                # relay only, on the public network
+```
+
+VPNs (WireGuard, Tailscale, corporate) are detected and advertised automatically. If a connection fails because of a network policy (UDP blocked, strict NAT, unreachable relay…), Session Hub tells you **why** and **Copy connection report** produces a ready‑to‑send message for IT.
+
+**Language:** the interface follows the editor language (Spanish or English); force it with `sessionHub.language`.
 
 ## MCP tools
 

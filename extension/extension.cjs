@@ -11,6 +11,44 @@ const os = require('node:os');
 const path = require('node:path');
 const { renderSession, renderChanges } = require('./render.cjs');
 const { Dashboard } = require('./dashboard.cjs');
+const { createTranslator, resolveLanguage } = require('../media/i18n.js');
+const EN = require('../locales/en.json');
+
+// Idioma: sessionHub.language, o el del editor si es "auto".
+const translate = createTranslator(EN);
+const lang = () => resolveLanguage(vscode.workspace.getConfiguration('sessionHub').get('language'), vscode.env.language);
+const t = (text, vars) => translate(lang(), text, vars);
+const tLabel = (l) => (l ? l.replace(/^(\$\([\w-]+\)\s*)?([\s\S]*)$/, (m, icon = '', rest) => icon + t(rest)) : l);
+
+// Avisos, preguntas y selectores traducidos. Los botones se muestran traducidos, pero se
+// devuelve siempre la opción original: la lógica compara contra el texto en español.
+const say = (fn) => async (msg, ...rest) => {
+  const opts = rest.length && rest[0] && typeof rest[0] === 'object' ? [rest.shift()] : [];
+  const labels = rest.map((x) => t(x));
+  const r = await fn(t(msg), ...opts, ...labels);
+  const i = labels.indexOf(r);
+  return i >= 0 ? rest[i] : r;
+};
+const info = say((...a) => vscode.window.showInformationMessage(...a));
+const warn = say((...a) => vscode.window.showWarningMessage(...a));
+const error = say((...a) => vscode.window.showErrorMessage(...a));
+const input = (o) =>
+  vscode.window.showInputBox({
+    ...o,
+    title: t(o.title),
+    prompt: t(o.prompt),
+    placeHolder: t(o.placeHolder),
+    validateInput: o.validateInput && ((v) => t(o.validateInput(v))),
+  });
+async function pick(items, o = {}) {
+  const list = await items;
+  const shown = list.map((it) => (typeof it === 'string' ? t(it) : { ...it, label: tLabel(it.label), description: t(it.description), _orig: it }));
+  const r = await vscode.window.showQuickPick(shown, { ...o, title: t(o.title), placeHolder: t(o.placeHolder) });
+  if (r == null) return r;
+  const back = (x) => (typeof x === 'string' ? list[shown.indexOf(x)] : x._orig);
+  return Array.isArray(r) ? r.map(back) : back(r);
+}
+const progress = (o, fn) => vscode.window.withProgress({ ...o, title: t(o.title) }, fn);
 
 const MCP_NAME = 'session-hub';
 const TOKEN_KEY = 'sessionHub.token';
@@ -43,6 +81,7 @@ async function activate(context) {
     getState: buildState,
     openSession: (id, peer) => api(`/api/sessions/${encodeURIComponent(id)}?peer=${encodeURIComponent(peer)}&full=1`, { timeout: 60000 }),
     toggleFollow,
+    lang,
   });
   // Token solo para la API local de esta máquina (el equipo se identifica con claves, no con tokens).
   token = (await ctx.secrets.get(TOKEN_KEY)) || '';
@@ -71,6 +110,7 @@ async function activate(context) {
   reg('sessionHub.toggleSessionVisibility', toggleSessionVisibility);
   reg('sessionHub.editProjectAccess', editProjectAccess);
   reg('sessionHub.doctor', runDoctor);
+  reg('sessionHub.copyNetReport', copyNetReport);
   reg('sessionHub.openSource', () => vscode.env.openExternal(vscode.Uri.parse(`${base()}/source`)));
   reg('sessionHub.openWebViewer', () => vscode.env.openExternal(vscode.Uri.parse(`${base()}/?token=${encodeURIComponent(token)}`)));
 
@@ -89,7 +129,7 @@ async function activate(context) {
     setTimeout(async () => {
       const t = await api('/api/team').catch(() => null);
       if (t && !t.hasTeam && !attached) { // solo en la ventana que lanzó el hub, no en cada ventana
-        const pick = await vscode.window.showInformationMessage('Session Hub: crea un equipo o únete con una invitación para compartir sesiones de IA.', 'Crear equipo', 'Unirme');
+        const pick = await info('Session Hub: crea un equipo o únete con una invitación para compartir sesiones de IA.', 'Crear equipo', 'Unirme');
         if (pick === 'Crear equipo') createTeam();
         if (pick === 'Unirme') joinTeam();
       }
@@ -105,6 +145,11 @@ function deactivate() {
 // (nombre, rol, red, compartir, pausar, ocultar).
 const RESTART_KEYS = ['port', 'nodePath'];
 function onConfigChanged(e) {
+  if (e.affectsConfiguration('sessionHub.language')) {
+    tree.refresh();
+    updateStatus();
+    if (dashboard.visible) buildState().then((s) => dashboard.update(s));
+  }
   if (!e.affectsConfiguration('sessionHub') || !hubUp()) return;
   if (RESTART_KEYS.some((k) => e.affectsConfiguration(`sessionHub.${k}`))) return restartHub();
   writeHubConfig();
@@ -124,6 +169,8 @@ function writeHubConfig() {
     network: c.get('network'),
     dhtPort: c.get('dhtPort'),
     bootstrap: c.get('bootstrap'),
+    relay: c.get('relay'),
+    language: lang(),
     peers: c.get('peers'),
     projects: c.get('sharedProjects'),
     paused: c.get('paused'),
@@ -139,14 +186,14 @@ function writeHubConfig() {
 function pickNode() {
   const custom = cfg().get('nodePath');
   const [maj, min] = process.versions.node.split('.').map(Number);
-  if (!custom && (maj > 22 || (maj === 22 && min >= 5))) return { cmd: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' }, label: `runtime del editor (Node ${process.versions.node})` };
+  if (!custom && (maj > 22 || (maj === 22 && min >= 5))) return { cmd: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' }, label: t('runtime del editor (Node {v1})', { v1: process.versions.node }) };
   const candidate = custom || 'node';
   try {
     const v = cp.execFileSync(candidate, ['--version'], { encoding: 'utf8', timeout: 5000 }).trim();
     return { cmd: candidate, env: {}, label: `${candidate} ${v}` };
   } catch {
-    output.appendLine(`No encontré "${candidate}"; uso el runtime del editor.`);
-    return { cmd: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' }, label: `runtime del editor (Node ${process.versions.node})` };
+    output.appendLine(t(`No encontré "${candidate}"; uso el runtime del editor.`));
+    return { cmd: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' }, label: t('runtime del editor (Node {v1})', { v1: process.versions.node }) };
   }
 }
 
@@ -174,8 +221,8 @@ function startHub() {
       const who = await probePort();
       if (who === 'mine') return attach();
       if (who === 'other') {
-        output.appendLine(`[hub] el puerto ${port()} lo usa otro programa.`);
-        vscode.window.showErrorMessage(`El puerto ${port()} lo está usando otro programa u otro Session Hub (con otra identidad). Cambia "sessionHub.port" o cierra ese programa.`, 'Abrir ajustes').then((p) => p && vscode.commands.executeCommand('workbench.action.openSettings', 'sessionHub.port'));
+        output.appendLine(t(`[hub] el puerto ${port()} lo usa otro programa.`));
+        error(`El puerto ${port()} lo está usando otro programa u otro Session Hub (con otra identidad). Cambia "sessionHub.port" o cierra ese programa.`, 'Abrir ajustes').then((p) => p && vscode.commands.executeCommand('workbench.action.openSettings', 'sessionHub.port'));
         return;
       }
       spawnHub();
@@ -188,7 +235,7 @@ function startHub() {
 
 function attach() {
   attached = true;
-  output.appendLine(`[hub] esta ventana usa el hub que ya está abierto en otra ventana (puerto ${port()}).`);
+  output.appendLine(t(`[hub] esta ventana usa el hub que ya está abierto en otra ventana (puerto ${port()}).`));
   afterStart();
 }
 
@@ -203,7 +250,7 @@ function spawnHub() {
   proc.stdout.on('data', (d) => output.append(d.toString().replace(/token=[^\s]+/g, 'token=***')));
   proc.stderr.on('data', (d) => output.append(d.toString()));
   proc.on('exit', async (code) => {
-    output.appendLine(`[hub] terminó (código ${code})`);
+    output.appendLine(t(`[hub] terminó (código ${code})`));
     if (hubProc !== proc) return; // era el proceso anterior a un reinicio
     hubProc = null;
     // Código 2 = puerto ocupado: otra ventana lo lanzó a la vez; me conecto a ese.
@@ -211,16 +258,16 @@ function spawnHub() {
     updateStatus();
     mcpChanged.fire();
     if (dashboard?.visible) buildState().then((s) => dashboard.update(s));
-    if (code) vscode.window.showErrorMessage('Session Hub se detuvo. Revisa la salida "Session Hub".', 'Ver salida', 'Reiniciar').then((p) => (p === 'Ver salida' ? output.show() : p && startHub()));
+    if (code) error('Session Hub se detuvo. Revisa la salida "Session Hub".', 'Ver salida', 'Reiniciar').then((p) => (p === 'Ver salida' ? output.show() : p && startHub()));
   });
-  output.appendLine(`[hub] iniciando con ${label}`);
+  output.appendLine(t(`[hub] iniciando con ${label}`));
   afterStart();
 }
 
 function afterStart() {
   lastReadAt = new Date().toISOString(); // no avisar de lecturas guardadas antes de este arranque
   waitForHub().then((up) => {
-    if (!up && hubUp()) output.appendLine('[hub] no respondió en 15 s; revisa la salida.');
+    if (!up && hubUp()) output.appendLine(t('[hub] no respondió en 15 s; revisa la salida.'));
     updateStatus();
     tree.refresh();
     mcpChanged.fire();
@@ -287,9 +334,9 @@ const post = (route, body, timeout) => api(route, { method: 'POST', body, timeou
 // ---------- equipo ----------
 
 async function askIdentity(step) {
-  const name = await vscode.window.showInputBox({ title: step, prompt: 'Tu nombre visible para el equipo', value: cfg().get('name') || os.userInfo().username, ignoreFocusOut: true });
+  const name = await input({ title: step, prompt: 'Tu nombre visible para el equipo', value: cfg().get('name') || os.userInfo().username, ignoreFocusOut: true });
   if (!name) return false;
-  const role = await vscode.window.showInputBox({ title: step, prompt: 'Tu rol (backend, frontend, QA…)', value: cfg().get('role'), ignoreFocusOut: true });
+  const role = await input({ title: step, prompt: 'Tu rol (backend, frontend, QA…)', value: cfg().get('role'), ignoreFocusOut: true });
   if (role === undefined) return false;
   await cfg().update('name', name, vscode.ConfigurationTarget.Global);
   await cfg().update('role', role || '', vscode.ConfigurationTarget.Global);
@@ -302,17 +349,17 @@ async function ensureHub() {
 }
 
 async function createTeam() {
-  const team = await vscode.window.showInputBox({ title: 'Crear equipo (1/2)', prompt: 'Nombre del equipo', ignoreFocusOut: true });
+  const team = await input({ title: 'Crear equipo (1/2)', prompt: 'Nombre del equipo', ignoreFocusOut: true });
   if (!team || !(await askIdentity('Crear equipo (2/2)'))) return;
   try {
     await ensureHub();
     writeHubConfig();
     await post('/api/team/create', { name: team }, 30000);
   } catch (err) {
-    return vscode.window.showErrorMessage(`No se pudo crear el equipo: ${err.message}`);
+    return error(`No se pudo crear el equipo: ${err.message}`);
   }
   pollUpdates();
-  const pick = await vscode.window.showInformationMessage(`Equipo "${team}" creado. Invita a cada persona con su propia invitación.`, 'Copiar invitación', 'Compartir este proyecto');
+  const pick = await info(`Equipo "${team}" creado. Invita a cada persona con su propia invitación.`, 'Copiar invitación', 'Compartir este proyecto');
   if (pick === 'Copiar invitación') copyInvite();
   if (pick === 'Compartir este proyecto') shareWorkspace();
 }
@@ -330,7 +377,7 @@ function looksLikeInvite(text) {
 }
 
 async function joinTeam() {
-  const text = await vscode.window.showInputBox({
+  const text = await input({
     title: 'Unirme a un equipo (1/2)',
     prompt: 'Pega la invitación que te pasó tu compañero (empieza por SH2-)',
     placeHolder: 'SH2-…',
@@ -350,7 +397,7 @@ async function joinTeam() {
     writeHubConfig();
     await post('/api/team/join', { code: inv.code }, 30000);
   } catch (err) {
-    return vscode.window.showErrorMessage(`No se pudo unir: ${err.message}`);
+    return error(`No se pudo unir: ${err.message}`);
   }
   verifyJoin(inv.team);
 }
@@ -358,7 +405,7 @@ async function joinTeam() {
 // Espera la confirmación de quien invitó (máx. 60 s) y dice claramente qué pasó.
 async function verifyJoin(team) {
   let info = null;
-  await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: `Esperando que tu compañero confirme tu entrada a "${team}"…`, cancellable: true }, async (_p, cancel) => {
+  await progress({ location: vscode.ProgressLocation.Notification, title: `Esperando que tu compañero confirme tu entrada a "${team}"…`, cancellable: true }, async (_p, cancel) => {
     const end = Date.now() + 60000;
     while (Date.now() < end && !cancel.isCancellationRequested) {
       info = await api('/api/team').catch(() => null);
@@ -369,10 +416,11 @@ async function verifyJoin(team) {
   pollUpdates();
   if (info?.team && !info.team.pending) {
     const online = (await api('/api/peers').catch(() => [])).filter((m) => !m.self && m.online);
-    const pick = await vscode.window.showInformationMessage(`Ya eres miembro de "${team}".${online.length ? ` En línea: ${online.map((m) => m.name).join(', ')}.` : ''}`, 'Abrir panel');
+    const msg = t('Ya eres miembro de "{v1}".', { v1: team }) + (online.length ? ' ' + t('En línea: {v1}.', { v1: online.map((m) => m.name).join(', ') }) : '');
+    const pick = await info(msg, 'Abrir panel');
     if (pick) dashboard.show();
   } else {
-    const pick = await vscode.window.showWarningMessage(
+    const pick = await warn(
       `Tu entrada a "${team}" está pendiente: quien te invitó debe tener Session Hub abierto para confirmarla. Se completará sola en cuanto esté en línea.`,
       'Diagnosticar',
       'Abrir panel',
@@ -387,16 +435,16 @@ async function copyInvite() {
     const r = await post('/api/team/invite', {});
     const t = await api('/api/team');
     await vscode.env.clipboard.writeText(`Te invito a mi equipo de Session Hub "${t.team.name}".\nEn VS Code o Cursor: Session Hub → Unirme a un equipo → pega este código.\nSirve para UNA persona y vence el ${new Date(r.expires).toLocaleString()}.\n\n${r.code}`);
-    vscode.window.showInformationMessage('Invitación copiada: sirve para una sola persona y vence en 48 h. Pásala por un canal privado. Mantén Session Hub abierto para confirmar su entrada.');
+    info('Invitación copiada: sirve para una sola persona y vence en 48 h. Pásala por un canal privado. Mantén Session Hub abierto para confirmar su entrada.');
   } catch (err) {
-    vscode.window.showWarningMessage(err.message);
+    warn(err.message);
   }
 }
 
 async function leaveTeam() {
-  const ok = await vscode.window.showWarningMessage('¿Salir del equipo? Dejarás de ver a tus compañeros y ellos a ti. Para volver necesitarás otra invitación.', { modal: true }, 'Salir del equipo');
+  const ok = await warn('¿Salir del equipo? Dejarás de ver a tus compañeros y ellos a ti. Para volver necesitarás otra invitación.', { modal: true }, 'Salir del equipo');
   if (!ok) return;
-  await post('/api/team/leave', {}).catch((err) => vscode.window.showErrorMessage(err.message));
+  await post('/api/team/leave', {}).catch((err) => error(err.message));
   pollUpdates();
 }
 
@@ -406,10 +454,10 @@ async function blockMember(id, name = 'esta persona') {
   const m = peers.find((p) => p.id === id);
   const blocked = !m?.blocked;
   if (blocked) {
-    const ok = await vscode.window.showWarningMessage(`¿Bloquear a ${m?.name || name} solo para ti? No podrá ver tus sesiones ni tú las suyas. El resto del equipo no se ve afectado.`, { modal: true }, 'Bloquear');
+    const ok = await warn(`¿Bloquear a ${m?.name || name} solo para ti? No podrá ver tus sesiones ni tú las suyas. El resto del equipo no se ve afectado.`, { modal: true }, 'Bloquear');
     if (!ok) return;
   }
-  await post('/api/members/block', { id, blocked }).catch((err) => vscode.window.showErrorMessage(err.message));
+  await post('/api/members/block', { id, blocked }).catch((err) => error(err.message));
   pollUpdates();
 }
 
@@ -417,10 +465,10 @@ async function blockMember(id, name = 'esta persona') {
 async function revokeMember(id) {
   const peers = await api('/api/peers').catch(() => []);
   const m = peers.find((p) => p.id === id);
-  if (!m?.canRevoke) return vscode.window.showWarningMessage('Solo puede expulsar a alguien quien lo invitó (o quien está por encima en su cadena).');
-  const ok = await vscode.window.showWarningMessage(`¿Expulsar a ${m.name} del equipo? Nadie podrá volver a conectarse con esa persona, ni con quienes ella haya invitado.`, { modal: true }, 'Expulsar');
+  if (!m?.canRevoke) return warn('Solo puede expulsar a alguien quien lo invitó (o quien está por encima en su cadena).');
+  const ok = await warn(`¿Expulsar a ${m.name} del equipo? Nadie podrá volver a conectarse con esa persona, ni con quienes ella haya invitado.`, { modal: true }, 'Expulsar');
   if (!ok) return;
-  await post('/api/members/revoke', { id, reason: 'expulsado desde el panel' }).catch((err) => vscode.window.showErrorMessage(err.message));
+  await post('/api/members/revoke', { id, reason: 'expulsado desde el panel' }).catch((err) => error(err.message));
   pollUpdates();
 }
 
@@ -432,27 +480,27 @@ const saveShared = (list) => cfg().update('sharedProjects', list, vscode.Configu
 
 async function shareWorkspace() {
   const folders = vscode.workspace.workspaceFolders || [];
-  if (!folders.length) return vscode.window.showWarningMessage('Abre una carpeta de proyecto primero.');
-  const folder = folders.length === 1 ? folders[0] : await vscode.window.showWorkspaceFolderPick({ placeHolder: 'Qué carpeta compartir' });
+  if (!folders.length) return warn('Abre una carpeta de proyecto primero.');
+  const folder = folders.length === 1 ? folders[0] : await vscode.window.showWorkspaceFolderPick({ placeHolder: t('Qué carpeta compartir') });
   if (!folder) return;
-  const name = await vscode.window.showInputBox({ title: 'Compartir proyecto (1/2)', prompt: 'Nombre con el que el equipo verá este proyecto', value: folder.name, ignoreFocusOut: true });
+  const name = await input({ title: 'Compartir proyecto (1/2)', prompt: 'Nombre con el que el equipo verá este proyecto', value: folder.name, ignoreFocusOut: true });
   if (!name) return;
   const allow = await pickAudience(['*']);
   if (!allow) return;
   await saveShared([...sharedList().filter((p) => p.path !== folder.uri.fsPath), { path: folder.uri.fsPath, name, allow }]);
-  vscode.window.showInformationMessage(`Compartiendo "${name}" con ${audienceLabel(allow, await teamMembers())}. Puedes ocultar sesiones concretas o pausar desde el panel.`, 'Abrir panel').then((p) => p && dashboard.show());
+  info(`Compartiendo "${name}" con ${audienceLabel(allow, await teamMembers())}. Puedes ocultar sesiones concretas o pausar desde el panel.`, 'Abrir panel').then((p) => p && dashboard.show());
 }
 
 async function unshareProject(fsPath) {
   const list = sharedList();
   let target = typeof fsPath === 'string' ? fsPath : null;
   if (!target) {
-    const pick = await vscode.window.showQuickPick(list.map((p) => ({ label: p.name, description: p.path })), { placeHolder: 'Dejar de compartir' });
+    const pick = await pick(list.map((p) => ({ label: p.name, description: p.path })), { placeHolder: 'Dejar de compartir' });
     target = pick?.description;
   }
   const proj = list.find((p) => p.path === target);
   if (!proj) return;
-  const ok = await vscode.window.showWarningMessage(`¿Dejar de compartir "${proj.name}"? El equipo dejará de ver sus sesiones.`, { modal: true }, 'Dejar de compartir');
+  const ok = await warn(`¿Dejar de compartir "${proj.name}"? El equipo dejará de ver sus sesiones.`, { modal: true }, 'Dejar de compartir');
   if (ok) await saveShared(list.filter((p) => p.path !== target));
 }
 
@@ -463,11 +511,11 @@ async function editProjectAccess(fsPath) {
   const allow = await pickAudience(proj.allow || ['*'], proj.name);
   if (!allow) return;
   await saveShared(list.map((p) => (p.path === proj.path ? { ...p, allow } : p)));
-  vscode.window.showInformationMessage(`"${proj.name}" ahora lo ve: ${audienceLabel(allow, await teamMembers())}.`);
+  info(`"${proj.name}" ahora lo ve: ${audienceLabel(allow, await teamMembers())}.`);
 }
 
 async function pickProject(list) {
-  const pick = await vscode.window.showQuickPick(list.map((p) => ({ label: p.name, description: p.path, p })), { placeHolder: 'Elige el proyecto' });
+  const pick = await pick(list.map((p) => ({ label: p.name, description: p.path, p })), { placeHolder: 'Elige el proyecto' });
   return pick?.p;
 }
 
@@ -486,7 +534,7 @@ async function pickAudience(current, projectName) {
     id: m.id,
     picked: !current.includes('*') && current.includes(m.id),
   }));
-  const picks = await vscode.window.showQuickPick([everyone, ...people], {
+  const picks = await pick([everyone, ...people], {
     canPickMany: true,
     title: projectName ? `Quién puede ver "${projectName}"` : 'Compartir proyecto (2/2): quién puede verlo',
     placeHolder: people.length ? 'Marca "Todo el equipo" o personas concretas' : 'Aún no hay compañeros conectados: se compartirá con todo el equipo',
@@ -494,7 +542,7 @@ async function pickAudience(current, projectName) {
   });
   if (!picks) return null;
   if (!picks.length) {
-    vscode.window.showWarningMessage('Elige al menos una opción. Para no compartir, usa "Dejar de compartir".');
+    warn('Elige al menos una opción. Para no compartir, usa "Dejar de compartir".');
     return null;
   }
   return picks.some((p) => p.id === '*') ? ['*'] : picks.map((p) => p.id);
@@ -503,14 +551,14 @@ async function pickAudience(current, projectName) {
 const teamMembers = () => api('/api/peers').catch(() => []);
 
 function audienceLabel(allow, members = []) {
-  if (!allow || allow.includes('*')) return 'todo el equipo';
+  if (!allow || allow.includes('*')) return t('todo el equipo');
   return allow.map((id) => members.find((m) => m.id === id)?.name || id.split('@')[0]).join(', ');
 }
 
 async function togglePause() {
   const paused = !cfg().get('paused');
   await cfg().update('paused', paused, vscode.ConfigurationTarget.Global);
-  vscode.window.showInformationMessage(paused ? 'Compartir en pausa: nadie del equipo ve tus sesiones hasta que reanudes.' : 'Compartir reanudado.');
+  info(paused ? 'Compartir en pausa: nadie del equipo ve tus sesiones hasta que reanudes.' : 'Compartir reanudado.');
   updateStatus();
 }
 
@@ -558,10 +606,11 @@ async function buildState() {
     members: m,
     mine: val(mine, []),
     team: t.filter((x) => x.id),
-    teamErrors: [...t.filter((x) => x.error), ...[...new Set(loadErrors)].map((error) => ({ member: 'Panel', error }))],
+    teamErrors: [...t.filter((x) => x.error), ...[...new Set(loadErrors)].map((error) => ({ member: t('Panel'), error: t(error) }))],
     access: val(access, offline.access),
     sharing: { ...sh, projects: sh.projects.map((p) => ({ ...p, audience: audienceLabel(p.allow, m) })) },
     checks: diag.status === 'fulfilled' ? healthChecks(diag.value) : [{ status: 'error', label: 'No pude leer el estado del hub', hint: diag.reason.message }],
+    networkIssues: diag.status === 'fulfilled' ? diag.value.networkIssues || [] : [],
   };
 }
 
@@ -574,9 +623,9 @@ function currentWorkspace() {
 // Comprobaciones con estado ok / warn / error y qué hacer en cada caso.
 function healthChecks(d) {
   const out = [];
-  const add = (status, label, hint = '') => out.push({ status, label, hint });
+  const add = (status, label, hint = '') => out.push({ status, label: t(label), hint: t(hint) });
   const net = d.network;
-  add(d.runtime.sqlite ? 'ok' : 'warn', `Hub activo · Node ${d.runtime.node}${d.runtime.electron ? ' (runtime del editor)' : ''}`, d.runtime.sqlite ? '' : 'Sin SQLite: no se leerán sesiones de Cursor. Ajusta sessionHub.nodePath a un Node 22.5 o superior.');
+  add(d.runtime.sqlite ? 'ok' : 'warn', t(d.runtime.electron ? 'Hub activo · Node {v1} (runtime del editor)' : 'Hub activo · Node {v1}', { v1: d.runtime.node }), d.runtime.sqlite ? '' : 'Sin SQLite: no se leerán sesiones de Cursor. Ajusta sessionHub.nodePath a un Node 22.5 o superior.');
   add('ok', `API local en 127.0.0.1:${d.api.port}`, 'Solo esta máquina puede usarla; tu IA se conecta aquí por MCP.');
   if (d.team.team?.pending) add('warn', 'Tu entrada al equipo está pendiente', `Quien te invitó (${d.team.team.invitedBy}) debe tener Session Hub abierto para confirmarla.`);
   if (!net.running) add('error', 'La conexión con el equipo no está activa', net.lastError || 'Reinicia el hub.');
@@ -598,6 +647,7 @@ function healthChecks(d) {
     const err = [p.claude.ok ? '' : `Claude Code: ${p.claude.error}`, p.cursor.ok ? '' : `Cursor: ${p.cursor.error}`].filter(Boolean).join(' · ');
     add(err ? 'warn' : 'ok', `${p.name}: ${p.claude.sessions || 0} de Claude Code, ${p.cursor.sessions || 0} de Cursor`, err || (total ? '' : 'Todavía no hay sesiones de IA en esta carpeta.'));
   }
+  for (const x of d.networkIssues || []) add(x.severity === 'error' ? 'error' : 'warn', x.title, `${x.cause} ${x.fix}`);
   if (d.sharing.staleAllow?.length) add('warn', `Permisos de una versión anterior en: ${d.sharing.staleAllow.join(', ')}`, 'Vuelve a elegir "Quién lo ve": ahora los permisos van por persona verificada.');
   if (d.sharing.paused) add('warn', 'Compartir está en pausa', 'Nadie del equipo ve tus sesiones. Reanuda desde el panel.');
   add('ok', `Auditoría: ${d.audit.entries} registros (${d.audit.retentionDays} días)`, d.audit.file);
@@ -606,37 +656,62 @@ function healthChecks(d) {
 
 async function runDoctor() {
   if (!hubUp()) {
-    const pick = await vscode.window.showWarningMessage('El hub está detenido.', 'Iniciar');
+    const pick = await warn('El hub está detenido.', 'Iniciar');
     if (pick === 'Iniciar') startHub();
     return;
   }
   try {
     const checks = healthChecks(await api('/api/diagnostics'));
-    output.appendLine('\n== Diagnóstico de Session Hub ==');
+    output.appendLine(`\n== ${t('Diagnóstico de Session Hub')} ==`);
     for (const c of checks) output.appendLine(`${{ ok: '✔', warn: '!', error: '✖' }[c.status]} ${c.label}${c.hint ? '\n    ' + c.hint : ''}`);
-    output.appendLine(`MCP: ${vscode.cursor?.mcp ? 'registrado en Cursor' : vscode.lm?.registerMcpServerDefinitionProvider ? 'disponible en VS Code' : 'usa "Conectar Claude Code"'}`);
+    output.appendLine(`MCP: ${t(vscode.cursor?.mcp ? 'registrado en Cursor' : vscode.lm?.registerMcpServerDefinitionProvider ? 'disponible en VS Code' : 'usa "Conectar Claude Code"')}`);
     const bad = checks.filter((c) => c.status !== 'ok');
     dashboard.show();
     const msg = bad.length ? `Diagnóstico: ${bad.length} punto(s) a revisar. Detalle en el panel y en la salida "Session Hub".` : 'Diagnóstico: todo en orden.';
-    (bad.length ? vscode.window.showWarningMessage : vscode.window.showInformationMessage)(msg, 'Ver salida').then((p) => p && output.show());
+    (bad.length ? warn : info)(msg, 'Ver salida').then((p) => p && output.show());
   } catch (err) {
-    vscode.window.showErrorMessage(`No pude consultar el hub: ${err.message}`);
+    error(`No pude consultar el hub: ${err.message}`);
   }
 }
 
 function readMessage(r) {
   const who = `${r.who}${r.role ? ' (' + r.role + ')' : ''}`;
-  const from = r.via === 'api' ? 'acceso directo sin identificarse' : `${r.via === 'mcp' ? 'desde su IA' : 'desde su panel'}${r.client ? ' en ' + r.client : ''}`;
-  if (r.what === 'session') return `👁 ${who} está leyendo tu sesión "${r.title}" de ${r.project} — ${from}`;
-  if (r.what === 'changes') return `👁 ${who} revisó tus novedades (${r.since})${r.project ? ' de ' + r.project : ''} — ${from}`;
-  if (r.what === 'search') return `👁 ${who} buscó "${r.query}" en tus sesiones — ${from}`;
-  if (r.what === 'denied') return `⛔ ${who} intentó leer "${r.title}" de ${r.project}, sin permiso — ${from}`;
-  return `👁 ${who} consultó tus sesiones — ${from}`;
+  const from =
+    r.via === 'api' ? t('acceso directo sin identificarse') : r.client ? t(r.via === 'mcp' ? 'desde su IA en {v1}' : 'desde su panel en {v1}', { v1: r.client }) : t(r.via === 'mcp' ? 'desde su IA' : 'desde su panel');
+  if (r.what === 'session') return t('👁 {v1} está leyendo tu sesión "{v2}" de {v3} — {v4}', { v1: who, v2: r.title, v3: r.project, v4: from });
+  if (r.what === 'changes') return r.project ? t('👁 {v1} revisó tus novedades ({v2}) de {v3} — {v4}', { v1: who, v2: r.since, v3: r.project, v4: from }) : t('👁 {v1} revisó tus novedades ({v2}) — {v3}', { v1: who, v2: r.since, v3: from });
+  if (r.what === 'search') return t('👁 {v1} buscó "{v2}" en tus sesiones — {v3}', { v1: who, v2: r.query, v3: from });
+  if (r.what === 'denied') return t('⛔ {v1} intentó leer "{v2}" de {v3}, sin permiso — {v4}', { v1: who, v2: r.title, v3: r.project, v4: from });
+  return t('👁 {v1} consultó tus sesiones — {v2}', { v1: who, v2: from });
 }
 
 let lastSeen = null; // sesiones del equipo: id -> updatedAt
 let lastReadAt = ''; // fecha del último acceso ya avisado
 const readNotified = new Map(); // quién+qué -> último aviso
+
+// Copia el informe de conexión: qué falla, por qué y qué pedirle a TI.
+async function copyNetReport() {
+  try {
+    const r = await api('/api/netreport');
+    await vscode.env.clipboard.writeText(r.text);
+    info(r.issues.length ? 'Informe de conexión copiado. Pégalo en el chat o correo a TI o a tu equipo.' : 'Informe copiado: no se detectan problemas de red.');
+  } catch (err) {
+    error(`No pude generar el informe: ${err.message}`);
+  }
+}
+
+const notifiedIssues = new Set();
+function notifyNetworkIssues(checksSource) {
+  for (const x of checksSource || []) {
+    if (notifiedIssues.has(x.code)) continue;
+    notifiedIssues.add(x.code);
+    const show = x.severity === 'error' ? error : warn;
+    show(`Session Hub: ${x.title}. ${x.cause}`, 'Copiar informe para TI', 'Ver detalle').then((p) => {
+      if (p === 'Copiar informe para TI') copyNetReport();
+      if (p === 'Ver detalle') dashboard.show();
+    });
+  }
+}
 
 let polling = false;
 let healthFailures = 0;
@@ -650,6 +725,7 @@ async function pollUpdates() {
     await checkHealth();
     const state = await buildState();
     notifyTeamUpdates(state);
+    notifyNetworkIssues(state.networkIssues);
     notifyReads(state.access.reads);
     if (dashboard.visible) dashboard.update(state);
     tree.refresh();
@@ -673,14 +749,14 @@ async function checkHealth() {
     // Estaba usando el hub de otra ventana y esa ventana se cerró: esta toma el relevo.
     if (attached && err.name !== 'TimeoutError') {
       attached = false;
-      output.appendLine('[hub] la ventana que tenía el hub se cerró; esta ventana lo inicia.');
+      output.appendLine(t('[hub] la ventana que tenía el hub se cerró; esta ventana lo inicia.'));
       await startHub();
       throw new Error('relevo del hub');
     }
     healthFailures++;
     if (healthFailures >= 3 && !offeredRestart) {
       offeredRestart = true;
-      const pick = await vscode.window.showErrorMessage('Session Hub no responde desde hace 30 s.', 'Reiniciar', 'Ver salida');
+      const pick = await error('Session Hub no responde desde hace 30 s.', 'Reiniciar', 'Ver salida');
       if (pick === 'Reiniciar') restartHub();
       if (pick === 'Ver salida') output.show();
     }
@@ -700,7 +776,7 @@ function notifyTeamUpdates(state) {
     if (changed.length) {
       const s = changed[0];
       const more = changed.length > 1 ? ` (+${changed.length - 1})` : '';
-      vscode.window.showInformationMessage(`${s.owner} avanzó en "${s.title}" (${s.project})${more}`, 'Ver').then((p) => p && openSession({ session: s }));
+      info(`${s.owner} avanzó en "${s.title}" (${s.project})${more}`, 'Ver').then((p) => p && openSession({ session: s }));
     }
   }
   lastSeen = new Map([...now.values()].map((s) => [s.id, s.updatedAt]));
@@ -715,18 +791,18 @@ function notifyReads(reads) {
     const key = `${r.whoId}|${r.what}|${r.sessionId || r.query || r.since || ''}`;
     if (Date.now() - (readNotified.get(key) || 0) < READ_NOTIFY_COOLDOWN_MS) continue;
     readNotified.set(key, Date.now());
-    (r.what === 'denied' ? vscode.window.showWarningMessage : vscode.window.showInformationMessage)(readMessage(r), 'Abrir panel').then((p) => p && dashboard.show());
+    (r.what === 'denied' ? warn : info)(readMessage(r), 'Abrir panel').then((p) => p && dashboard.show());
   }
 }
 
 async function updateStatus() {
   if (!hubUp()) {
     statusItem.text = '$(debug-disconnect) Session Hub';
-    statusItem.tooltip = 'Detenido';
+    statusItem.tooltip = t('Detenido');
     statusItem.backgroundColor = undefined;
   } else if (healthFailures >= 3) {
-    statusItem.text = '$(error) Session Hub sin respuesta';
-    statusItem.tooltip = 'El hub no responde. Clic para abrir el panel.';
+    statusItem.text = `$(error) ${t('Session Hub sin respuesta')}`;
+    statusItem.tooltip = t('El hub no responde. Clic para abrir el panel.');
     statusItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
   } else {
     let n = 0;
@@ -735,9 +811,9 @@ async function updateStatus() {
     } catch {}
     const shared = sharedList().length;
     const paused = cfg().get('paused');
-    statusItem.text = paused ? `$(debug-pause) Session Hub en pausa · ${n}` : `$(broadcast) Session Hub · ${n} · ${shared} compartido${shared === 1 ? '' : 's'}`;
+    statusItem.text = paused ? `$(debug-pause) ${t('Session Hub en pausa')} · ${n}` : `$(broadcast) Session Hub · ${n} · ${t(shared === 1 ? '{v1} compartido' : '{v1} compartidos', { v1: shared })}`;
     statusItem.backgroundColor = paused ? new vscode.ThemeColor('statusBarItem.warningBackground') : undefined;
-    statusItem.tooltip = `${n} compañero(s) en línea\n${paused ? 'En pausa: nadie ve tus sesiones' : `Compartes ${shared} proyecto(s)`}\nClic para abrir el panel`;
+    statusItem.tooltip = [t('{v1} compañero(s) en línea', { v1: n }), paused ? t('En pausa: nadie ve tus sesiones') : t('Compartes {v1} proyecto(s)', { v1: shared }), t('Clic para abrir el panel')].join('\n');
   }
   statusItem.show();
 }
@@ -761,9 +837,9 @@ class TeamTree {
       if (!el) {
         const members = await api('/api/peers');
         return members.map((m) => {
-          const item = new vscode.TreeItem(m.self ? `${m.name} (tú)` : m.name, vscode.TreeItemCollapsibleState[m.self ? 'Collapsed' : 'Expanded']);
-          item.description = [m.role, m.online ? '' : 'desconectado'].filter(Boolean).join(' · ');
-          item.tooltip = `Proyectos: ${m.projects.join(', ') || 'ninguno'}`;
+          const item = new vscode.TreeItem(m.self ? `${m.name} (${t('tú')})` : m.name, vscode.TreeItemCollapsibleState[m.self ? 'Collapsed' : 'Expanded']);
+          item.description = [m.role, m.online ? '' : t('desconectado')].filter(Boolean).join(' · ');
+          item.tooltip = `${t('Proyectos')}: ${m.projects.join(', ') || t('ninguno')}`;
           item.iconPath = new vscode.ThemeIcon(m.self ? 'account' : m.online ? 'person' : 'circle-slash');
           item.contextValue = 'member';
           return { item, member: m };
@@ -772,10 +848,10 @@ class TeamTree {
       if (el.member) {
         const since = cfg().get('listSince');
         const sessions = await api(`/api/sessions?peer=${encodeURIComponent(el.member.id)}&since=${since}&limit=40`);
-        if (!sessions.length) return [{ item: new vscode.TreeItem(`Sin sesiones en ${since}`) }];
+        if (!sessions.length) return [{ item: new vscode.TreeItem(t('Sin sesiones en {v1}', { v1: since })) }];
         return sessions.map((s) => {
           const item = new vscode.TreeItem(s.title);
-          item.description = `${s.project} · ${ago(s.updatedAt)}${s.hidden ? ' · oculta al equipo' : ''}`;
+          item.description = `${s.project} · ${ago(s.updatedAt)}${s.hidden ? ` · ${t('oculta al equipo')}` : ''}`;
           item.tooltip = new vscode.MarkdownString(
             `**${s.title}**\n\n${s.source} · ${s.project}${s.branch ? ' · `' + s.branch + '`' : ''}\n\n${s.messages} mensajes · ${s.filesChanged.length} archivos`,
           );
@@ -785,7 +861,7 @@ class TeamTree {
         });
       }
     } catch (err) {
-      return [{ item: new vscode.TreeItem(`Error: ${err.message}`) }];
+      return [{ item: new vscode.TreeItem(`Error: ${t(err.message)}`) }];
     }
     return [];
   }
@@ -793,9 +869,9 @@ class TeamTree {
 
 function ago(isoDate) {
   const min = Math.round((Date.now() - Date.parse(isoDate)) / 60000);
-  if (min < 60) return `hace ${min} min`;
-  if (min < 1440) return `hace ${Math.round(min / 60)} h`;
-  return `hace ${Math.round(min / 1440)} d`;
+  if (min < 60) return t('hace {v1} min', { v1: min });
+  if (min < 1440) return t('hace {v1} h', { v1: Math.round(min / 60) });
+  return t('hace {v1} d', { v1: Math.round(min / 1440) });
 }
 
 async function openSession(arg) {
@@ -804,7 +880,7 @@ async function openSession(arg) {
   const panel = vscode.window.createWebviewPanel('sessionHub.session', `${s.owner}: ${s.title}`, vscode.ViewColumn.Active, {});
   const load = async () => {
     const peer = s.ownerId || arg.member?.id || s.owner;
-    panel.webview.html = renderSession(await api(`/api/sessions/${encodeURIComponent(s.id)}?peer=${encodeURIComponent(peer)}&full=1`, { timeout: 60000 }));
+    panel.webview.html = renderSession(t, await api(`/api/sessions/${encodeURIComponent(s.id)}?peer=${encodeURIComponent(peer)}&full=1`, { timeout: 60000 }));
   };
   try {
     await load();
@@ -815,14 +891,14 @@ async function openSession(arg) {
 
 async function whatChanged(el) {
   const member = el?.member;
-  const since = await vscode.window.showQuickPick(['2h', '24h', '3d', '7d'], { placeHolder: 'Desde cuándo' });
+  const since = await pick(['2h', '24h', '3d', '7d'], { placeHolder: 'Desde cuándo' });
   if (!since) return;
   const who = member ? member.name : 'el equipo';
-  const panel = vscode.window.createWebviewPanel('sessionHub.changes', `Novedades de ${who}`, vscode.ViewColumn.Active, {});
+  const panel = vscode.window.createWebviewPanel('sessionHub.changes', t('Novedades de {v1}', { v1: t(who) }), vscode.ViewColumn.Active, {});
   try {
     const q = member ? `peer=${encodeURIComponent(member.id)}&` : '';
     const data = member ? [await api(`/api/changes?${q}since=${since}`)] : await teamChanges(since);
-    panel.webview.html = renderChanges(data, who);
+    panel.webview.html = renderChanges(t, data, t(who));
   } catch (err) {
     panel.webview.html = `<p>Error: ${err.message}</p>`;
   }
@@ -859,13 +935,13 @@ function registerCursorMcp() {
     api.unregisterServer?.(MCP_NAME);
   } catch {}
   api.registerServer({ name: MCP_NAME, server: { url: `${base()}/mcp`, headers: { Authorization: `Bearer ${token}` } } });
-  output.appendLine('[mcp] registrado en Cursor como "session-hub"');
+  output.appendLine(t('[mcp] registrado en Cursor como "session-hub"'));
 }
 
 async function copyClaudeCommand() {
   const cmd = `claude mcp add --transport http --scope user ${MCP_NAME} ${base()}/mcp --header "Authorization: Bearer ${token}"`;
   await vscode.env.clipboard.writeText(cmd);
-  vscode.window.showInformationMessage('Comando para Claude Code copiado. Pégalo en una terminal.');
+  info('Comando para Claude Code copiado. Pégalo en una terminal.');
 }
 
 module.exports = { activate, deactivate };

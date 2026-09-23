@@ -96,3 +96,5 @@ button.link { background: none; color: var(--vscode-textLink-foreground); paddin
 .person-actions { margin: 2px 0 0 }
 .person-actions button { padding: 0 6px 0 0; font-size: 12px }
 button.danger { color: var(--vscode-errorForeground) }
+.pager { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 8px 12px }
+.pager button[disabled] { opacity: .35; cursor: default }

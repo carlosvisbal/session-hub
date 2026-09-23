@@ -164,7 +164,9 @@ Cómo abrir el puerto: en **Windows**, cuando pregunte, permite el acceso en *Re
 
 **¿Pueden cambiar mi código?** No. Session Hub solo lee.
 
-**¿Funciona desde casa?** Sí. En los ajustes, cambia `sessionHub.network` a **private** (con un servidor de arranque propio) o a **public** (por internet, cifrado).
+**¿Funciona desde casa?** Sí. Con la VPN de la empresa funciona igual que en la oficina. Sin VPN, cambia `sessionHub.network` a **public** (por internet, cifrado) o a **private** (servidor propio, se levanta con `npm run infra`). Si algo falla por una política de red, pulsa **Copiar informe de conexión** en la sección *Estado* del panel y envíaselo a TI: dice qué falla, por qué y qué hay que permitir.
+
+**¿Puedo cambiar el idioma?** Sí: la interfaz sigue el idioma del editor. Para fijarlo, en Ajustes busca `sessionHub.language` y elige español o inglés.
 
 **¿Puedo usarlo en Cursor y VS Code a la vez?** Mejor solo en uno. Cada editor tiene su propia identidad.
 

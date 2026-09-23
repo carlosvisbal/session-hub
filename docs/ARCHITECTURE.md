@@ -39,6 +39,9 @@ flowchart LR
 | `src/mcp.js` | MCP tools (`list_peers`, `what_changed`, `list_sessions`, `get_session`, `search_sessions`) |
 | `src/server.js` | Local HTTP API (127.0.0.1 only), MCP endpoint, hot config reload, shutdown |
 | `src/source.js` | AGPL §13: serves the running source at `/source` |
+| `src/netdiag.js` | Classifies connection failures (UDP blocked, strict NAT, hole‑punch failure, relay down, mode mismatch…) and builds the shareable report |
+| `src/infra.js` | `npm run infra`: 3 bootstrap nodes + blind relay (`blind-relay`) with a stable key |
+| `media/i18n.js`, `locales/en.json` | Spanish ↔ English translation shared by hub, extension and panel; templates with `{v1}` placeholders |
 | `extension/*.cjs`, `media/*` | Editor integration: hub lifecycle (shared across windows), panel, notifications, MCP registration |
 
 ## Identity and membership
@@ -76,6 +79,8 @@ The receiver verifies the chain **and** that the chain's member key equals the c
 | `revoke` | any → all | signed revocation, verified before applying |
 | `profile` | any → all | updated signed name/role |
 
+**Relay.** When hole‑punching fails (`HOLEPUNCH_*`, `CANNOT_HOLEPUNCH`, `REMOTE_NOT_HOLEPUNCHABLE`) and `relay` is configured, the connection is retried through a blind relay (`relayThrough`). The relay pairs two UDX streams and forwards encrypted bytes; the Noise session stays end‑to‑end between the two hubs.
+
 Full sessions travel in pages (`offset`/`limit`, 100 messages) and are verified on reassembly: if the total doesn't match, the read fails instead of returning partial data.
 
 ## Timeouts and limits (nothing hangs)
@@ -111,5 +116,5 @@ In the extension these live in the editor's `globalStorage` for the extension; a
 
 ## Tests
 
-- `npm test` — unit tests: identity and membership, readers (fixtures), redaction, hub permissions and paging.
-- `npm run test:e2e` — two real hubs on this machine (LAN mode): admission, ACL, complete encrypted reads verified byte for byte.
+- `npm test` — unit tests: identity and membership, readers (fixtures), redaction, hub permissions and paging, network diagnosis.
+- `npm run test:e2e` — real hubs on this machine: LAN mode (admission, ACL, complete encrypted reads verified byte for byte) and private mode through your own bootstrap nodes and a forced blind relay, plus the network report for an unreachable bootstrap.

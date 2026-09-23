@@ -19,37 +19,37 @@ const page = (body) => `<!doctype html><html><head><meta charset="utf-8">
   .err { color: var(--vscode-errorForeground) }
 </style></head><body>${body}</body></html>`;
 
-function renderSession(s) {
+function renderSession(t, s) {
   return page(`<h2>${esc(s.title)}</h2>
     <p class="meta"><b>${esc(s.owner)}</b> · <span class="badge">${esc(s.source)}</span> ${esc(s.project)}
-      ${s.branch ? ' · rama <code>' + esc(s.branch) + '</code>' : ''} · ${s.messages} mensajes · actualizado ${when(s.updatedAt)}</p>
-    ${s.filesChanged.length ? `<details><summary>Archivos modificados (${s.filesChanged.length})</summary><pre>${s.filesChanged.map(esc).join('\n')}</pre></details>` : ''}
-    ${s.omittedMessages ? `<p class="meta">(${s.omittedMessages} mensajes anteriores omitidos)</p>` : ''}
+      ${s.branch ? ` · ${t('rama')} <code>${esc(s.branch)}</code>` : ''} · ${t('{v1} mensajes', { v1: s.messages })} · ${t('actualizada {v1}', { v1: when(s.updatedAt) })}</p>
+    ${s.filesChanged.length ? `<details><summary>${t('Archivos modificados ({v1})', { v1: s.filesChanged.length })}</summary><pre>${s.filesChanged.map(esc).join('\n')}</pre></details>` : ''}
+    ${s.omittedMessages ? `<p class="meta">${t('({v1} mensajes anteriores omitidos)', { v1: s.omittedMessages })}</p>` : ''}
     ${s.conversation
       .map(
-        (m) => `<div class="msg ${m.role}"><div class="meta">${m.role === 'user' ? esc(s.owner) : 'IA'} · ${when(m.at)}</div>${esc(m.text)}${
+        (m) => `<div class="msg ${m.role}"><div class="meta">${m.role === 'user' ? esc(s.owner) : t('IA')} · ${when(m.at)}</div>${esc(m.text)}${
           m.actions.length ? '<div class="acts">' + m.actions.map((a) => (a.kind === 'edit' ? '✎ ' : '$ ') + esc(a.target)).join('<br>') + '</div>' : ''
         }</div>`,
       )
       .join('')}`);
 }
 
-function renderChanges(list, who) {
+function renderChanges(t, list, who) {
   const blocks = list.map((c) => {
     if (c.error) return `<h3>${esc(c.owner)}</h3><p class="err">${esc(c.error)}</p>`;
-    if (!c.sessions.length) return `<h3>${esc(c.owner)}</h3><p class="meta">Nada nuevo.</p>`;
+    if (!c.sessions.length) return `<h3>${esc(c.owner)}</h3><p class="meta">${t('Nada nuevo.')}</p>`;
     return `<h3>${esc(c.owner)}</h3>` + c.sessions
       .map(
         (s) => `<div class="msg"><b>${esc(s.title)}</b> <span class="badge">${esc(s.source)}</span>
           <div class="meta">${esc(s.project)}${s.branch ? ' · <code>' + esc(s.branch) + '</code>' : ''} · ${when(s.updatedAt)}</div>
-          ${s.requests.length ? '<p><b>Se pidió:</b></p><ul>' + s.requests.map((r) => `<li>${esc(r)}</li>`).join('') + '</ul>' : ''}
-          ${s.filesChanged.length ? `<p><b>Archivos (${s.filesChanged.length}):</b></p><pre>${s.filesChanged.map(esc).join('\n')}</pre>` : ''}
-          ${s.lastAssistantMessage ? `<p><b>Último estado según la IA:</b></p>${esc(s.lastAssistantMessage)}` : ''}
+          ${s.requests.length ? `<p><b>${t('Se pidió:')}</b></p><ul>` + s.requests.map((r) => `<li>${esc(r)}</li>`).join('') + '</ul>' : ''}
+          ${s.filesChanged.length ? `<p><b>${t('Archivos ({v1}):', { v1: s.filesChanged.length })}</b></p><pre>${s.filesChanged.map(esc).join('\n')}</pre>` : ''}
+          ${s.lastAssistantMessage ? `<p><b>${t('Último estado según la IA:')}</b></p>${esc(s.lastAssistantMessage)}` : ''}
         </div>`,
       )
       .join('');
   });
-  return page(`<h2>Novedades de ${esc(who)}</h2>${blocks.join('') || '<p class="meta">No hay compañeros en línea.</p>'}`);
+  return page(`<h2>${t('Novedades de {v1}', { v1: esc(who) })}</h2>${blocks.join('') || `<p class="meta">${t('No hay compañeros en línea.')}</p>`}`);
 }
 
 module.exports = { renderSession, renderChanges };

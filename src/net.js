@@ -2,17 +2,29 @@
 // Copyright (C) 2026 Los autores de Session Hub (ver AUTHORS)
 import os from 'node:os';
 
-// IPs de la red local, sin las interfaces virtuales de Docker/VPN.
-export function lanAddresses() {
+// Interfaces virtuales que no sirven para hablar con compañeros (contenedores, puentes).
+const IGNORED = /^(docker|br-|veth|virbr|lo|vmnet|vboxnet|podman|cni|flannel)/i;
+// Interfaces de VPN: sí sirven (VPN de la empresa, WireGuard, Tailscale, ZeroTier…).
+const VPN = /^(tun|tap|wg|tailscale|utun|ppp|zt|ipsec|nordlynx|proton)/i;
+
+function ipv4(filter) {
   return Object.entries(os.networkInterfaces())
-    .filter(([name]) => !/^(docker|br-|veth|virbr|tun|tap|wg|lo)/.test(name))
+    .filter(([name]) => !IGNORED.test(name) && filter(name))
     .flatMap(([, list]) => list)
     .filter((i) => i && i.family === 'IPv4' && !i.internal)
     .map((i) => i.address);
 }
 
-// Direcciones donde me pueden encontrar; sin red local (VM, CI), la propia máquina.
-export const reachableAddresses = () => (lanAddresses().length ? lanAddresses() : ['127.0.0.1']);
+// IPs de la red local (sin VPN).
+export const lanAddresses = () => ipv4((name) => !VPN.test(name));
+// IPs de VPN.
+export const vpnAddresses = () => ipv4((name) => VPN.test(name));
+
+// Direcciones donde me pueden encontrar: red local y VPN; sin ninguna (VM, CI), la propia máquina.
+export function reachableAddresses() {
+  const all = [...new Set([...lanAddresses(), ...vpnAddresses()])];
+  return all.length ? all : ['127.0.0.1'];
+}
 
 // "host:puerto" → { host, port }
 export function parseAddr(a) {

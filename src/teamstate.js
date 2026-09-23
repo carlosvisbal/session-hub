@@ -86,7 +86,7 @@ export function openTeamState(file) {
       const v = verifyChain(inv.team.id, chain);
       if (!v.pending || v.member !== me()) throw new Error(`No se pudo crear tu certificado: ${v.error}`);
       // Queda pendiente hasta que quien me invitó confirme la admisión al verme conectado.
-      s.team = { id: inv.team.id, name: inv.team.name, chain, pending: true, invitedBy: inviter.member, joined: new Date().toISOString() };
+      s.team = { id: inv.team.id, name: inv.team.name, chain, pending: true, invitedBy: inviter.member, network: inv.network || null, joined: new Date().toISOString() };
       s.members = { [inviter.member]: inv.chain };
       s.usedInvites = {};
       s.redeemed = {};

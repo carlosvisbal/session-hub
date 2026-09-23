@@ -11,9 +11,9 @@ Los secretos vienen como [REDACTED]. Los paths son relativos a la raíz de cada 
 const json = (data) => ({ content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] });
 
 // Una lista vacía no dice si "no hay nada" o "no hay nadie": se explica para que la IA no adivine.
-const explain = (result, peer) =>
+const explainWith = (t) => (result, peer) =>
   Array.isArray(result) && !result.length
-    ? { resultado: [], nota: peer ? `Sin resultados de ${peer}.` : 'No hay compañeros en línea en este momento (usa list_peers para ver quién está conectado), o no tienen nada compartido contigo.' }
+    ? { resultado: [], nota: peer ? t('Sin resultados de {v1}.', { v1: peer }) : t('No hay compañeros en línea en este momento (usa list_peers para ver quién está conectado), o no tienen nada compartido contigo.') }
     : result;
 const peer = z
   .string()
@@ -22,15 +22,16 @@ const peer = z
 const since = z.string().optional().describe('Desde cuándo: ISO 8601 o relativo como "30m", "2h", "3d"');
 const project = z.string().optional().describe('Nombre del proyecto tal como lo comparte ese compañero (ver list_peers)');
 
-export function createMcpServer(team, software, origin = { via: 'mcp' }) {
-  const notice = `\nSession Hub ${software.version} es software libre (${software.license}); código fuente: ${software.source}`;
-  const server = new McpServer({ name: 'session-hub', version: software.version }, { instructions: INSTRUCTIONS + notice });
+export function createMcpServer(team, software, origin = { via: 'mcp' }, t = (x) => x) {
+  const notice = '\n' + t('Session Hub {v1} es software libre ({v2}); código fuente: {v3}', { v1: software.version, v2: software.license, v3: software.source });
+  const explain = explainWith(t);
+  const server = new McpServer({ name: 'session-hub', version: software.version }, { instructions: t(INSTRUCTIONS) + notice });
 
   server.registerTool(
     'list_peers',
     {
-      title: 'Equipo',
-      description: 'Lista al equipo (nombre, rol, huella, quién está en línea, qué comparte contigo) y el estado de la conexión. Úsalo primero si una consulta vuelve vacía.',
+      title: t('Equipo'),
+      description: t('Lista al equipo (nombre, rol, huella, quién está en línea, qué comparte contigo) y el estado de la conexión. Úsalo primero si una consulta vuelve vacía.'),
       inputSchema: {},
     },
     async () => json({ equipo: team.peersInfo(), red: team.networkStatus() }),
@@ -39,9 +40,8 @@ export function createMcpServer(team, software, origin = { via: 'mcp' }) {
   server.registerTool(
     'what_changed',
     {
-      title: 'Qué hay nuevo',
-      description:
-        'Resumen por compañero de lo trabajado desde una fecha: peticiones a la IA, archivos modificados, comandos y el último mensaje de la IA por sesión.',
+      title: t('Qué hay nuevo'),
+      description: t('Resumen por compañero de lo trabajado desde una fecha: peticiones a la IA, archivos modificados, comandos y el último mensaje de la IA por sesión.'),
       inputSchema: { peer, since: since.default('24h'), project },
     },
     async (args) => json(explain(await team.whatChanged(args, origin), args.peer)),
@@ -50,8 +50,8 @@ export function createMcpServer(team, software, origin = { via: 'mcp' }) {
   server.registerTool(
     'list_sessions',
     {
-      title: 'Listar sesiones',
-      description: 'Lista sesiones de Claude Code y Cursor, las más recientes primero, indicando de quién es cada una.',
+      title: t('Listar sesiones'),
+      description: t('Lista sesiones de Claude Code y Cursor, las más recientes primero, indicando de quién es cada una.'),
       inputSchema: {
         peer,
         project,
@@ -66,10 +66,9 @@ export function createMcpServer(team, software, origin = { via: 'mcp' }) {
   server.registerTool(
     'get_session',
     {
-      title: 'Leer sesión completa',
-      description:
-        'Lee una sesión COMPLETA: todos los mensajes, en orden y sin recortar ninguno. ' +
-        'Opcional: offset y limit para leerla por partes (si la respuesta trae siguiente_offset, sigue desde ahí).',
+      title: t('Leer sesión completa'),
+      description: t('Lee una sesión COMPLETA: todos los mensajes, en orden y sin recortar ninguno. ' +
+        'Opcional: offset y limit para leerla por partes (si la respuesta trae siguiente_offset, sigue desde ahí).'),
       inputSchema: {
         id: z.string().describe('Id de la sesión, p.ej. "claude:…" o "cursor:…"'),
         peer: peer.describe('Dueño de la sesión, si lo sabes (acelera la búsqueda)'),
@@ -83,10 +82,10 @@ export function createMcpServer(team, software, origin = { via: 'mcp' }) {
       const end = s.offset + s.conversation.length;
       const more = end < s.total;
       return json({
-        mensajes: `${s.offset + 1}–${end} de ${s.total}`,
+        mensajes: t('{v1}–{v2} de {v3}', { v1: s.offset + 1, v2: end, v3: s.total }),
         completa: !more && s.offset === 0,
         hay_mas: more,
-        ...(more ? { siguiente_offset: end, nota: `Faltan ${s.total - end} mensajes: llama de nuevo con offset=${end}.` } : {}),
+        ...(more ? { siguiente_offset: end, nota: t('Faltan {v1} mensajes: llama de nuevo con offset={v2}.', { v1: s.total - end, v2: end }) } : {}),
         ...s,
       });
     },
@@ -95,8 +94,8 @@ export function createMcpServer(team, software, origin = { via: 'mcp' }) {
   server.registerTool(
     'search_sessions',
     {
-      title: 'Buscar en sesiones',
-      description: 'Busca un texto (endpoint, modelo, archivo…) en las conversaciones del equipo.',
+      title: t('Buscar en sesiones'),
+      description: t('Busca un texto (endpoint, modelo, archivo…) en las conversaciones del equipo.'),
       inputSchema: { query: z.string().min(2), peer, project, limit: z.number().int().min(0).default(0).describe('0 = todos los resultados') },
     },
     async ({ query, ...q }) => json(explain(await team.search(query, q, origin), q.peer)),
