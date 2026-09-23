@@ -39,6 +39,7 @@ Your backend teammate spent the morning with Claude Code changing an API. You, o
 | 🔐 **Signed identity** | Every install has an Ed25519 key. Nobody can impersonate anyone — not even with a stolen certificate. |
 | 🛰️ **No central server** | Each person runs their own hub; hubs talk directly over Hyperswarm, encrypted with Noise. Works on a LAN with no internet. |
 | 🎛️ **Personal control** | Choose which projects you share and with whom, hide single sessions, pause everything, block someone just for you. |
+| ✉️ **Messages between people** | Write to a teammate — or to one of their open AI sessions — from the panel or by asking your AI. Signed, held until they approve it, and one click passes it to their AI. Nothing runs by itself. |
 | 👁️ **Transparency** | Get notified when someone reads your session — who, which one, which project, from which tool. 90‑day audit log. |
 | 🧹 **Secret redaction** | Tokens, passwords, keys and credentialed URLs leave your machine as `[REDACTED]`. |
 | 📜 **Free software** | AGPL‑3.0‑or‑later. The running hub serves its own source at `/source`. |
@@ -107,6 +108,9 @@ VPNs (WireGuard, Tailscale, corporate) are detected and advertised automatically
 | `list_sessions` | Sessions by person, project, source and date |
 | `get_session` | A **complete** session — every message, untruncated |
 | `search_sessions` | Full‑text search across what your team shares with you |
+| `list_agents` | AI sessions each teammate has open right now (tool, project, busy/idle) |
+| `send_message` | A signed text message to one teammate (queued up to 24 h if they're offline) |
+| `check_inbox` | Messages you approved for your AI, marked as coming from a teammate, not from you |
 
 All tools accept `peer` (name, fingerprint, `"me"` or `"all"`). Empty results explain *why* (nobody online vs. nothing shared).
 

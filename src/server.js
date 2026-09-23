@@ -11,6 +11,7 @@ import { AccessDenied, createHub } from './hub.js';
 import { createMcpServer } from './mcp.js';
 import { createTeam } from './team.js';
 import { createAccessLog, friendlyClient } from './access.js';
+import { createInbox } from './inbox.js';
 import { handleSource, sourceInfo } from './source.js';
 import { setExtraPatterns } from './redact.js';
 import { cursorUnavailable } from './sources/cursor.js';
@@ -41,8 +42,9 @@ export function startServer(cfg, { log = console.log } = {}) {
   cfg.id = teamState.me(); // mi identidad es mi clave pública
   const hub = createHub(cfg);
   const access = createAccessLog({ file: cfg.auditFile, retentionDays: cfg.auditRetentionDays });
+  const inbox = createInbox({ file: cfg.inboxFile, teamState, policy: () => cfg.inbound });
   const transport = createSwarmTransport({ cfg, teamState, onRequest: serveRemote, onEvent, log });
-  const team = createTeam(cfg, hub, transport, teamState, t);
+  const team = createTeam(cfg, hub, transport, teamState, t, inbox);
   const panelOrigin = { via: 'panel', client: process.env.SESSION_HUB_EDITOR || 'visor web' };
   const mcpClients = new Map(); // en modo sin estado, clientInfo solo llega en "initialize"
   const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'));
@@ -77,6 +79,14 @@ export function startServer(cfg, { log = console.log } = {}) {
       case 'search':
         access.record(viewer, 'search', { query: String(args.q || '').slice(0, 200) });
         return hub.search(String(args.q || ''), { project: args.project, limit: lim(args.limit), viewer });
+      case 'agents':
+        access.record(viewer); // solo presencia
+        return hub.liveAgents(viewer);
+      case 'message': {
+        const r = inbox.receive(args.doc, peer);
+        log(`[mensajes] ${peer.name} te escribió (${r.status === 'held' ? 'retenido hasta que lo apruebes' : 'visible para tu IA'})`);
+        return r;
+      }
       default:
         throw new Error(`Operación desconocida: ${op}`);
     }
@@ -85,7 +95,16 @@ export function startServer(cfg, { log = console.log } = {}) {
   function onEvent(type, data) {
     if (type === 'rejected') access.record({ id: `key:${data.id}`, name: `Clave desconocida ${data.fingerprint}`, via: 'red' }, 'rejected', { reason: data.reason });
     if (type === 'conn-issue') log(`[red] no se pudo conectar con ${data.peer}: ${data.code}`);
+    if (type === 'joined') team.flushQueue(data.id).catch(() => {});
+    if (type === 'receipt') inbox.receipt(data.from, data.id, data.status);
     if (type === 'revoked') log(`[equipo] ${fingerprint(data.member)} fue expulsado por ${fingerprint(data.by)}`);
+  }
+
+  function messageStatus(id, status) {
+    const m = inbox.get(String(id));
+    if (!m) throw new Error('Mensaje no encontrado.');
+    team.notifySender(inbox.setStatus(m.id, status));
+    return inbox.get(m.id);
   }
 
   // ---------- estado del equipo para el panel ----------
@@ -146,6 +165,15 @@ export function startServer(cfg, { log = console.log } = {}) {
     },
     'GET /api/team/sessions': (q) => team.listSessions({ ...q, limit: lim(q.limit) }, panelOrigin),
     'GET /api/team/changes': (q) => team.whatChanged(q, panelOrigin),
+    'GET /api/team/agents': (q) => team.listAgents(q, panelOrigin),
+    'GET /api/agents': () => hub.liveAgents(),
+
+    'GET /api/inbox': () => inbox.list(),
+    'POST /api/messages/send': (q, body) => team.sendMessage(body, panelOrigin),
+    // Permitir que mi IA lo lea (check_inbox), pasarlo al chat de mi IA (leído) o descartarlo.
+    'POST /api/inbox/approve': (q, body) => messageStatus(body.id, 'delivered'),
+    'POST /api/inbox/handoff': (q, body) => messageStatus(body.id, 'read'),
+    'POST /api/inbox/dismiss': (q, body) => messageStatus(body.id, 'dismissed'),
 
     'POST /api/team/create': async (q, body) => {
       if (teamState.hasTeam()) throw new Error('Ya perteneces a un equipo. Sal de él antes de crear otro.');
@@ -165,6 +193,7 @@ export function startServer(cfg, { log = console.log } = {}) {
     'POST /api/team/leave': async () => {
       await transport.stop();
       teamState.leave();
+      inbox.clear();
       return teamInfo();
     },
     'POST /api/members/block': (q, body) => {
@@ -239,13 +268,13 @@ export function startServer(cfg, { log = console.log } = {}) {
     if (body?.method === 'initialize') mcpClients.set(key, friendlyClient(body.params?.clientInfo?.name));
     const software = { ...sourceInfo(cfg), source: cfg.sourceUrl || `http://127.0.0.1:${cfg.port}/source` };
     const mcp = createMcpServer(team, software, { via: 'mcp', client: mcpClients.get(key) || friendlyClient(req.headers['user-agent']) }, t);
-    const t = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+    const mcpTransport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on('close', () => {
-      t.close();
+      mcpTransport.close();
       mcp.close();
     });
-    await mcp.connect(t);
-    await t.handleRequest(req, res, body);
+    await mcp.connect(mcpTransport);
+    await mcpTransport.handleRequest(req, res, body);
     if (body?.method === 'tools/call') log(`[mcp] ${body.params?.name}`);
   }
 

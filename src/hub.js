@@ -7,10 +7,12 @@
 // un compañero solo ve lo que la pausa, la lista de acceso y las exclusiones permiten.
 import fs from 'node:fs';
 import path from 'node:path';
-import { encodeProject, listClaudeSessions } from './sources/claude.js';
+import { encodeProject, listClaudeLive, listClaudeSessions } from './sources/claude.js';
 import { cursorUnavailable, listCursorSessions } from './sources/cursor.js';
 import { redact, setExtraPatterns } from './redact.js';
 import { iso, parseSince, relPath, truncate } from './util.js';
+
+const CURSOR_ACTIVE_MS = 10 * 60_000; // Cursor no deja registro de sesiones abiertas: cuenta la actividad reciente
 
 export class AccessDenied extends Error {
   constructor(session) {
@@ -158,6 +160,28 @@ export function createHub(cfg) {
           cursor: cursorUnavailable ? { ok: false, error: cursorUnavailable } : count(() => listCursorSessions(cfg, p.path)),
         };
       });
+    },
+
+    // Sesiones de IA abiertas ahora en los proyectos que este visor puede ver.
+    // Claude Code: su registro de sesiones vivas (con estado ocupada/libre). Cursor: actividad reciente.
+    liveAgents(viewer = null) {
+      const projects = visibleProjects(viewer);
+      const projectOf = (cwd) => projects.find((p) => cwd === p.path || cwd.startsWith(p.path + path.sep));
+      const out = [];
+      for (const a of safe(() => listClaudeLive(cfg))) {
+        const p = projectOf(a.cwd);
+        const session = 'claude:' + a.sessionId;
+        if (!p || (viewer && cfg.excludedSessions.includes(session))) continue;
+        const s = safe(() => listClaudeSessions(cfg, p.path)).find((x) => x.id === session);
+        out.push({ session, owner: owner.name, ownerId: owner.id, tool: 'Claude Code', name: a.name, project: p.name, status: a.status, title: s ? redact(s.title) : null, since: iso(a.statusAt) });
+      }
+      const recent = Date.now() - CURSOR_ACTIVE_MS;
+      for (const s of rawSessions(projects, 'cursor')) {
+        if ((s.updatedAt || 0) < recent) break;
+        if (viewer && isExcluded(s)) continue;
+        out.push({ session: s.id, owner: owner.name, ownerId: owner.id, tool: 'Cursor', name: null, project: nameOf(s.project), status: 'recent', title: redact(s.title), since: iso(s.updatedAt) });
+      }
+      return out;
     },
 
     listSessions({ project, source, since, limit = Infinity, viewer = null } = {}) {

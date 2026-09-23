@@ -39,6 +39,7 @@ Tu compañero del backend pasó la mañana con Claude Code cambiando una API. T�
 | 🔐 **Identidad firmada** | Cada instalación tiene una clave Ed25519. Nadie puede hacerse pasar por otro, ni con un certificado robado. |
 | 🛰️ **Sin servidor central** | Cada persona tiene su propio hub; los hubs hablan directo por Hyperswarm, cifrado con Noise. Funciona en la red local sin internet. |
 | 🎛️ **Control personal** | Eliges qué proyectos compartes y con quién, ocultas sesiones sueltas, pausas todo o bloqueas a alguien solo para ti. |
+| ✉️ **Mensajes entre personas** | Escríbele a un compañero, o a una de sus sesiones de IA abiertas, desde el panel o pidiéndoselo a tu IA. Van firmados, quedan retenidos hasta que los apruebe y con un clic los pasa a su IA. Nada se ejecuta solo. |
 | 👁️ **Transparencia** | Te avisa cuando alguien lee tu sesión: quién, cuál, de qué proyecto y desde qué herramienta. Auditoría de 90 días. |
 | 🧹 **Oculta secretos** | Tokens, contraseñas, llaves y URLs con credenciales salen de tu máquina como `[REDACTED]`. |
 | 📜 **Software libre** | AGPL‑3.0‑or‑later. El hub en ejecución sirve su propio código en `/source`. |
@@ -107,6 +108,9 @@ Las VPN (WireGuard, Tailscale, la de la empresa) se detectan y anuncian solas. S
 | `list_sessions` | Sesiones por persona, proyecto, fuente y fecha |
 | `get_session` | Una sesión **completa**: todos los mensajes, sin recortar |
 | `search_sessions` | Búsqueda de texto en lo que tu equipo comparte contigo |
+| `list_agents` | Sesiones de IA que cada compañero tiene abiertas ahora (herramienta, proyecto, ocupada o libre) |
+| `send_message` | Un mensaje de texto firmado para un compañero (en cola hasta 24 h si está desconectado) |
+| `check_inbox` | Los mensajes que aprobaste para tu IA, marcados como de un compañero y no tuyos |
 
 Todas aceptan `peer` (nombre, huella, `"yo"` o `"todos"`). Si no hay resultados, explican *por qué* (nadie en línea o nada compartido).
 

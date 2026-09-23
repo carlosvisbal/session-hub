@@ -55,5 +55,15 @@
   "cmd.whatChanged": "What's new?",
   "ext.description": "Share Claude Code and Cursor AI sessions with your team: peer-to-peer, encrypted, signed identities, MCP-ready.",
   "view.team": "Team",
-  "view.welcome": "Share your Claude Code and Cursor sessions with your team.\n[Create team](command:sessionHub.createTeam)\n[Join with an invitation](command:sessionHub.joinTeam)\nAlready have a team: [Start hub](command:sessionHub.start) · [Open panel](command:sessionHub.openDashboard) · [Diagnostics](command:sessionHub.doctor)"
+  "view.welcome": "Share your Claude Code and Cursor sessions with your team.\n[Create team](command:sessionHub.createTeam)\n[Join with an invitation](command:sessionHub.joinTeam)\nAlready have a team: [Start hub](command:sessionHub.start) · [Open panel](command:sessionHub.openDashboard) · [Diagnostics](command:sessionHub.doctor)",
+  "cmd.sendMessage": "Message a teammate",
+  "cmd.replyMessage": "Reply to message",
+  "cmd.handoffMessage": "Pass message to my AI",
+  "cmd.approveMessage": "Let my AI read the message",
+  "cmd.dismissMessage": "Dismiss message",
+  "cfg.inboundMessages": "Messages from teammates. They always arrive signed and verified and never run anything.",
+  "cfg.inboundMessages.enum0": "Hold: they wait until you approve them or pass them to your AI (recommended)",
+  "cfg.inboundMessages.enum1": "Accept: your AI can read them right away with check_inbox",
+  "cfg.inboundMessages.enum2": "Refuse: do not receive messages",
+  "cfg.notifyMessages": "Notify when a teammate sends you a message."
 }

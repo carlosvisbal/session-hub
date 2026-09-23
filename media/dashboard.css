@@ -103,3 +103,12 @@ button.danger { color: var(--vscode-errorForeground) }
 .lang button.on { color: var(--vscode-foreground); font-weight: 700; text-decoration: underline }
 .team-actions { margin: 0 14px 4px }
 .team-actions button { padding: 0 8px 0 0; font-size: 12px }
+
+.badge { font-size: 11px; padding: 0 6px; border-radius: 8px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); font-weight: 600 }
+.msgbox .text { white-space: pre-wrap; word-break: break-word; margin: 3px 0 }
+.msgbox details summary { cursor: pointer }
+.sent { padding: 0 14px 6px }
+.sent .read { padding: 5px 0 }
+.live { margin: 3px 0 }
+.live .dot { width: 7px; height: 7px; margin-right: 5px; vertical-align: middle }
+.dot.busy { background: var(--vscode-charts-orange, #d18616) }

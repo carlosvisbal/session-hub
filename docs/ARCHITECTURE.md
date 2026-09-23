@@ -26,7 +26,7 @@ flowchart LR
 
 | File | Responsibility |
 | --- | --- |
-| `src/sources/claude.js` | Reads `~/.claude/projects/<encoded path>/*.jsonl`; normalizes messages and actions; cache by mtime+size |
+| `src/sources/claude.js` | Reads `~/.claude/projects/<encoded path>/*.jsonl`; normalizes messages and actions; cache by mtime+size. Open sessions from `~/.claude/sessions/<pid>.json` (only those files, only if the process is alive) |
 | `src/sources/cursor.js` | Reads Cursor's `state.vscdb` (read‑only SQLite via `node:sqlite`): `composerHeaders` + `cursorDiskKV` |
 | `src/redact.js` | Pattern‑based secret redaction applied to everything that leaves the hub |
 | `src/hub.js` | Owner's data: allowlisted projects, per‑viewer ACL, exclusions, pause, summaries, paging, search |
@@ -35,8 +35,9 @@ flowchart LR
 | `src/transport/swarm.js` | Hyperswarm/HyperDHT connections, handshake, firewall, gossip, direct dialing, refresh |
 | `src/transport/rpc.js` | Line‑delimited JSON RPC over the encrypted stream, with timeouts and size limits |
 | `src/team.js` | Local orchestrator: fans out to teammates in parallel, merges and labels results |
+| `src/inbox.js` | Signed messages between members: compose, verify, hold/accept/refuse policy, rate limit, offline queue, receipts (`inbox.json`) |
 | `src/access.js` | Audit log (`audit.jsonl`): reads, denials, rejected connections; retention |
-| `src/mcp.js` | MCP tools (`list_peers`, `what_changed`, `list_sessions`, `get_session`, `search_sessions`) |
+| `src/mcp.js` | MCP tools (`list_peers`, `what_changed`, `list_sessions`, `get_session`, `search_sessions`, `list_agents`, `send_message`, `check_inbox`) |
 | `src/server.js` | Local HTTP API (127.0.0.1 only), MCP endpoint, hot config reload, shutdown |
 | `src/source.js` | AGPL §13: serves the running source at `/source` |
 | `src/netdiag.js` | Classifies connection failures (UDP blocked, strict NAT, hole‑punch failure, relay down, mode mismatch…) and builds the shareable report |
@@ -75,11 +76,28 @@ The receiver verifies the chain **and** that the chain's member key equals the c
 | --- | --- | --- |
 | `hello` | both | certificate chain, signed profile, addresses, gossip |
 | `admitted` | issuer → joiner | admission doc completing the joiner's chain |
-| `req` / `res` | both | RPC: `whoami`, `projects`, `sessions`, `session`, `changes`, `search` |
+| `req` / `res` | both | RPC: `whoami`, `projects`, `sessions`, `session`, `changes`, `search`, `agents`, `message` |
+| `receipt` | recipient → sender | what happened to a message: `held`, `delivered`, `read`, `dismissed` |
 | `revoke` | any → all | signed revocation, verified before applying |
 | `profile` | any → all | updated signed name/role |
 
 **Relay.** When hole‑punching fails (`HOLEPUNCH_*`, `CANNOT_HOLEPUNCH`, `REMOTE_NOT_HOLEPUNCHABLE`) and `relay` is configured, the connection is retried through a blind relay (`relayThrough`). The relay pairs two UDX streams and forwards encrypted bytes; the Noise session stays end‑to‑end between the two hubs.
+
+## Messages
+
+A message is a signed doc `{ kind: "message", v: 1, id, team, from, to, text, toSession, aboutSession, replyTo, at }` sent with the `message` RPC. The recipient accepts it only if the signature verifies with the **connection's** key, `from` equals that key, `to` is itself, `team` matches, the text is 1–20 000 characters and `at` is within the queue window (24 h, ±5 min clock skew). Duplicate ids are idempotent (retries); more than 10 messages per minute from one sender are refused.
+
+| Policy (`inbound`) | Effect |
+| --- | --- |
+| `hold` *(default)* | Stored as `held`; the AI does not see it until the person approves it or passes it to the chat |
+| `accept` | Stored as `delivered`; `check_inbox` returns it |
+| `refuse` | Rejected; the sender gets "not receiving messages" |
+
+If the recipient is offline the signed doc stays in the sender's `inbox.json` as `queued` and is retried when they connect (`joined` event), until it expires after 24 h. Messages never trigger actions: the extension only offers to open the AI chat with the text framed as coming from a teammate.
+
+**Open sessions** (`agents` RPC): Claude Code writes `~/.claude/sessions/<pid>.json` (cwd, name, busy/idle). The hub reads only those JSON files, never Claude Code's per‑session keys or sockets, and only counts a session if its process is alive and its folder is inside a project shared with the viewer (pause and hidden sessions apply). Cursor has no such registry, so a Cursor session counts as open when it was active in the last 10 minutes.
+
+## Paging
 
 Full sessions travel in pages (`offset`/`limit`, 100 messages) and are verified on reassembly: if the total doesn't match, the read fails instead of returning partial data.
 
@@ -103,6 +121,7 @@ Full sessions travel in pages (`offset`/`limit`, 100 messages) and are verified 
 | `config.json` | owner, port, local token, network, shared projects, exclusions, pause | 0600 |
 | `team.json` | key pair, team, chain, members, admissions, revocations, blocks, addresses | 0600 |
 | `audit.jsonl` | one line per read / denial / rejected connection | 0600 |
+| `inbox.json` | received and sent messages (30 days, max 500 each); queued docs until delivered | 0600 |
 
 In the extension these live in the editor's `globalStorage` for the extension; all windows share them and a single hub.
 
@@ -113,6 +132,7 @@ In the extension these live in the editor's `globalStorage` for the extension; a
 3. Everything leaving the hub goes through `redact()`.
 4. Session sources are opened read‑only.
 5. No operation waits without a deadline.
+6. A message is text for a person: it is verified against the connection's key and never executes anything.
 
 ## Tests
 

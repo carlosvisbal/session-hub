@@ -149,6 +149,7 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
       discovery?.refresh().catch(() => {});
       setTimeout(dialKnown, 1000);
     }
+    if (msg.t === 'receipt' && typeof msg.id === 'string') onEvent('receipt', { from: peer.id, id: msg.id, status: msg.status });
     if (msg.t === 'profile') {
       const p = verifyProfile(peer.id, msg.profile);
       if (p) Object.assign(peer, { name: p.name, role: p.role }) && teamState.rememberProfile(peer.id, p);
@@ -269,6 +270,11 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
       const p = peers.get(pub);
       if (!p) return Promise.reject(Object.assign(new Error('No está conectado ahora'), { code: 'offline' }));
       return p.rpc.call(op, args, timeoutMs);
+    },
+
+    // Aviso sin respuesta a un compañero conectado (false si no lo está).
+    send(pub, msg) {
+      return peers.get(pub)?.rpc.send(msg) || false;
     },
 
     broadcast(msg) {

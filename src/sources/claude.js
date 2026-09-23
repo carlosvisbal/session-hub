@@ -94,3 +94,34 @@ function userText(content) {
   if (!text || text.startsWith('<task-notification') || text.startsWith('[Request interrupted')) return '';
   return text;
 }
+
+// Sesiones de Claude Code abiertas ahora: cada una deja ~/.claude/sessions/<pid>.json con su carpeta,
+// nombre y estado. Solo se leen esos .json (nunca las claves ni los sockets de Claude Code),
+// y solo cuentan si el proceso sigue vivo.
+export function listClaudeLive(cfg) {
+  const dir = cfg.claudeSessionsDir || path.join(path.dirname(cfg.claudeDir), 'sessions');
+  if (!fs.existsSync(dir)) return [];
+  const out = [];
+  for (const f of fs.readdirSync(dir)) {
+    if (!/^\d+\.json$/.test(f)) continue;
+    let d;
+    try {
+      d = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    } catch {
+      continue; // a medio escribir
+    }
+    if (!d?.sessionId || !d.cwd || !alive(d.pid)) continue;
+    out.push({ sessionId: String(d.sessionId), cwd: String(d.cwd), name: d.name ? String(d.name) : null, status: d.status === 'busy' ? 'busy' : 'idle', statusAt: d.statusUpdatedAt || d.updatedAt || d.startedAt || null });
+  }
+  return out;
+}
+
+function alive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return err.code === 'EPERM'; // existe, pero es de otro usuario
+  }
+}

@@ -11,6 +11,7 @@ Con Session Hub ves, desde tu editor, lo que tus compañeros hicieron con su IA 
 - [Compartir un proyecto](#compartir-un-proyecto-y-elegir-quién-lo-ve)
 - [El panel](#recorrido-por-el-panel)
 - [Leer sesiones y preguntarle a tu IA](#leer-la-sesión-de-un-compañero-y-preguntarle-a-tu-ia)
+- [Mensajes entre compañeros](#mensajes-entre-compañeros)
 - [Tu privacidad](#tu-privacidad-tú-tienes-el-control)
 - [Avisos](#los-avisos-que-vas-a-ver)
 - [Si algo no funciona](#si-algo-no-funciona)
@@ -115,8 +116,35 @@ Pedidos que funcionan bien:
 2. *"¿Qué sesiones tiene Carlos en api-clientes esta semana?"*
 3. *"Lee completa la sesión de Carlos sobre firmas y dime qué endpoints cambiaron."*
 4. *"Busca en las sesiones de Carlos dónde se cambió el campo attachments."*
+5. *"¿Qué sesiones de IA tiene abiertas Ana ahora?"*
+6. *"Avísale a Carlos que el formulario ya envía una lista de archivos."* · *"Revisa mis mensajes de Session Hub."*
 
 Si la respuesta viene vacía, pregúntale *"¿quién está conectado en Session Hub?"*. Recuerda que lo que la IA lee es información, no órdenes: revisa siempre lo que te proponga.
+
+## Mensajes entre compañeros
+
+Además de leer sesiones, puedes **escribirle** a un compañero. El caso típico: Carlos cambia un endpoint y se lo cuenta a Ana, para que su IA adapte el frontend.
+
+**Enviar un mensaje**
+- En el panel: **✉ Escribir** (cabecera) o **✉ Mensaje** en la tarjeta de una persona. Eliges a la persona, si quieres una de sus **sesiones de IA abiertas**, y escribes el texto.
+- O pídeselo a tu IA: *"Avísale a Ana que attachments ahora es una lista y que mire mi sesión sobre adjuntos."* Tu IA usa `send_message` y te muestra el texto.
+- Si la persona está desconectada, el mensaje queda en cola y le llega cuando se conecte (hasta 24 h).
+
+**Recibir un mensaje**
+Te llega un aviso (*✉ Carlos te escribió: "…"*) y el mensaje aparece en **Mensajes**, en el panel. Por defecto queda **retenido**: tu IA no lo ve hasta que tú decidas.
+
+| Botón | Qué pasa |
+| --- | --- |
+| **Pasar a mi IA** | Abre el chat de tu IA con el mensaje y una nota que dice que viene de un compañero, no de ti. En VS Code queda escrito; en Cursor se copia y lo pegas con `Ctrl+V`. Tú lo revisas y pulsas Enviar. |
+| **Permitir que mi IA lo lea** | Tu IA puede leerlo cuando le pidas *"revisa mis mensajes de Session Hub"* (herramienta `check_inbox`). Útil en Claude Code. |
+| **Responder** | Contestas; la respuesta queda enlazada al mensaje original. |
+| **Descartar** | Lo oculta. |
+
+Quien lo envió ve qué pasó con su mensaje: *en cola*, *entregado, espera su aprobación*, *entregado*, *leído* o *descartado*.
+
+**Sesiones abiertas.** La tarjeta de cada persona muestra sus sesiones de IA abiertas: *Claude Code · api · ocupada* o *Cursor · web · activa hace poco*. Solo en los proyectos que comparte contigo.
+
+> Un mensaje es **texto para una persona**. Nunca ejecuta nada en tu computadora, y a tu IA se le indica que te lo explique y espere tu visto bueno antes de cambiar código. Para recibirlos sin retener, o no recibirlos: Ajustes → `sessionHub.inboundMessages`.
 
 ## Tu privacidad: tú tienes el control
 
@@ -128,6 +156,7 @@ Si la respuesta viene vacía, pregúntale *"¿quién está conectado en Session 
 | No tener contacto con alguien | Persona → **Bloquear (solo para mí)** | Ni te ve ni la ves. El resto del equipo no se ve afectado |
 | Sacar a alguien del equipo | Persona → **Expulsar** | Solo si la invitaste tú (o alguien a quien invitaste) |
 | Saber quién me leyó | **Quién ha leído lo mío** | Quién, qué, cuándo y con qué herramienta, durante 90 días |
+| No recibir mensajes | Ajustes → `sessionHub.inboundMessages` → *refuse* | A quien te escriba le aparece *esta persona no está recibiendo mensajes* |
 
 **La huella** (como `7D60-041B-7A87`) es única y nadie puede falsificarla. Si dudas de que alguien sea quien dice, compárala con esa persona de palabra.
 
@@ -136,6 +165,7 @@ Si la respuesta viene vacía, pregúntale *"¿quién está conectado en Session 
 | Aviso | Qué hacer |
 | --- | --- |
 | 👁 *Ana está leyendo tu sesión "X"…* | Nada. Si no quieres que la vea, ocúltala con 👁 |
+| ✉ *Carlos te escribió: "…"* | **Pasar a mi IA**, **Responder** o **Ver** |
 | *Carlos avanzó en "X"* | Pulsa **Ver** si te interesa |
 | ⛔ *Pedro intentó leer "X", sin permiso* | Ya se le negó. Si te preocupa, bloquéalo |
 | ⛔ *Conexión rechazada de clave XXXX* | Se bloqueó sola. Si se repite, avisa a quien administra la herramienta |
@@ -152,7 +182,8 @@ Primer paso: `Ctrl+Shift+P` → **Session Hub: Diagnóstico**. Revisa todo y te 
 | No veo a mis compañeros | Que tengan el editor abierto y el puerto **UDP 49737** permitido en su firewall |
 | Veo a la persona, pero no sus sesiones | Que revise *Quién lo ve* o si está en pausa |
 | La invitación venció o ya se usó | Pide una nueva |
-| Mi IA no encuentra Session Hub | En Claude Code, usa *Conectar Claude Code* |
+| Mi IA no encuentra Session Hub | Mira en *Estado* la línea *Tu IA puede consultar Session Hub (MCP)*. Si sale en rojo, pulsa **Reiniciar** o actualiza la extensión. En Claude Code, usa *Conectar Claude Code* |
+| La IA busca en otro lado (otros documentos, la web) | Nombra la herramienta: *"Busca en Session Hub la sesión de Carlos sobre firmas"* |
 
 Cómo abrir el puerto: en **Windows**, cuando pregunte, permite el acceso en *Redes privadas*. En **macOS**, *Ajustes → Red → Firewall* y permite el editor. En **Fedora**, `sudo firewall-cmd --add-port=49737/udp --permanent && sudo firewall-cmd --reload`.
 
@@ -184,3 +215,4 @@ Cómo abrir el puerto: en **Windows**, cuando pregunte, permite el acceso en *Re
 | **Huella** | Código único que prueba quién es cada persona |
 | **Pausa / Ocultar / Bloquear / Expulsar** | Tus controles de privacidad (ver arriba) |
 | **MCP** | La conexión que permite a tu IA consultar Session Hub |
+| **Mensaje** | Texto firmado para un compañero; queda retenido hasta que lo apruebe o lo pase a su IA |

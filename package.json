@@ -1,7 +1,7 @@
 {
   "name": "session-hub",
   "displayName": "Session Hub",
-  "version": "0.7.2",
+  "version": "0.8.0",
   "description": "%ext.description%",
   "publisher": "carlosvisbal",
   "author": {
@@ -179,6 +179,32 @@
         "command": "sessionHub.setLanguage",
         "title": "%cmd.setLanguage%",
         "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.sendMessage",
+        "title": "%cmd.sendMessage%",
+        "category": "Session Hub",
+        "icon": "$(mail)"
+      },
+      {
+        "command": "sessionHub.replyMessage",
+        "title": "%cmd.replyMessage%",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.handoffMessage",
+        "title": "%cmd.handoffMessage%",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.approveMessage",
+        "title": "%cmd.approveMessage%",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.dismissMessage",
+        "title": "%cmd.dismissMessage%",
+        "category": "Session Hub"
       }
     ],
     "menus": {
@@ -197,6 +223,22 @@
         },
         {
           "command": "sessionHub.revokeMember",
+          "when": "false"
+        },
+        {
+          "command": "sessionHub.replyMessage",
+          "when": "false"
+        },
+        {
+          "command": "sessionHub.handoffMessage",
+          "when": "false"
+        },
+        {
+          "command": "sessionHub.approveMessage",
+          "when": "false"
+        },
+        {
+          "command": "sessionHub.dismissMessage",
           "when": "false"
         }
       ],
@@ -280,6 +322,11 @@
           "command": "sessionHub.leaveTeam",
           "when": "view == sessionHub.team",
           "group": "2_team@9"
+        },
+        {
+          "command": "sessionHub.sendMessage",
+          "when": "view == sessionHub.team",
+          "group": "2_team@4"
         }
       ],
       "view/item/context": [
@@ -481,6 +528,26 @@
             "%cfg.language.enum2%"
           ],
           "description": "%cfg.language%"
+        },
+        "sessionHub.inboundMessages": {
+          "type": "string",
+          "enum": [
+            "hold",
+            "accept",
+            "refuse"
+          ],
+          "default": "hold",
+          "enumDescriptions": [
+            "%cfg.inboundMessages.enum0%",
+            "%cfg.inboundMessages.enum1%",
+            "%cfg.inboundMessages.enum2%"
+          ],
+          "description": "%cfg.inboundMessages%"
+        },
+        "sessionHub.notifyMessages": {
+          "type": "boolean",
+          "default": true,
+          "description": "%cfg.notifyMessages%"
         }
       }
     }

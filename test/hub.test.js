@@ -2,6 +2,8 @@
 // Copyright (C) 2026 Los autores de Session Hub (ver AUTHORS)
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { AccessDenied, createHub } from '../src/hub.js';
 import { LONG_TEXT, makeClaudeFixture } from './fixtures.js';
 
@@ -64,4 +66,24 @@ test('qué hay nuevo sin recortes', () => {
   assert.deepEqual(s.requests, ['Haz que attachments acepte una lista 📎', 'Ahora documenta el cambio']);
   assert.deepEqual(s.filesChanged, ['app/serializers.py']);
   assert.ok(s.lastAssistantMessage.length > 4000);
+});
+
+test('sesiones abiertas: Claude Code vivo en un proyecto compartido, respetando pausa y ocultas', () => {
+  const { cfg, hub } = setup();
+  const dir = path.join(path.dirname(cfg.claudeDir), 'sessions');
+  fs.mkdirSync(dir, { recursive: true });
+  const write = (pid, sessionId, cwd, status) => fs.writeFileSync(path.join(dir, `${pid}.json`), JSON.stringify({ pid, sessionId, cwd, name: 'demo-api-1', status, updatedAt: Date.now() }));
+  write(process.pid, 's1', cfg.project, 'busy'); // este proceso: vivo
+  write(2 ** 22 + 12345, 's2', cfg.project, 'idle'); // proceso inexistente
+  write(process.ppid, 's3', '/otra/carpeta', 'idle'); // vivo, pero fuera de lo compartido
+  fs.writeFileSync(path.join(dir, `${process.pid}.abc.key`), 'secreto'); // nunca se lee
+  const live = hub.liveAgents(ANA);
+  assert.equal(live.length, 1);
+  assert.deepEqual({ session: live[0].session, tool: live[0].tool, status: live[0].status, project: live[0].project, title: live[0].title }, { session: 'claude:s1', tool: 'Claude Code', status: 'busy', project: 'demo-api', title: 'Adjuntos múltiples en contactos' });
+  cfg.excludedSessions.push('claude:s1');
+  assert.equal(hub.liveAgents(ANA).length, 0, 'oculta al equipo');
+  assert.equal(hub.liveAgents().length, 1, 'el dueño la sigue viendo');
+  cfg.excludedSessions.length = 0;
+  cfg.paused = true;
+  assert.equal(hub.liveAgents(ANA).length, 0, 'en pausa no se ve nada');
 });

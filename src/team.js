@@ -9,7 +9,7 @@ const ME = new Set(['yo', 'me', 'mi', 'mío', 'mio', 'self']);
 const ALL = new Set(['todos', 'all', '*']);
 const PAGE = 100;
 
-export function createTeam(cfg, hub, transport, teamState, t = (s) => s) {
+export function createTeam(cfg, hub, transport, teamState, t = (s) => s, inbox = null) {
   const self = () => ({ ...hub.whoami(), fingerprint: fingerprint(teamState.me()), self: true, online: true });
 
   const members = () => [self(), ...transport.list()];
@@ -59,6 +59,21 @@ export function createTeam(cfg, hub, transport, teamState, t = (s) => s) {
     }
     if (conversation.length !== expected) throw new Error(`La sesión llegó incompleta (${conversation.length} de ${expected} mensajes); vuelve a intentarlo.`);
     return { ...first, omittedMessages: first.offset, conversation };
+  }
+
+  // Entrega un mensaje ya firmado. Si la persona no está, queda en cola y sale cuando se conecte.
+  async function deliver(pub, doc) {
+    try {
+      const r = await transport.request(pub, 'message', { doc });
+      inbox.markSent(doc.body.id, r.status);
+      return r.status;
+    } catch (err) {
+      if (['offline', 'closed', 'timeout'].includes(err.code)) return 'queued';
+      // Hub de una versión sin mensajes: responde "Operación desconocida".
+      const msg = /Operación desconocida/.test(err.message) ? 'Su Session Hub es de una versión sin mensajes; debe actualizarlo.' : err.message;
+      inbox.markSent(doc.body.id, err.code === 'refused' ? 'refused' : 'failed', msg);
+      throw Object.assign(new Error(msg), { code: err.code });
+    }
   }
 
   const api = {
@@ -142,6 +157,45 @@ export function createTeam(cfg, hub, transport, teamState, t = (s) => s) {
     async search(query, { peer, ...q }, origin) {
       const res = await fanOut(peer, (m) => ask(m, () => hub.search(query, q), 'search', { q: query, ...q }, origin));
       return res.flatMap((r) => (r.error ? [{ member: r.member, error: r.error }] : r.data));
+    },
+
+    // Sesiones de IA abiertas ahora, por compañero (o "yo").
+    async listAgents({ peer } = {}, origin) {
+      const res = await fanOut(peer, (m) => ask(m, () => hub.liveAgents(), 'agents', {}, origin));
+      return res.flatMap((r) => (r.error ? [{ member: r.member, error: r.error }] : r.data));
+    },
+
+    // Mensaje de texto a una persona. replyTo sin "to" responde a quien escribió ese mensaje.
+    async sendMessage({ to, text, toSession, aboutSession, replyTo }, origin = {}) {
+      if (!inbox) throw new Error('Mensajes no disponibles.');
+      const original = replyTo ? inbox.get(replyTo) : null;
+      if (replyTo && !original) throw new Error(t('No encuentro el mensaje {v1} en tu bandeja.', { v1: replyTo }));
+      if (!to && !original) throw new Error(t('Indica a quién va el mensaje ("to"): nombre, huella o id. Equipo: {v1}', { v1: members().filter((m) => !m.self).map(label).join(', ') || '—' }));
+      const targets = original ? members().filter((m) => m.id === original.from) : resolve(to).filter((m) => !m.self);
+      if (targets.length !== 1) throw new Error(t('El mensaje va a una sola persona. Equipo: {v1}', { v1: members().filter((m) => !m.self).map(label).join(', ') || '—' }));
+      const m = targets[0];
+      const doc = inbox.compose({ to: m.id, text, toSession, aboutSession, replyTo });
+      inbox.recordSent(doc, m.name);
+      if (original) inbox.markReplied(original.id);
+      const status = m.online ? await deliver(m.id, doc) : 'queued';
+      return { id: doc.body.id, to: label(m), status, via: origin.via };
+    },
+
+    // Para mi IA: los mensajes aprobados que no leyó; se marcan como leídos y se avisa a cada remitente.
+    checkInbox() {
+      const r = inbox.takeForAi();
+      for (const m of r.messages) api.notifySender(m);
+      return r;
+    },
+
+    // Reintenta lo que estaba en cola para alguien que acaba de conectarse.
+    async flushQueue(pub) {
+      for (const doc of inbox?.queuedFor(pub) || []) await deliver(pub, doc).catch(() => {});
+    },
+
+    // Aviso al remitente de qué pasó con su mensaje (retenido, entregado, leído, descartado).
+    notifySender(m) {
+      if (m) transport.send(m.from, { t: 'receipt', id: m.id, status: m.status });
     },
 
     // Para el panel: una operación contra una persona concreta.

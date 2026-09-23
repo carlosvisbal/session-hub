@@ -5,8 +5,8 @@
   const vscode = acquireVsCodeApi();
   const saved = vscode.getState() || {};
   let state = null;
-  let ui = { tab: saved.tab || 'team', filter: '', person: saved.person || '', selected: null, detail: null, loading: false, error: null, page: { reads: 0, team: 0, following: 0, mine: 0 } };
-  const PAGE_SIZE = { reads: 10, team: 15, following: 15, mine: 15 };
+  let ui = { tab: saved.tab || 'team', filter: '', person: saved.person || '', selected: null, detail: null, loading: false, error: null, page: { reads: 0, team: 0, following: 0, mine: 0, inbox: 0 } };
+  const PAGE_SIZE = { reads: 10, team: 15, following: 15, mine: 15, inbox: 5 };
 
   // Traducción (media/i18n.js + diccionario que inyecta la extensión). El idioma llega con el estado.
   const translate = window.SessionHubI18n ? window.SessionHubI18n.createTranslator(window.SESSION_HUB_DICT || {}) : (l, s) => s;
@@ -43,6 +43,10 @@
   const srcLabel = (s) => (s.source === 'cursor' ? 'Cursor' : 'Claude Code');
   const me = () => state.members.find((m) => m.self) || {};
   const b = (x) => `<b>${esc(x)}</b>`;
+  const clip = (s, n) => (s && s.length > n ? s.slice(0, n) + '…' : s || '');
+  const AGENT_STATUS = { busy: 'ocupada', idle: 'libre', recent: 'activa hace poco' };
+  const MSG_STATUS = { held: 'esperando tu aprobación', delivered: 'visible para tu IA', read: 'leído', dismissed: 'descartado' };
+  const SENT_STATUS = { queued: 'en cola: se entrega cuando se conecte', held: 'entregado, espera su aprobación', delivered: 'entregado', read: 'leído', dismissed: 'descartado', refused: 'rechazado', failed: 'no se pudo entregar', expired: 'venció en la cola' };
 
   // Misma frase que la notificación: quién, qué, de qué proyecto y desde dónde.
   function readSentence(r) {
@@ -120,6 +124,7 @@
         ${cmd('sessionHub.whatChanged', T('¿Qué hay nuevo?'), 'primary')}
         ${cmd('sessionHub.togglePause', paused ? `▶ ${T('Reanudar')}` : `⏸ ${T('Pausar')}`, paused ? 'warn' : '')}
         ${cmd('sessionHub.copyInvite', T('Invitar'))}
+        ${cmd('sessionHub.sendMessage', `✉ ${T('Escribir')}`)}
         <button data-act="refresh" title="${T('Refrescar')}">⟳</button>
         ${langSwitch()}
         ${cmd('sessionHub.openSource', 'AGPL-3.0', 'icon')}
@@ -129,6 +134,7 @@
       <main>
         <section>
           ${sharingHtml()}
+          <div id="messages">${messagesHtml()}</div>
           <h3>${T('Personas del equipo')}</h3>
           <div class="actions team-actions">${cmd('sessionHub.copyInvite', T('Invitar'), 'link')}${cmd('sessionHub.leaveTeam', T('Salir del equipo'), 'link danger')}</div>
           ${state.members.map(personHtml).join('') || `<p class="empty">${T('Nadie más en la red todavía.')}</p>`}
@@ -166,6 +172,46 @@
     );
   }
 
+  // Mensajes de compañeros (firmados). Retenido = mi IA no lo ve hasta que lo apruebe o lo pase al chat.
+  function messagesHtml() {
+    const box = state.inbox || { received: [], sent: [], unread: 0 };
+    const visible = box.received.filter((m) => m.status !== 'dismissed');
+    const head = `<h3>${T('Mensajes')}${box.unread ? ` <span class="badge">${box.unread}</span>` : ''}</h3>`;
+    const refuse = box.policy === 'refuse' ? `<p class="small warn-txt pad">${T('No estás recibiendo mensajes (ajuste sessionHub.inboundMessages).')}</p>` : '';
+    let body = `<p class="empty small">${T('Sin mensajes. Tus compañeros pueden escribirte desde su panel o pidiéndoselo a su IA.')}</p>`;
+    if (visible.length) {
+      const { items, pager } = paginate(visible, 'inbox');
+      body = items.map(messageHtml).join('') + pager;
+    }
+    const sent = box.sent.slice(0, 10);
+    const sentHtml = sent.length
+      ? `<details class="sent"><summary class="small muted">${T('Enviados ({v1})', { v1: box.sent.length })}</summary>${sent
+          .map((m) => `<div class="read small">${T('Para {v1}', { v1: b(m.toName) })}: ${esc(clip(m.text, 120))}<div class="muted">${T(SENT_STATUS[m.status] || m.status)}${m.error ? ' · ' + esc(T(m.error)) : ''} · ${ago(m.updatedAt || m.at)}</div></div>`)
+          .join('')}</details>`
+      : '';
+    return `${head}${refuse}${body}${sentHtml}`;
+  }
+
+  const sessionName = (id) => state.mine.find((s) => s.id === id)?.title || id;
+
+  function messageHtml(m) {
+    const pending = m.status === 'held' || m.status === 'delivered';
+    const long = m.text.length > 280;
+    const notes = [T(MSG_STATUS[m.status] || m.status), m.toSession ? T('para tu sesión {v1}', { v1: b(clip(sessionName(m.toSession), 50)) }) : '', m.replyTo ? T('es una respuesta') : '', m.repliedAt ? T('respondido') : ''].filter(Boolean);
+    return `<div class="read msgbox ${pending ? 'fresh' : 'dim'}">
+      <div><b>${esc(m.fromName)}</b>${m.fromRole ? ` <span class="muted">(${esc(m.fromRole)})</span>` : ''} <span class="muted small" title="${T('Huella de su clave')}: ${esc(m.fingerprint)}">· ${ago(m.receivedAt)}</span></div>
+      <div class="text">${esc(long ? clip(m.text, 280) : m.text)}</div>
+      ${long ? `<details><summary class="small muted">${T('Ver completo')}</summary><div class="text">${esc(m.text)}</div></details>` : ''}
+      <div class="muted small">${notes.join(' · ')}</div>
+      <div class="actions person-actions">
+        ${cmd('sessionHub.handoffMessage', T('Pasar a mi IA'), 'link', [m.id])}
+        ${m.status === 'held' ? cmd('sessionHub.approveMessage', T('Permitir que mi IA lo lea'), 'link', [m.id]) : ''}
+        ${cmd('sessionHub.replyMessage', T('Responder'), 'link', [m.id])}
+        ${cmd('sessionHub.dismissMessage', T('Descartar'), 'link', [m.id])}
+      </div>
+    </div>`;
+  }
+
   function sharingHtml() {
     const ws = state.workspace;
     const projects = state.sharing.projects;
@@ -199,16 +245,21 @@
   function personHtml(m) {
     const viewer = state.access.viewers.find((v) => v.id === m.id);
     const followed = state.follows.people.includes(m.id);
+    const live = (state.agents || []).filter((a) => a.ownerId === m.id);
+    const liveHtml = live.length
+      ? `<div class="live">${live.map((a) => `<div class="small" title="${esc(a.title || a.session)}"><span class="dot ${a.status === 'busy' ? 'busy' : 'on'}"></span>${esc(a.tool)} · ${esc(a.project)} · ${T(AGENT_STATUS[a.status] || a.status)}${a.title ? ` · <span class="muted">${esc(clip(a.title, 40))}</span>` : ''}</div>`).join('')}</div>`
+      : '';
     return `<div class="person ${m.self ? '' : 'clickable'}" data-person="${m.self ? '' : esc(m.id)}">
       <span class="dot ${m.online ? 'on' : ''}"></span>
       <span><span class="name">${esc(m.name)}</span>${m.self ? ` <span class="muted">(${T('tú')})</span>` : ''} <span class="muted small">${esc(m.role || '')}</span>${m.founder ? ` <span class="chip">${T('fundador')}</span>` : ''}</span>
       ${m.self ? '<span></span>' : `<button class="icon ${followed ? 'on' : ''}" data-follow="person" data-id="${esc(m.id)}" title="${T(followed ? 'Dejar de seguir' : 'Seguir')}">${followed ? '★' : '☆'}</button>`}
       <div class="sub">
+        ${liveHtml}
         <div class="chips">${(m.projects || []).map((p) => `<span class="chip">${esc(p)}</span>`).join('') || `<span class="muted small">${T('no comparte proyectos contigo')}</span>`}</div>
         <div class="muted small" title="${T('Huella de su clave')}">${esc(m.fingerprint || '')}${m.invitedByName ? ` · ${T('lo invitó {v1}', { v1: esc(m.invitedByName === 'ti' ? T('ti') : m.invitedByName) })}` : ''}</div>
         ${m.paused && !m.self ? `<div class="muted small">⏸ ${T('en pausa')}</div>` : ''}
         ${m.blocked ? `<div class="small warn-txt">🚫 ${T('bloqueado por ti')}</div>` : ''}
-        ${m.self ? '' : `<div class="actions person-actions">${cmd('sessionHub.blockMember', T(m.blocked ? 'Desbloquear' : 'Bloquear (solo para mí)'), 'link', [m.id])}${m.canRevoke ? cmd('sessionHub.revokeMember', T('Expulsar del equipo'), 'link danger', [m.id]) : ''}</div>`}
+        ${m.self ? '' : `<div class="actions person-actions">${m.blocked ? '' : cmd('sessionHub.sendMessage', `✉ ${T('Mensaje')}`, 'link', [m.id])}${cmd('sessionHub.blockMember', T(m.blocked ? 'Desbloquear' : 'Bloquear (solo para mí)'), 'link', [m.id])}${m.canRevoke ? cmd('sessionHub.revokeMember', T('Expulsar del equipo'), 'link danger', [m.id]) : ''}</div>`}
         ${viewer && viewer.reads ? `<div class="muted small seen">👁 ${T('te leyó {v1}', { v1: ago(viewer.lastSeen) })}${viewer.lastClient ? ' · ' + esc(viewer.lastClient) : ''}</div>` : ''}
         ${m.online ? '' : `<div class="muted small">${T('desconectado')}</div>`}
       </div>
@@ -298,6 +349,7 @@
       const [key, dir] = t.dataset.page.split(':');
       ui.page[key] = Math.max(0, (ui.page[key] || 0) + Number(dir));
       if (key === 'reads') document.getElementById('reads').innerHTML = readsHtml();
+      else if (key === 'inbox') document.getElementById('messages').innerHTML = messagesHtml();
       else document.getElementById('list').innerHTML = listHtml();
       return;
     }

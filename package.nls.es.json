@@ -55,5 +55,15 @@
   "cmd.whatChanged": "¿Qué hay nuevo?",
   "ext.description": "Comparte con tu equipo las sesiones de Claude Code y Cursor: de igual a igual, cifrado, con identidad firmada y listo para MCP.",
   "view.team": "Equipo",
-  "view.welcome": "Comparte tus sesiones de Claude Code y Cursor con tu equipo.\n[Crear equipo](command:sessionHub.createTeam)\n[Unirme con una invitación](command:sessionHub.joinTeam)\nSi ya tienes equipo: [Iniciar hub](command:sessionHub.start) · [Abrir panel](command:sessionHub.openDashboard) · [Diagnóstico](command:sessionHub.doctor)"
+  "view.welcome": "Comparte tus sesiones de Claude Code y Cursor con tu equipo.\n[Crear equipo](command:sessionHub.createTeam)\n[Unirme con una invitación](command:sessionHub.joinTeam)\nSi ya tienes equipo: [Iniciar hub](command:sessionHub.start) · [Abrir panel](command:sessionHub.openDashboard) · [Diagnóstico](command:sessionHub.doctor)",
+  "cmd.sendMessage": "Escribir a un compañero",
+  "cmd.replyMessage": "Responder mensaje",
+  "cmd.handoffMessage": "Pasar mensaje a mi IA",
+  "cmd.approveMessage": "Permitir que mi IA lea el mensaje",
+  "cmd.dismissMessage": "Descartar mensaje",
+  "cfg.inboundMessages": "Mensajes de compañeros. Siempre llegan firmados y verificados, y nunca ejecutan nada.",
+  "cfg.inboundMessages.enum0": "Retener: esperan a que los apruebes o los pases a tu IA (recomendado)",
+  "cfg.inboundMessages.enum1": "Aceptar: tu IA puede leerlos enseguida con check_inbox",
+  "cfg.inboundMessages.enum2": "Rechazar: no recibir mensajes",
+  "cfg.notifyMessages": "Avisar cuando un compañero te envía un mensaje."
 }

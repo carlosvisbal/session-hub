@@ -2,6 +2,26 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versiones con [SemVer](https://semver.org/lang/es/).
 
+## [0.8.0] — 2026-09-23
+
+### Añadido
+- **Mensajes entre compañeros.** Escríbele a una persona del equipo (o a una de sus sesiones de IA abiertas) desde el panel o pidiéndoselo a tu IA.
+  - Van **firmados** con tu clave y el hub del destinatario los verifica contra la conexión.
+  - Por defecto quedan **retenidos** hasta que el destinatario los aprueba. Con **Pasar a mi IA** se abre el chat de su IA con el mensaje enmarcado como "de un compañero, no una orden tuya". Nada se ejecuta solo.
+  - Si la persona está desconectada, **cola** de hasta 24 h. Acuses de *retenido / entregado / leído / descartado*. Respuestas enlazadas al mensaje original.
+  - Ajustes `sessionHub.inboundMessages` (retener / aceptar / rechazar) y `sessionHub.notifyMessages`. Límites de 20 000 caracteres y 10 mensajes por minuto por remitente.
+- **Sesiones abiertas:** el panel muestra, por persona, sus sesiones de IA abiertas (*Claude Code · api · ocupada*, *Cursor · web · activa hace poco*), solo en los proyectos que comparte contigo.
+- Herramientas MCP **`list_agents`**, **`send_message`** y **`check_inbox`**.
+- **Comprobación del MCP:** la extensión prueba el MCP como lo haría la IA (una conexión real). Si falla, aparece en *Estado* y en el diagnóstico, y avisa una vez con **Reiniciar**.
+- **Instrucciones del MCP más claras:** si preguntan por "el doc", "la sesión" o "la conversación" de un compañero, la IA busca primero en Session Hub, aunque no se nombre, en vez de irse a otros conectores de documentos.
+- Pruebas: bandeja de mensajes (5), sesiones abiertas, y el extremo a extremo ahora cubre MCP, mensajes, acuses, respuesta y entrega de la cola al reconectar.
+
+### Corregido
+- **El MCP fallaba en 0.7.x** con *"Cannot access 't' before initialization"*: una variable local tapaba la función de traducción. Tu IA volvía a no poder consultar Session Hub; ya funciona, y la prueba extremo a extremo ahora lo cubre.
+- Al unirse a un equipo no aparecía el aviso *"Ya eres miembro"*.
+- *Dejar de compartir* y *Quién lo ve*, elegidos desde el menú (sin proyecto), fallaban.
+- El panel dejaba de cargar si alguna consulta al hub fallaba.
+
 ## [0.7.2] — 2026-09-23
 
 ### Añadido

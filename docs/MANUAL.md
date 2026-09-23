@@ -13,6 +13,7 @@ Session Hub lets you see, from your editor, what your teammates did with their A
 - [Share a project](#share-a-project-and-choose-who-sees-it)
 - [The panel](#tour-of-the-panel)
 - [Read sessions and ask your AI](#read-a-teammates-session-and-ask-your-ai)
+- [Messages between teammates](#messages-between-teammates)
 - [Your privacy](#your-privacy-youre-in-control)
 - [Notifications](#notifications-youll-see)
 - [Troubleshooting](#troubleshooting)
@@ -117,8 +118,35 @@ Requests that work well:
 2. *"Which sessions does Carlos have in api-clients this week?"*
 3. *"Read Carlos's session about signatures in full and tell me which endpoints changed."*
 4. *"Search Carlos's sessions for where the attachments field changed."*
+5. *"What AI sessions does Ana have open right now?"*
+6. *"Tell Carlos the form already sends a list of files."* · *"Check my Session Hub messages."*
 
 Empty answer? Ask *"who is connected in Session Hub?"*. What the AI reads is information, not instructions — always review what it proposes.
+
+## Messages between teammates
+
+Besides reading sessions, you can **write** to a teammate. Typical case: Carlos changes an endpoint and tells Ana, so her AI adapts the frontend.
+
+**Send a message**
+- In the panel: **✉ Write** (header) or **✉ Message** on a person's card. Choose the person, optionally one of their **open AI sessions**, and write the text.
+- Or ask your AI: *"Tell Ana that attachments is now a list, and point her to my session about attachments."* Your AI uses `send_message` and shows you the text.
+- If the person is offline, the message waits in a queue and is delivered when they connect (up to 24 h).
+
+**Receive a message**
+You get a notification (*✉ Carlos wrote to you: "…"*) and the message appears under **Mensajes** (*Messages*) in the panel. By default it's **held**: your AI doesn't see it until you decide.
+
+| Button | What happens |
+| --- | --- |
+| **Pasar a mi IA** (*Pass to my AI*) | Opens your AI's chat with the message and a note saying it comes from a teammate, not from you. In VS Code it's typed in for you; in Cursor it's copied, so paste it with `Ctrl+V`. You review it and press Send. |
+| **Permitir que mi IA lo lea** (*Let my AI read it*) | Your AI can read it when you ask *"check my Session Hub messages"* (tool `check_inbox`). Useful in Claude Code. |
+| **Responder** (*Reply*) | Write back; the reply is linked to the original message. |
+| **Descartar** (*Dismiss*) | Hides it. |
+
+The sender sees what happened to their message: *queued*, *delivered, waiting for approval*, *delivered*, *read* or *dismissed*.
+
+**Open sessions.** Each person's card shows their open AI sessions: *Claude Code · api · busy* or *Cursor · web · recently active*. Only in projects they share with you.
+
+> A message is **text for a person**. It never runs anything on your computer, and your AI is told to explain it to you and wait for your OK before changing code. To receive messages without holding them, or not receive them at all: Settings → `sessionHub.inboundMessages`.
 
 ## Your privacy: you're in control
 
@@ -130,6 +158,7 @@ Empty answer? Ask *"who is connected in Session Hub?"*. What the AI reads is inf
 | Cut contact with someone | Person → **Bloquear** (*Block, just for me*) | Neither sees the other; the rest of the team is unaffected |
 | Remove someone from the team | Person → **Expulsar** (*Expel*) | Only if you (or someone you invited) invited them |
 | Know who read me | **Quién ha leído lo mío** (*Who read mine*) | Who, what, when and with which tool — 90 days |
+| Not receive messages | Settings → `sessionHub.inboundMessages` → *refuse* | Senders see *this person is not receiving messages* |
 
 **The fingerprint** (like `7D60-041B-7A87`) is unique and can't be forged. If in doubt about someone, compare it with them by voice.
 
@@ -138,6 +167,7 @@ Empty answer? Ask *"who is connected in Session Hub?"*. What the AI reads is inf
 | Notification | What to do |
 | --- | --- |
 | 👁 *Ana is reading your session "X"…* | Nothing. Hide it with 👁 if you don't want that |
+| ✉ *Carlos wrote to you: "…"* | **Pass to my AI**, **Reply** or **View** |
 | *Carlos progressed on "X"* | Click **Ver** (*View*) if interested |
 | ⛔ *Pedro tried to read "X", without permission* | Already denied. Block if concerned |
 | ⛔ *Connection rejected from key XXXX* | Blocked automatically. Tell your admin if it repeats |
@@ -154,7 +184,8 @@ First step: `Ctrl+Shift+P` → **Session Hub: Diagnóstico** (*Diagnostics*). It
 | I can't see my teammates | They must have the editor open and allow **UDP 49737** in their firewall |
 | I see the person but not their sessions | Ask them to check *Who sees it* or whether they're paused |
 | Invitation expired or already used | Ask for a new one |
-| My AI can't find Session Hub | In Claude Code, use *Connect Claude Code* |
+| My AI can't find Session Hub | Check the *Status* line *Your AI can query Session Hub (MCP)*. If it's red, click **Restart** or update the extension. In Claude Code, use *Connect Claude Code* |
+| The AI looks elsewhere (other documents, the web) | Name the tool: *"Search Session Hub for Carlos's session about signatures"* |
 
 Opening the port — **Windows:** allow on *Private networks* when prompted. **macOS:** *Settings → Network → Firewall* → allow the editor. **Fedora:** `sudo firewall-cmd --add-port=49737/udp --permanent && sudo firewall-cmd --reload`.
 
@@ -184,3 +215,4 @@ Opening the port — **Windows:** allow on *Private networks* when prompted. **m
 | **Fingerprint** | Unique code that proves who each person is |
 | **Pause / Hide / Block / Expel** | Your privacy controls (see above) |
 | **MCP** | The connection that lets your AI query Session Hub |
+| **Message** | Signed text for a teammate; held until they approve it or pass it to their AI |

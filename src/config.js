@@ -30,11 +30,15 @@ const defaults = {
   paused: false,
   // Sesiones que no se muestran al equipo aunque su proyecto esté compartido.
   excludedSessions: [],
+  // Mensajes de compañeros: 'hold' (esperan a que los apruebe), 'accept' (mi IA los ve enseguida) o 'refuse'.
+  inbound: 'hold',
   // Archivos junto a la configuración si se dejan vacíos.
   stateFile: '', // claves, equipo, miembros, expulsiones (team.json)
   auditFile: '', // quién leyó qué (audit.jsonl)
+  inboxFile: '', // mensajes recibidos y enviados (inbox.json)
   auditRetentionDays: 90,
   claudeDir: path.join(os.homedir(), '.claude', 'projects'),
+  claudeSessionsDir: '', // sesiones de Claude Code abiertas; vacío = ~/.claude/sessions
   cursorUserDir: path.join(os.homedir(), '.config', 'Cursor', 'User'),
   // URL pública del repositorio (AGPL §13). Vacío = el hub sirve su propio código en /source.
   sourceUrl: '',
@@ -62,6 +66,8 @@ export function normalizeConfig(raw) {
   const dir = path.dirname(CONFIG_PATH);
   cfg.stateFile ||= path.join(dir, 'team.json');
   cfg.auditFile ||= path.join(dir, 'audit.jsonl');
+  cfg.inboxFile ||= path.join(dir, 'inbox.json');
+  if (!['hold', 'accept', 'refuse'].includes(cfg.inbound)) cfg.inbound = 'hold';
   if (!cfg.localToken) throw new Error('La configuración no tiene localToken. Ejecuta npm run setup.');
   return cfg;
 }
@@ -71,7 +77,7 @@ export function saveConfig(cfg) {
 }
 
 // Se recarga en caliente al cambiar el archivo. Las claves de red reinician solo la conexión entre hubs.
-export const HOT_RELOAD_KEYS = ['language', 'owner', 'projects', 'paused', 'excludedSessions', 'redactExtra', 'peers', 'auditRetentionDays', 'network', 'dhtPort', 'bootstrap', 'relay', 'forceRelay'];
+export const HOT_RELOAD_KEYS = ['language', 'owner', 'projects', 'paused', 'excludedSessions', 'inbound', 'redactExtra', 'peers', 'auditRetentionDays', 'network', 'dhtPort', 'bootstrap', 'relay', 'forceRelay'];
 export const NETWORK_KEYS = ['network', 'dhtPort', 'bootstrap', 'relay', 'forceRelay'];
 
 export { defaults };
