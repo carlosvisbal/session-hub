@@ -98,3 +98,6 @@ button.link { background: none; color: var(--vscode-textLink-foreground); paddin
 button.danger { color: var(--vscode-errorForeground) }
 .pager { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 8px 12px }
 .pager button[disabled] { opacity: .35; cursor: default }
+
+.lang { display: inline-flex; gap: 2px }
+.lang button.on { color: var(--vscode-foreground); font-weight: 700; text-decoration: underline }

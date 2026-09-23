@@ -1,7 +1,7 @@
 {
   "name": "session-hub",
   "displayName": "Session Hub",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "%ext.description%",
   "publisher": "carlosvisbal",
   "author": {
@@ -173,6 +173,11 @@
       {
         "command": "sessionHub.copyNetReport",
         "title": "%cmd.copyNetReport%",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.setLanguage",
+        "title": "%cmd.setLanguage%",
         "category": "Session Hub"
       }
     ],

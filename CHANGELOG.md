@@ -2,6 +2,16 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versiones con [SemVer](https://semver.org/lang/es/).
 
+## [0.7.1] — 2026-09-23
+
+### Corregido
+- **Se recupera el equipo de la versión anterior.** Al cambiar el publisher (`energiasolar` → `carlosvisbal`), el editor trató la extensión como nueva y pedía crear otro equipo. Ahora, al abrirla:
+  - si no tienes equipo, recupera sola el anterior, con tu identidad (huella) y tu historial de lecturas;
+  - si ya creaste otro, pregunta si quieres recuperar el anterior y deja una copia del actual.
+
+### Añadido
+- Botón **ES / EN** en la cabecera del panel y comando **Session Hub: Cambiar idioma** (antes solo desde el ajuste `sessionHub.language`).
+
 ## [0.7.0] — 2026-09-23
 
 ### Añadido

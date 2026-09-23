@@ -111,6 +111,7 @@ async function activate(context) {
   reg('sessionHub.editProjectAccess', editProjectAccess);
   reg('sessionHub.doctor', runDoctor);
   reg('sessionHub.copyNetReport', copyNetReport);
+  reg('sessionHub.setLanguage', setLanguage);
   reg('sessionHub.openSource', () => vscode.env.openExternal(vscode.Uri.parse(`${base()}/source`)));
   reg('sessionHub.openWebViewer', () => vscode.env.openExternal(vscode.Uri.parse(`${base()}/?token=${encodeURIComponent(token)}`)));
 
@@ -122,7 +123,10 @@ async function activate(context) {
   );
   registerMcp();
   updateStatus();
+  const migration = migrateLegacyStorage();
 
+  if (migration?.restored) info(t('Recuperé tu equipo "{v1}" de la versión anterior de la extensión.', { v1: migration.restored }));
+  if (migration?.ask) migration.ask();
   if (cfg().get('autoStart')) {
     startHub();
     // Primera vez: ofrecer crear o unirse.
@@ -139,6 +143,53 @@ async function activate(context) {
 
 function deactivate() {
   stopHub();
+}
+
+// Hasta 0.6.1 la extensión se publicaba como "energiasolar.session-hub"; el editor la trata como
+// otra extensión, con otra carpeta de datos. Si ahí hay un equipo, se trae (identidad incluida).
+const LEGACY_IDS = ['energiasolar.session-hub'];
+const readTeam = (file) => {
+  try {
+    return JSON.parse(fs.readFileSync(file, 'utf8')).team || null;
+  } catch {
+    return null;
+  }
+};
+
+function migrateLegacyStorage() {
+  const dir = ctx.globalStorageUri.fsPath;
+  const current = readTeam(path.join(dir, 'team.json'));
+  for (const id of LEGACY_IDS) {
+    const legacyDir = path.join(path.dirname(dir), id);
+    const legacy = readTeam(path.join(legacyDir, 'team.json'));
+    if (!legacy || fs.existsSync(path.join(dir, `.migrated-from-${id}`))) continue;
+    const copy = () => {
+      fs.mkdirSync(dir, { recursive: true });
+      const target = path.join(dir, 'team.json');
+      if (fs.existsSync(target)) fs.copyFileSync(target, path.join(dir, `team.json.${Date.now()}.bak`));
+      for (const f of ['team.json', 'audit.jsonl']) if (fs.existsSync(path.join(legacyDir, f))) fs.copyFileSync(path.join(legacyDir, f), path.join(dir, f));
+      fs.writeFileSync(path.join(dir, `.migrated-from-${id}`), new Date().toISOString());
+      output.appendLine(t('[hub] equipo "{v1}" recuperado de la versión anterior de la extensión.', { v1: legacy.name }));
+    };
+    if (!current) {
+      copy(); // sin equipo en la versión nueva: se recupera el anterior sin preguntar
+      return { restored: legacy.name };
+    }
+    if (current.id === legacy.id) continue;
+    // Ya hay otro equipo: se pregunta, y el actual queda respaldado.
+    return {
+      ask: async () => {
+        const pick = await warn(t('Encontré tu equipo "{v1}" de la versión anterior de Session Hub. Ahora estás en "{v2}". ¿Recuperar "{v1}"? (el actual queda respaldado)', { v1: legacy.name, v2: current.name }), 'Recuperar equipo anterior', 'Mantener el actual');
+        if (pick === 'Recuperar equipo anterior') {
+          stopHub();
+          copy();
+          setTimeout(startHub, 800);
+          info(t('Equipo "{v1}" recuperado, con tu identidad anterior.', { v1: legacy.name }));
+        } else if (pick === 'Mantener el actual') fs.writeFileSync(path.join(dir, `.migrated-from-${id}`), 'kept-current');
+      },
+    };
+  }
+  return null;
 }
 
 // Solo el puerto de la API o el runtime requieren reiniciar el hub; lo demás se recarga en caliente
@@ -688,6 +739,24 @@ function readMessage(r) {
 let lastSeen = null; // sesiones del equipo: id -> updatedAt
 let lastReadAt = ''; // fecha del último acceso ya avisado
 const readNotified = new Map(); // quién+qué -> último aviso
+
+// Cambiar de idioma: desde el panel (botón ES / EN) o con el comando. Con un argumento, lo aplica directo.
+async function setLanguage(value) {
+  const choice =
+    typeof value === 'string'
+      ? value
+      : (
+          await pick(
+            [
+              { label: 'Español', value: 'es' },
+              { label: 'English', value: 'en' },
+              { label: 'Idioma del editor', value: 'auto' },
+            ],
+            { placeHolder: 'Idioma de Session Hub' },
+          )
+        )?.value;
+  if (choice) await cfg().update('language', choice, vscode.ConfigurationTarget.Global);
+}
 
 // Copia el informe de conexión: qué falla, por qué y qué pedirle a TI.
 async function copyNetReport() {

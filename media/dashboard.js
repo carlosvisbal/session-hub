@@ -79,8 +79,12 @@
 
   // ---------- pantallas ----------
 
+  const langSwitch = () =>
+    `<span class="lang" title="${T('Idioma de Session Hub')}">${cmd('sessionHub.setLanguage', 'ES', state.lang === 'es' ? 'icon on' : 'icon', ['es'])}${cmd('sessionHub.setLanguage', 'EN', state.lang === 'en' ? 'icon on' : 'icon', ['en'])}</span>`;
+
   function welcomeHtml() {
     return `<div class="welcome">
+      <div style="float:right">${langSwitch()}</div>
       <h1>Session Hub</h1>
       <p>${T('Comparte con tu equipo lo que haces con Claude Code y Cursor: quién pidió qué, qué archivos cambiaron y en qué quedó. Tu IA también puede consultarlo.')}</p>
       <ol>
@@ -117,6 +121,7 @@
         ${cmd('sessionHub.togglePause', paused ? `▶ ${T('Reanudar')}` : `⏸ ${T('Pausar')}`, paused ? 'warn' : '')}
         ${cmd('sessionHub.copyInvite', T('Invitar'))}
         <button data-act="refresh" title="${T('Refrescar')}">⟳</button>
+        ${langSwitch()}
         ${cmd('sessionHub.openSource', 'AGPL-3.0', 'icon')}
       </header>
       ${t.pending ? `<p class="banner warnbg">⏳ ${T('Tu entrada está pendiente: quien te invitó ({v1}) debe tener Session Hub abierto para confirmarla. Se completa sola.', { v1: esc(t.invitedBy) })}</p>` : ''}

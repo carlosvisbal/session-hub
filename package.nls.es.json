@@ -45,6 +45,7 @@
   "cmd.openWebViewer": "Abrir visor web",
   "cmd.refresh": "Refrescar",
   "cmd.revokeMember": "Expulsar del equipo",
+  "cmd.setLanguage": "Cambiar idioma / Change language",
   "cmd.shareWorkspace": "Compartir este proyecto",
   "cmd.start": "Iniciar hub",
   "cmd.stop": "Detener hub",
