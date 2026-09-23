@@ -130,6 +130,7 @@
         <section>
           ${sharingHtml()}
           <h3>${T('Personas del equipo')}</h3>
+          <div class="actions team-actions">${cmd('sessionHub.copyInvite', T('Invitar'), 'link')}${cmd('sessionHub.leaveTeam', T('Salir del equipo'), 'link danger')}</div>
           ${state.members.map(personHtml).join('') || `<p class="empty">${T('Nadie más en la red todavía.')}</p>`}
           <h3>${T('Quién ha leído lo mío')}</h3>
           <div id="reads">${readsHtml()}</div>

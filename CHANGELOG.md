@@ -2,6 +2,11 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versiones con [SemVer](https://semver.org/lang/es/).
 
+## [0.7.2] — 2026-09-23
+
+### Añadido
+- **Salir del equipo** e **Invitar** a mano en el panel, en *Personas del equipo* (antes solo desde la paleta de comandos). Pide confirmación antes de salir.
+
 ## [0.7.1] — 2026-09-23
 
 ### Corregido

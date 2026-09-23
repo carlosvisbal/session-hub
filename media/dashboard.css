@@ -101,3 +101,5 @@ button.danger { color: var(--vscode-errorForeground) }
 
 .lang { display: inline-flex; gap: 2px }
 .lang button.on { color: var(--vscode-foreground); font-weight: 700; text-decoration: underline }
+.team-actions { margin: 0 14px 4px }
+.team-actions button { padding: 0 8px 0 0; font-size: 12px }
