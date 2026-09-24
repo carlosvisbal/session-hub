@@ -35,6 +35,8 @@ flowchart LR
 | `src/transport/swarm.js` | Hyperswarm/HyperDHT connections, handshake, firewall, gossip, direct dialing, refresh |
 | `src/transport/rpc.js` | Line‑delimited JSON RPC over the encrypted stream, with timeouts and size limits |
 | `src/team.js` | Local orchestrator: fans out to teammates in parallel, merges and labels results |
+| `src/archive.js` | Local backup: `own` (mirror of my shared sessions that survives deletion at the source, with previous version on shrink) and `copies` (read copies of teammates' sessions, incremental, withdrawn when access ends). Gzip, atomic writes, 0600 |
+| `src/projectkey.js` | Project identity: hash of the normalized git `origin` (same repo = same key, whatever the folder name) or a per‑owner local key; the URL never leaves the machine |
 | `src/inbox.js` | Signed messages between members: compose, verify, hold/accept/refuse policy, rate limit, offline queue, receipts (`inbox.json`) |
 | `src/access.js` | Audit log (`audit.jsonl`): reads, denials, rejected connections; retention |
 | `src/mcp.js` | MCP tools (`list_peers`, `what_changed`, `list_sessions`, `get_session`, `search_sessions`, `list_agents`, `send_message`, `check_inbox`) |
@@ -77,6 +79,7 @@ The receiver verifies the chain **and** that the chain's member key equals the c
 | `hello` | both | certificate chain, signed profile, addresses, gossip |
 | `admitted` | issuer → joiner | admission doc completing the joiner's chain |
 | `req` / `res` | both | RPC: `whoami`, `projects`, `sessions`, `session`, `changes`, `search`, `agents`, `message` |
+| `req copystatus` | copier → owner | for each copied session: `ok`, `withdrawn` (hidden, unshared, copies disallowed) → delete, `gone` (no longer exists) → keep, `paused` |
 | `receipt` | recipient → sender | what happened to a message: `held`, `delivered`, `read`, `dismissed` |
 | `revoke` | any → all | signed revocation, verified before applying |
 | `profile` | any → all | updated signed name/role |
@@ -96,6 +99,12 @@ A message is a signed doc `{ kind: "message", v: 1, id, team, from, to, text, to
 If the recipient is offline the signed doc stays in the sender's `inbox.json` as `queued` and is retried when they connect (`joined` event), until it expires after 24 h. Messages never trigger actions: the extension only offers to open the AI chat with the text framed as coming from a teammate.
 
 **Open sessions** (`agents` RPC): Claude Code writes `~/.claude/sessions/<pid>.json` (cwd, name, busy/idle). The hub reads only those JSON files, never Claude Code's per‑session keys or sockets, and only counts a session if its process is alive and its folder is inside a project shared with the viewer (pause and hidden sessions apply). Cursor has no such registry, so a Cursor session counts as open when it was active in the last 10 minutes.
+
+## Backup
+
+**Own archive (layer 1).** Every minute the hub reads its sources and mirrors each shared session into `archive/own/<id>.json.gz` (only when the content hash changes). If a source listing fails, nothing is marked as deleted. When a session disappears from Claude Code/Cursor it is marked `goneSince` and `rawSessions()` keeps serving it (`archived: true`) under the same ACL, exclusions and pause. If a session shrinks, the previous file is kept as `.prev`. Retention and size limits delete oldest *gone* sessions first.
+
+**Team copies (layer 2).** Every 2 minutes (and 5 s after a teammate connects) the hub lists each online teammate's sessions (`origin.via = "backup"`) and updates copies incrementally: it re‑reads from the second‑to‑last stored message and only appends if those two still match; otherwise it re‑reads the whole session. A copy is saved only when complete and verified. Sessions that disappear are checked with `copystatus`. Copies are used only when the owner is offline (`copy: { syncedAt, status }`), hidden while the owner is paused or blocked, purged on revocation, leave, or when the owner sets `allowCopies: false`. The owner's audit gets one `copy` entry per session per day, with no read notifications.
 
 ## Paging
 
@@ -121,6 +130,8 @@ Full sessions travel in pages (`offset`/`limit`, 100 messages) and are verified 
 | `config.json` | owner, port, local token, network, shared projects, exclusions, pause | 0600 |
 | `team.json` | key pair, team, chain, members, admissions, revocations, blocks, addresses | 0600 |
 | `audit.jsonl` | one line per read / denial / rejected connection | 0600 |
+| `archive/own/` | my sessions: `index.json` + `<id>.json.gz` (+ `.prev`) | 0600 |
+| `archive/copies/` | teammates' copies: `index.json` + `<owner>/<id>.json.gz` | 0600 |
 | `inbox.json` | received and sent messages (30 days, max 500 each); queued docs until delivered | 0600 |
 
 In the extension these live in the editor's `globalStorage` for the extension; all windows share them and a single hub.
@@ -133,8 +144,11 @@ In the extension these live in the editor's `globalStorage` for the extension; a
 4. Session sources are opened read‑only.
 5. No operation waits without a deadline.
 6. A message is text for a person: it is verified against the connection's key and never executes anything.
+7. Two results are the same project only if their `projectKey` matches. A Claude Code session belongs to the folder it started in (`cwd`), not to the encoded history folder (which can be shared by `/x/my.app` and `/x/my-app`).
+8. A backup never widens access: archived sessions go through the same ACL, and copies are dropped as soon as the owner withdraws access.
 
 ## Tests
 
 - `npm test` — unit tests: identity and membership, readers (fixtures), redaction, hub permissions and paging, network diagnosis.
-- `npm run test:e2e` — real hubs on this machine: LAN mode (admission, ACL, complete encrypted reads verified byte for byte) and private mode through your own bootstrap nodes and a forced blind relay, plus the network report for an unreachable bootstrap.
+- `npm run test:e2e` — real hubs on this machine: LAN mode (admission, ACL, complete encrypted reads verified byte for byte, MCP, messages), private mode through your own bootstrap nodes and a forced blind relay, the network report for an unreachable bootstrap, and the backup cycle (copy, incremental update, source deleted, owner offline, access withdrawn).
+- `npm run test:ext` — the panel in jsdom (every action reachable from the tabs, search and paging, grouping by `projectKey`, both languages) and the real extension with a simulated `vscode` against real hubs: messages and "Pass to my AI", backup and export, and Cursor with several windows (one MCP registration, token in the URL) plus Claude Code repair.

@@ -5,8 +5,10 @@
   const vscode = acquireVsCodeApi();
   const saved = vscode.getState() || {};
   let state = null;
-  let ui = { tab: saved.tab || 'team', filter: '', person: saved.person || '', selected: null, detail: null, loading: false, error: null, page: { reads: 0, team: 0, following: 0, mine: 0, inbox: 0 } };
-  const PAGE_SIZE = { reads: 10, team: 15, following: 15, mine: 15, inbox: 5 };
+  const VIEWS = ['sessions', 'messages', 'team', 'privacy', 'status'];
+  let ui = { view: VIEWS.includes(saved.view) ? saved.view : 'sessions', tab: saved.tab || 'team', filter: '', q: {}, person: saved.person || '', group: ['project', 'person', 'none'].includes(saved.group) ? saved.group : 'project', collapsed: new Set(saved.collapsed || []), expanded: new Set(), selected: null, detail: null, loading: false, error: null, page: { reads: 0, team: 0, following: 0, mine: 0, inbox: 0 } };
+  const PAGE_SIZE = { reads: 15, team: 15, following: 15, mine: 15, inbox: 10, sent: 10, people: 12, shares: 8, checks: 20, copyowners: 8, groups: 10 };
+  const BOXES = {}; // listas con buscador: clave -> { items, render, text, empty, wrap }
 
   // Traducción (media/i18n.js + diccionario que inyecta la extensión). El idioma llega con el estado.
   const translate = window.SessionHubI18n ? window.SessionHubI18n.createTranslator(window.SESSION_HUB_DICT || {}) : (l, s) => s;
@@ -26,6 +28,24 @@
     return { items, pager };
   }
 
+  // Lista con buscador (aparece cuando la lista pasa de una página, o si ya hay algo escrito) y paginación.
+  function listBox(key, items, { render, text, empty, placeholder, wrap = '' }) {
+    BOXES[key] = { items, render, text, empty, wrap };
+    const size = PAGE_SIZE[key] || 10;
+    const q = ui.q[key] || '';
+    const search = items.length > size || q ? `<input class="lsearch" type="search" data-search="${key}" placeholder="${esc(placeholder || T('Buscar…'))}" aria-label="${esc(placeholder || T('Buscar…'))}" value="${esc(q)}">` : '';
+    return `<div class="lbox">${search}<div id="lb-${key}">${boxBody(key)}</div></div>`;
+  }
+  function boxBody(key) {
+    const box = BOXES[key];
+    if (!box.items.length) return box.empty || '';
+    const q = (ui.q[key] || '').trim().toLowerCase();
+    const list = q ? box.items.filter((x) => box.text(x).toLowerCase().includes(q)) : box.items;
+    if (!list.length) return `<p class="empty small">${T('Nada coincide con “{v1}”.', { v1: esc(ui.q[key]) })}</p>`;
+    const { items, pager } = paginate(list, key);
+    return `${box.wrap ? `<div class="${box.wrap}">` : ''}${items.map(box.render).join('')}${box.wrap ? '</div>' : ''}${pager}`;
+  }
+
   const $app = document.getElementById('app');
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const ago = (iso) => {
@@ -37,7 +57,8 @@
     return T('hace {v1} d', { v1: Math.round(min / 1440) });
   };
   const when = (iso) => (iso ? new Date(iso).toLocaleString(state?.lang === 'en' ? 'en' : 'es') : '');
-  const persist = () => vscode.setState({ tab: ui.tab, person: ui.person });
+  const persist = () => vscode.setState({ view: ui.view, tab: ui.tab, person: ui.person, group: ui.group, collapsed: [...ui.collapsed] });
+  const GROUP_PREVIEW = 5; // sesiones visibles por grupo antes de "Ver más"
   const cmd = (command, label, cls = '', args) =>
     `<button class="${cls}" data-cmd="${command}"${args ? ` data-args="${esc(JSON.stringify(args))}"` : ''}>${label}</button>`;
   const srcLabel = (s) => (s.source === 'cursor' ? 'Cursor' : 'Claude Code');
@@ -61,6 +82,7 @@
     if (r.what === 'changes') return `${r.project ? T('{v1} revisó tus novedades ({v2}) de {v3}', { v1: who, v2: esc(r.since), v3: b(r.project) }) : T('{v1} revisó tus novedades ({v2})', { v1: who, v2: esc(r.since) })} · ${from}`;
     if (r.what === 'search') return `${T('{v1} buscó {v2} en tus sesiones', { v1: who, v2: `<b>“${esc(r.query)}”</b>` })} · ${from}`;
     if (r.what === 'rejected') return `<span class="err">⛔</span> ${T('Conexión rechazada de {v1}: {v2}', { v1: b(r.who.replace('Clave desconocida ', '')), v2: esc(T(r.reason)) })}`;
+    if (r.what === 'copy') return `💾 ${T('{v1} guardó una copia de {v2} de {v3}', { v1: who, v2: b(r.title), v3: b(r.project) })}`;
     if (r.what === 'denied') return `<span class="err">⛔</span> ${T('{v1} intentó leer {v2} de {v3} sin permiso', { v1: who, v2: b(r.title), v3: b(r.project) })} · ${from}`;
     return `${who} ${esc(r.what)}`;
   }
@@ -108,8 +130,6 @@
     if (state.starting) return ($app.innerHTML = `<div class="welcome"><h1>Session Hub</h1><p class="muted">${T('Iniciando el hub…')}</p></div>`);
     if (!state.hasTeam) return ($app.innerHTML = welcomeHtml());
     const t = state.teamInfo.team;
-    const others = state.members.filter((m) => !m.self);
-    const online = others.filter((m) => m.online).length;
     const m0 = me();
     const paused = state.sharing.paused;
 
@@ -119,77 +139,211 @@
         <span class="me"><span class="dot ${state.running ? 'on' : ''}"></span>${esc(m0.name || '—')}${m0.role ? ' · ' + esc(m0.role) : ''}</span>
         <span class="pill" title="${T('Huella del fundador: {v1}', { v1: esc(t.fingerprint) })}">${T('equipo {v1}', { v1: esc(t.name) })}</span>
         <span class="muted small" title="${T('Tu huella: compárala de palabra si alguien duda de que eres tú')}">${T('huella {v1}', { v1: esc(state.teamInfo.me.fingerprint) })}</span>
-        <span class="muted small">${T('{v1} compañero(s) en línea', { v1: online })}</span>
         <span class="spacer"></span>
         ${cmd('sessionHub.whatChanged', T('¿Qué hay nuevo?'), 'primary')}
+        ${cmd('sessionHub.sendMessage', `✉ ${T('Escribir')}`)}
         ${cmd('sessionHub.togglePause', paused ? `▶ ${T('Reanudar')}` : `⏸ ${T('Pausar')}`, paused ? 'warn' : '')}
         ${cmd('sessionHub.copyInvite', T('Invitar'))}
-        ${cmd('sessionHub.sendMessage', `✉ ${T('Escribir')}`)}
-        <button data-act="refresh" title="${T('Refrescar')}">⟳</button>
+        <button data-act="refresh" title="${T('Refrescar')}" aria-label="${T('Refrescar')}">⟳</button>
         ${langSwitch()}
         ${cmd('sessionHub.openSource', 'AGPL-3.0', 'icon')}
       </header>
       ${t.pending ? `<p class="banner warnbg">⏳ ${T('Tu entrada está pendiente: quien te invitó ({v1}) debe tener Session Hub abierto para confirmarla. Se completa sola.', { v1: esc(t.invitedBy) })}</p>` : ''}
       ${paused ? `<p class="banner warnbg">⏸ ${T('Estás en pausa: nadie del equipo ve tus sesiones.')} ${cmd('sessionHub.togglePause', T('Reanudar'))}</p>` : ''}
-      <main>
+      <nav class="views" role="tablist" aria-label="Session Hub">${viewTabs()}</nav>
+      <div class="view view-${ui.view}" role="tabpanel" id="panel-${ui.view}" aria-labelledby="tab-${ui.view}">${VIEW_HTML[ui.view]()}</div>`;
+  }
+
+  // Pestañas principales, con un contador que dice si hay algo que mirar.
+  function viewTabs() {
+    const others = state.members.filter((m) => !m.self);
+    const online = others.filter((m) => m.online).length;
+    const unread = state.inbox?.unread || 0;
+    const fresh = state.access.reads.filter((r) => Date.now() - Date.parse(r.at) < 600000).length;
+    const bad = state.checks.filter((c) => c.status !== 'ok');
+    const tabs = [
+      { id: 'sessions', label: T('Sesiones'), badge: state.team.length + state.mine.length || '', cls: 'muted-badge', title: '' },
+      { id: 'messages', label: T('Mensajes'), badge: unread || '', cls: '', title: unread ? T('{v1} mensaje(s) sin revisar', { v1: unread }) : '' },
+      { id: 'team', label: T('Equipo'), badge: others.length ? `${online}/${others.length}` : '', cls: 'muted-badge', title: T('{v1} compañero(s) en línea', { v1: online }) },
+      { id: 'privacy', label: T('Privacidad'), badge: fresh || '', cls: '', title: fresh ? T('{v1} lectura(s) en los últimos 10 min', { v1: fresh }) : '' },
+      { id: 'status', label: T('Estado'), badge: bad.length || '', cls: bad.some((c) => c.status === 'error') ? 'err-badge' : 'warn-badge', title: bad.length ? T('{v1} por revisar', { v1: bad.length }) : T('todo en orden') },
+    ];
+    return tabs
+      .map((x) => {
+        const sel = ui.view === x.id;
+        return `<button class="view-tab ${sel ? 'sel' : ''}" role="tab" id="tab-${x.id}" aria-controls="panel-${x.id}" aria-selected="${sel}" tabindex="${sel ? 0 : -1}" data-view="${x.id}"${x.title ? ` title="${esc(x.title)}"` : ''}>${x.label}${x.badge !== '' ? ` <span class="badge ${x.cls}">${esc(x.badge)}</span>` : ''}</button>`;
+      })
+      .join('');
+  }
+
+  const pageHead = (title, sub, actions = '') => `<div class="page-head"><div><h2>${title}</h2>${sub ? `<p class="muted small">${sub}</p>` : ''}</div>${actions ? `<div class="actions">${actions}</div>` : ''}</div>`;
+
+  // Sesiones: la lista (del equipo, seguidas o mías) y la conversación elegida al lado.
+  function sessionsView() {
+    const others = state.members.filter((m) => !m.self);
+    return `<div class="split">
+      <section class="list-pane">
+        <div class="tabs" role="tablist" aria-label="${T('Sesiones')}">
+          ${tabBtn('team', T('Del equipo'), state.team.length)}
+          ${tabBtn('following', T('Siguiendo'), state.team.filter(isFollowed).length)}
+          ${tabBtn('mine', T('Mis sesiones'), state.mine.length)}
+        </div>
+        <div class="filters">
+          <input id="filter" placeholder="${T('Filtrar por título, proyecto, archivo…')}" value="${esc(ui.filter)}" aria-label="${T('Filtrar por título, proyecto, archivo…')}">
+          ${
+            ui.tab === 'team'
+              ? `<select id="person" aria-label="${T('Persona')}"><option value="">${T('Todos')}</option>${others.map((m) => `<option value="${esc(m.id)}" ${ui.person === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>`
+              : ''
+          }
+          <select id="group" aria-label="${T('Agrupar sesiones')}" title="${T('Agrupar sesiones')}">${[['project', 'Por proyecto'], ['person', 'Por persona'], ['none', 'Sin agrupar']]
+            .filter(([v]) => v !== 'person' || ui.tab !== 'mine')
+            .map(([v, l]) => `<option value="${v}" ${groupMode() === v ? 'selected' : ''}>${T(l)}</option>`)
+            .join('')}</select>
+        </div>
+        ${ui.tab === 'mine' && state.mine.length ? `<p class="hint">${T(state.mine.some((s) => s.hidden) ? 'Las sesiones atenuadas están ocultas al equipo. Usa 👁 para mostrar u ocultar.' : 'Quien tenga acceso al proyecto ve estas sesiones. Usa 👁 para mostrar u ocultar.')}</p>` : ''}
+        ${state.teamErrors.map((e) => `<p class="pad err small">${esc(e.member)}: ${esc(T(e.error))}</p>`).join('')}
+        <div id="list">${listHtml()}</div>
+      </section>
+      <section class="detail" id="detail">${detailHtml()}</section>
+    </div>`;
+  }
+
+  const POLICY_TEXT = {
+    hold: 'Los mensajes que recibes esperan a que los apruebes o los pases a tu IA.',
+    accept: 'Tu IA puede leer los mensajes apenas llegan (check_inbox).',
+    refuse: 'No estás recibiendo mensajes (ajuste sessionHub.inboundMessages).',
+  };
+
+  function messagesView() {
+    const box = state.inbox || { received: [], sent: [], unread: 0, policy: 'hold' };
+    const actions = cmd('sessionHub.sendMessage', `✉ ${T('Escribir a un compañero')}`, 'primary') + cmd('workbench.action.openSettings', T('Cómo recibo mensajes'), 'link', ['sessionHub.inboundMessages']);
+    return `<div class="page">
+      ${pageHead(T('Mensajes'), T(POLICY_TEXT[box.policy] || POLICY_TEXT.hold), actions)}
+      <h3>${T('Recibidos')}${box.unread ? ` <span class="badge">${box.unread}</span>` : ''}</h3>
+      <div id="messages">${receivedHtml()}</div>
+      <h3>${T('Enviados ({v1})', { v1: box.sent.length })}</h3>
+      ${sentHtml()}
+    </div>`;
+  }
+
+  function teamView() {
+    const others = state.members.filter((m) => !m.self);
+    const online = others.filter((m) => m.online).length;
+    const actions = cmd('sessionHub.copyInvite', T('Invitar'), 'primary') + cmd('sessionHub.sendMessage', `✉ ${T('Escribir')}`) + cmd('sessionHub.leaveTeam', T('Salir del equipo'), 'link danger');
+    return `<div class="page">
+      ${pageHead(T('Personas del equipo'), T('{v1} compañero(s) en línea', { v1: online }) + ` · ${T('equipo {v1}', { v1: esc(state.teamInfo.team.name) })}`, actions)}
+      <p class="hint">${T('Haz clic en una persona para ver sus sesiones.')}</p>
+      ${listBox('people', state.members, {
+        render: personHtml,
+        text: (m) => [m.name, m.role, ...(m.projects || []), m.fingerprint].join(' '),
+        empty: `<p class="empty">${T('Nadie más en la red todavía.')}</p>`,
+        placeholder: T('Buscar por nombre, rol o proyecto…'),
+        wrap: 'people',
+      })}
+    </div>`;
+  }
+
+  function privacyView() {
+    const paused = state.sharing.paused;
+    return `<div class="page">
+      <div class="cols">
         <section>
+          ${pageHead(T('Lo que comparto'), T('Nada se comparte hasta que tú lo eliges. Puedes ocultar sesiones o pausar en cualquier momento.'))}
+          <div class="share pause-box ${paused ? 'warnbg' : ''}">
+            <div>${paused ? `⏸ <b>${T('Estás en pausa: nadie del equipo ve tus sesiones.')}</b>` : T('Compartir activo: tu equipo ve lo que compartes.')}</div>
+            <div class="actions">${cmd('sessionHub.togglePause', paused ? `▶ ${T('Reanudar')}` : `⏸ ${T('Pausar')}`, paused ? 'warn' : '')}</div>
+          </div>
           ${sharingHtml()}
-          <div id="messages">${messagesHtml()}</div>
-          <h3>${T('Personas del equipo')}</h3>
-          <div class="actions team-actions">${cmd('sessionHub.copyInvite', T('Invitar'), 'link')}${cmd('sessionHub.leaveTeam', T('Salir del equipo'), 'link danger')}</div>
-          ${state.members.map(personHtml).join('') || `<p class="empty">${T('Nadie más en la red todavía.')}</p>`}
-          <h3>${T('Quién ha leído lo mío')}</h3>
-          <div id="reads">${readsHtml()}</div>
-          ${checksHtml()}
+          <p class="hint">${T('Para ocultar una sesión concreta: Sesiones → Mis sesiones → 👁.')}</p>
         </section>
         <section>
-          <div class="tabs">
-            ${tabBtn('team', T('Equipo'), state.team.length)}
-            ${tabBtn('following', T('Siguiendo'), state.team.filter(isFollowed).length)}
-            ${tabBtn('mine', T('Mis sesiones'), state.mine.length)}
-          </div>
-          <div class="filters">
-            <input id="filter" placeholder="${T('Filtrar por título, proyecto, archivo…')}" value="${esc(ui.filter)}">
-            ${
-              ui.tab === 'team'
-                ? `<select id="person"><option value="">${T('Todos')}</option>${others.map((m) => `<option value="${esc(m.id)}" ${ui.person === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>`
-                : ''
-            }
-          </div>
-          ${ui.tab === 'mine' && state.mine.length ? `<p class="hint">${T(state.mine.some((s) => s.hidden) ? 'Las sesiones atenuadas están ocultas al equipo. Usa 👁 para mostrar u ocultar.' : 'Quien tenga acceso al proyecto ve estas sesiones. Usa 👁 para mostrar u ocultar.')}</p>` : ''}
-          ${state.teamErrors.map((e) => `<p class="pad err small">${esc(e.member)}: ${esc(T(e.error))}</p>`).join('')}
-          <div id="list">${listHtml()}</div>
+          ${pageHead(T('Quién ha leído lo mío'), T('Quién, qué, cuándo y con qué herramienta, durante 90 días.'))}
+          <div id="reads">${readsHtml()}</div>
         </section>
-        <section class="detail" id="detail">${detailHtml()}</section>
-      </main>`;
+      </div>
+      ${backupHtml()}
+    </div>`;
+  }
+
+  const mb = (bytes) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round((bytes || 0) / 1024))} KB`);
+
+  // Respaldo: mis sesiones (siguen disponibles aunque la herramienta las borre) y copias de mi equipo.
+  function backupHtml() {
+    const a = state.archive;
+    if (!a) return '';
+    const own = a.own;
+    const cp = a.copies;
+    const actions = cmd('sessionHub.syncBackup', `⟳ ${T('Actualizar ahora')}`, 'primary') + cmd('sessionHub.exportAll', T('Exportar todo…')) + cmd('workbench.action.openSettings', T('Ajustes del respaldo'), 'link', ['sessionHub backup copies']);
+    const ownBox = own.enabled
+      ? `<div class="share">
+          <div><b>${T('Mis sesiones')}</b> <span class="muted small">${T('{v1} respaldada(s) · {v2} solo en el respaldo · {v3}', { v1: own.sessions, v2: own.onlyInBackup, v3: mb(own.bytes) })}</span></div>
+          <div class="small muted">${own.lastSync ? T('Actualizado {v1}', { v1: ago(own.lastSync) }) : T('Aún no se ha actualizado.')} ${own.lastError ? `<span class="err">${esc(T(own.lastError))}</span>` : ''}</div>
+          <div class="small">${T('Si Claude Code o Cursor borran una sesión, sigue disponible para ti y para quien la compartes (en Mis sesiones, marcada “solo en respaldo”).')}</div>
+          ${own.onlyInBackup ? `<div class="actions">${cmd('sessionHub.purgeOwnBackup', T('Borrar lo que ya no existe'), 'link danger')}</div>` : ''}
+        </div>`
+      : `<div class="share dim">${T('El respaldo de tus sesiones está desactivado (ajuste sessionHub.backupOwnSessions).')}</div>`;
+    const owners = cp.owners || [];
+    const copiesBox = cp.enabled
+      ? `<div class="share">
+          <div><b>${T('Copias de mi equipo')}</b> <span class="muted small">${T('{v1} copia(s) · {v2}', { v1: owners.reduce((n, o) => n + o.sessions, 0), v2: mb(cp.bytes) })}</span></div>
+          <div class="small">${T('Para leer sus sesiones aunque estén desconectados. Solo mientras sigas teniendo acceso: si las ocultan o dejan de compartirlas, se borran.')}</div>
+          ${listBox('copyowners', owners, {
+            text: (o) => `${o.name || ''} ${o.role || ''}`,
+            placeholder: T('Buscar persona…'),
+            empty: `<p class="muted small">${T('Todavía no hay copias: se guardan solas cuando tus compañeros están conectados.')}</p>`,
+            render: (o) => `<div class="read small"><b>${esc(o.name || o.id.slice(0, 12))}</b>${o.role ? ` <span class="muted">(${esc(o.role)})</span>` : ''} · ${T('{v1} copia(s)', { v1: o.sessions })} · ${mb(o.bytes)}
+              <div class="muted">${o.lastSync ? T('al día {v1}', { v1: ago(o.lastSync) }) : T('sin sincronizar')}${o.paused ? ` · ⏸ ${T('en pausa: ocultas')}` : ''}${o.gone ? ` · ${T('{v1} ya no existen en origen', { v1: o.gone })}` : ''}${o.ignored ? ` · ${T('{v1} borrada(s) por ti', { v1: o.ignored })}` : ''}${o.lastError ? ` · <span class="err">${esc(T(o.lastError))}</span>` : ''}</div>
+              <div class="actions person-actions">${cmd('sessionHub.purgeCopies', T('Borrar sus copias'), 'link danger', [o.id, o.name])}</div></div>`,
+          })}
+          ${owners.length ? `<div class="actions">${cmd('sessionHub.purgeCopies', T('Borrar todas las copias'), 'link danger')}</div>` : ''}
+        </div>`
+      : `<div class="share dim">${T('No guardas copias de tu equipo (ajuste sessionHub.keepTeamCopies).')}</div>`;
+    const consent = `<p class="hint">${cp.allowOthers ? T('Tus compañeros pueden guardar copia de lo que compartes con ellos (ajuste sessionHub.allowTeamCopies).') : T('No permites que tus compañeros guarden copias de tus sesiones.')}</p>`;
+    return `${pageHead(T('Respaldo'), T('Todo se guarda solo en este equipo, comprimido y sin secretos al compartir.'), actions)}<div class="cols">${ownBox}${copiesBox}</div>${consent}`;
+  }
+
+  function statusView() {
+    return `<div class="page">${checksHtml()}</div>`;
+  }
+
+  const VIEW_HTML = { sessions: sessionsView, messages: messagesView, team: teamView, privacy: privacyView, status: statusView };
+
+  function setView(view, focus) {
+    if (!VIEWS.includes(view)) return;
+    ui.view = view;
+    persist();
+    render();
+    if (focus) document.getElementById(`tab-${view}`)?.focus();
   }
 
   function readsHtml() {
-    if (!state.access.reads.length) return `<p class="empty small">${T('Nadie ha leído tus sesiones todavía.')}</p>`;
-    const { items, pager } = paginate(state.access.reads, 'reads');
-    return (
-      items.map((r) => `<div class="read ${Date.now() - Date.parse(r.at) < 600000 ? 'fresh' : ''} ${r.what === 'denied' || r.what === 'rejected' ? 'denied' : ''}">${readSentence(r)}<div class="muted small">${ago(r.at)}</div></div>`).join('') + pager
-    );
+    return listBox('reads', state.access.reads, {
+      render: (r) => `<div class="read ${Date.now() - Date.parse(r.at) < 600000 ? 'fresh' : ''} ${r.what === 'denied' || r.what === 'rejected' ? 'denied' : ''}">${readSentence(r)}<div class="muted small">${ago(r.at)}</div></div>`,
+      text: (r) => [r.who, r.role, r.title, r.project, r.query, r.client].join(' '),
+      empty: `<p class="empty small">${T('Nadie ha leído tus sesiones todavía.')}</p>`,
+      placeholder: T('Buscar por persona, sesión o proyecto…'),
+    });
   }
 
   // Mensajes de compañeros (firmados). Retenido = mi IA no lo ve hasta que lo apruebe o lo pase al chat.
-  function messagesHtml() {
-    const box = state.inbox || { received: [], sent: [], unread: 0 };
-    const visible = box.received.filter((m) => m.status !== 'dismissed');
-    const head = `<h3>${T('Mensajes')}${box.unread ? ` <span class="badge">${box.unread}</span>` : ''}</h3>`;
-    const refuse = box.policy === 'refuse' ? `<p class="small warn-txt pad">${T('No estás recibiendo mensajes (ajuste sessionHub.inboundMessages).')}</p>` : '';
-    let body = `<p class="empty small">${T('Sin mensajes. Tus compañeros pueden escribirte desde su panel o pidiéndoselo a su IA.')}</p>`;
-    if (visible.length) {
-      const { items, pager } = paginate(visible, 'inbox');
-      body = items.map(messageHtml).join('') + pager;
-    }
-    const sent = box.sent.slice(0, 10);
-    const sentHtml = sent.length
-      ? `<details class="sent"><summary class="small muted">${T('Enviados ({v1})', { v1: box.sent.length })}</summary>${sent
-          .map((m) => `<div class="read small">${T('Para {v1}', { v1: b(m.toName) })}: ${esc(clip(m.text, 120))}<div class="muted">${T(SENT_STATUS[m.status] || m.status)}${m.error ? ' · ' + esc(T(m.error)) : ''} · ${ago(m.updatedAt || m.at)}</div></div>`)
-          .join('')}</details>`
-      : '';
-    return `${head}${refuse}${body}${sentHtml}`;
+  function receivedHtml() {
+    const visible = (state.inbox?.received || []).filter((m) => m.status !== 'dismissed');
+    return listBox('inbox', visible, {
+      render: messageHtml,
+      text: (m) => [m.fromName, m.fromRole, m.text].join(' '),
+      empty: `<p class="empty small">${T('Sin mensajes. Tus compañeros pueden escribirte desde su panel o pidiéndoselo a su IA.')}</p>`,
+      placeholder: T('Buscar en los mensajes…'),
+    });
+  }
+
+  function sentHtml() {
+    return listBox('sent', state.inbox?.sent || [], {
+      render: (m) => `<div class="read small">${T('Para {v1}', { v1: b(m.toName) })}: ${esc(clip(m.text, 160))}<div class="muted">${T(SENT_STATUS[m.status] || m.status)}${m.error ? ' · ' + esc(T(m.error)) : ''} · ${ago(m.updatedAt || m.at)}</div></div>`,
+      text: (m) => [m.toName, m.text].join(' '),
+      empty: `<p class="empty small">${T('Todavía no has enviado mensajes.')}</p>`,
+      placeholder: T('Buscar en los enviados…'),
+      wrap: 'sent',
+    });
   }
 
   const sessionName = (id) => state.mine.find((s) => s.id === id)?.title || id;
@@ -216,31 +370,37 @@
     const ws = state.workspace;
     const projects = state.sharing.projects;
     const offer = ws && !ws.shared ? `<div class="offer">${T('¿Compartes {v1}?', { v1: b(ws.name) })}<br>${cmd('sessionHub.shareWorkspace', T('Compartir este proyecto'), 'primary')}</div>` : '';
-    const list = projects
-      .map(
-        (p) => `<div class="share ${state.sharing.paused ? 'dim' : ''}">
+    const list = listBox('shares', projects, {
+      text: (p) => [p.name, p.path, p.audience].join(' '),
+      placeholder: T('Buscar proyecto…'),
+      render: (p) => `<div class="share ${state.sharing.paused ? 'dim' : ''}">
           <div><b>${esc(p.name)}</b> <span class="muted small" title="${esc(p.path)}">${T(p.sessions === 1 ? '{v1} sesión' : '{v1} sesiones', { v1: p.sessions })}${p.hidden ? ` · ${T(p.hidden === 1 ? '{v1} oculta' : '{v1} ocultas', { v1: p.hidden })}` : ''}</span></div>
           <div class="small">${T('Lo ve: {v1}', { v1: b(p.audience) })}</div>
           <div class="actions">${cmd('sessionHub.editProjectAccess', T('Quién lo ve'), '', [p.path])}${cmd('sessionHub.unshareProject', T('Dejar de compartir'), 'link', [p.path])}</div>
         </div>`,
-      )
-      .join('');
+    });
     const empty = !projects.length && !offer ? `<p class="empty small">${T('No compartes ningún proyecto. Abre una carpeta y usa “Compartir este proyecto”.')}</p>` : '';
-    return `<h3>${T('Lo que comparto')}</h3>${offer}${list}${empty}`;
+    return `${offer}${list}${empty}`;
   }
 
   function checksHtml() {
-    if (!state.checks.length) return '';
     const bad = state.checks.filter((c) => c.status !== 'ok').length;
     const icon = { ok: '✔', warn: '!', error: '✖' };
-    return `<h3>${T('Estado')} ${bad ? `<span class="warn-txt">· ${T('{v1} por revisar', { v1: bad })}</span>` : `<span class="ok-txt">· ${T('todo en orden')}</span>`}</h3>
-      <details class="checks" ${bad ? 'open' : ''}><summary class="small muted">${T('Ver detalle')}</summary>
-      ${state.checks.map((c) => `<div class="check ${c.status}"><span class="ic">${icon[c.status]}</span><div>${esc(c.label)}${c.hint ? `<div class="muted small">${esc(c.hint)}</div>` : ''}</div></div>`).join('')}
-      <div class="actions pad" style="padding-top:6px">${cmd('sessionHub.doctor', T('Diagnóstico completo'))}${cmd('sessionHub.copyNetReport', T('Copiar informe de conexión'))}${cmd('sessionHub.copyClaudeCommand', T('Conectar Claude Code'))}</div>
-      </details>`;
+    const sub = state.checks.length ? (bad ? `<span class="warn-txt">${T('{v1} por revisar', { v1: bad })}</span>` : `<span class="ok-txt">${T('todo en orden')}</span>`) : '';
+    const actions = cmd('sessionHub.doctor', T('Diagnóstico completo'), 'primary') + cmd('sessionHub.copyNetReport', T('Copiar informe de conexión')) + cmd('sessionHub.copyClaudeCommand', T('Conectar Claude Code'));
+    const order = { error: 0, warn: 1, ok: 2 };
+    const list = [...state.checks].sort((a, b) => order[a.status] - order[b.status]);
+    return `${pageHead(T('Estado'), sub, actions)}
+      ${listBox('checks', list, {
+        render: (c) => `<div class="check ${c.status}"><span class="ic" aria-hidden="true">${icon[c.status]}</span><div>${esc(c.label)}${c.hint ? `<div class="muted small">${esc(c.hint)}</div>` : ''}</div></div>`,
+        text: (c) => `${c.label} ${c.hint || ''}`,
+        empty: `<p class="empty">${T('Cargando…')}</p>`,
+        placeholder: T('Buscar en el estado…'),
+        wrap: 'checks',
+      })}`;
   }
 
-  const tabBtn = (id, label, n) => `<button class="tab ${ui.tab === id ? 'sel' : ''}" data-tab="${id}">${label} <span class="muted">${n}</span></button>`;
+  const tabBtn = (id, label, n) => `<button class="tab ${ui.tab === id ? 'sel' : ''}" role="tab" aria-selected="${ui.tab === id}" data-tab="${id}">${label} <span class="muted">${n}</span></button>`;
 
   function personHtml(m) {
     const viewer = state.access.viewers.find((v) => v.id === m.id);
@@ -249,7 +409,7 @@
     const liveHtml = live.length
       ? `<div class="live">${live.map((a) => `<div class="small" title="${esc(a.title || a.session)}"><span class="dot ${a.status === 'busy' ? 'busy' : 'on'}"></span>${esc(a.tool)} · ${esc(a.project)} · ${T(AGENT_STATUS[a.status] || a.status)}${a.title ? ` · <span class="muted">${esc(clip(a.title, 40))}</span>` : ''}</div>`).join('')}</div>`
       : '';
-    return `<div class="person ${m.self ? '' : 'clickable'}" data-person="${m.self ? '' : esc(m.id)}">
+    return `<div class="person ${m.self ? '' : 'clickable'}" data-person="${m.self ? '' : esc(m.id)}"${m.self ? '' : ` tabindex="0" role="button" aria-label="${T('Ver las sesiones de {v1}', { v1: esc(m.name) })}"`}>
       <span class="dot ${m.online ? 'on' : ''}"></span>
       <span><span class="name">${esc(m.name)}</span>${m.self ? ` <span class="muted">(${T('tú')})</span>` : ''} <span class="muted small">${esc(m.role || '')}</span>${m.founder ? ` <span class="chip">${T('fundador')}</span>` : ''}</span>
       ${m.self ? '<span></span>' : `<button class="icon ${followed ? 'on' : ''}" data-follow="person" data-id="${esc(m.id)}" title="${T(followed ? 'Dejar de seguir' : 'Seguir')}">${followed ? '★' : '☆'}</button>`}
@@ -266,38 +426,97 @@
     </div>`;
   }
 
+  // En "Mis sesiones" no tiene sentido agrupar por persona: se agrupa por proyecto.
+  const groupMode = () => (ui.tab === 'mine' && ui.group === 'person' ? 'project' : ui.group);
+
+  function cardHtml(s) {
+    const mine = ui.tab === 'mine';
+    const readers = mine ? readersOf(s.id) : [];
+    const followed = isFollowed(s);
+    const action = mine
+      ? `<button class="icon ${s.hidden ? '' : 'on'}" data-cmd="sessionHub.toggleSessionVisibility" data-args="${esc(JSON.stringify([s.id]))}" title="${T(s.hidden ? 'Oculta al equipo: clic para mostrar' : 'Visible para el equipo: clic para ocultar')}">${s.hidden ? '🚫' : '👁'}</button>`
+      : `<button class="icon ${state.follows.sessions.includes(s.id) ? 'on' : ''}" data-follow="session" data-id="${esc(s.id)}" title="${T('Seguir sesión')}">${followed ? '★' : '☆'}</button>`;
+    const inGroup = groupMode();
+    const showOwner = !mine && inGroup !== 'person';
+    const showProject = inGroup !== 'project';
+    return `<div class="card ${ui.selected === s.id ? 'sel' : ''} ${s.hidden ? 'dim' : ''}" data-open="${esc(s.id)}" data-peer="${esc(s.ownerId)}">
+          <span class="t" title="${esc(s.title)}">${esc(s.title)}</span>
+          ${action}
+          <span class="meta muted small">
+            ${showOwner ? `<b>${esc(s.owner)}</b> · ` : ''}<span class="src ${esc(s.source)}">${srcLabel(s)}</span>
+            ${showProject ? `${esc(s.project)} · ` : ''}${ago(s.updatedAt)} · ${T('{v1} archivos', { v1: s.filesChanged.length })}${s.hidden ? ` · <b>${T('oculta al equipo')}</b>` : ''}${originBadge(s)}
+            ${readers.length ? `<br><span class="seen">👁 ${readers.map((r) => esc(r.who)).join(', ')}</span>` : ''}
+          </span>
+        </div>`;
+  }
+
+  // De dónde viene: el original ya no existe (respaldo del dueño) o es mi copia (el dueño no está).
+  const originBadge = (s) =>
+    s.copy ? ` · <span class="tag copy" title="${T('Copia local: {v1} no está conectado', { v1: esc(s.owner) })}">💾 ${T('copia de {v1}', { v1: ago(s.copy.syncedAt) })}</span>` : s.archived ? ` · <span class="tag archived" title="${T('El original ya no existe en {v1}', { v1: srcLabel(s) })}">🗄 ${T('solo en respaldo')}</span>` : '';
+
+  // Grupos por proyecto o por persona, ordenados por la actividad más reciente.
+  function groupsOf(list, mode) {
+    const groups = new Map();
+    for (const s of list) {
+      // Mismo proyecto = misma projectKey (mismo repo git). Sin clave (hub anterior) no se mezcla con nadie.
+      const key = mode === 'person' ? `person:${s.ownerId}` : `project:${s.projectKey || `${s.ownerId}:${s.project}`}`;
+      if (!groups.has(key)) groups.set(key, { key, label: mode === 'person' ? s.owner : s.project, sessions: [], owners: new Set(), projects: new Set(), latest: '' });
+      const g = groups.get(key);
+      g.sessions.push(s);
+      g.owners.add(s.owner);
+      g.projects.add(s.project);
+      if ((s.updatedAt || '') > g.latest) g.latest = s.updatedAt || '';
+    }
+    for (const g of groups.values()) g.sessions.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+    const out = [...groups.values()].sort((a, b) => b.latest.localeCompare(a.latest));
+    if (mode === 'project') {
+      // Un mismo repo con nombres distintos se muestra "web-app / frontend"; dos proyectos distintos con
+      // el mismo nombre se distinguen por su dueño: "web-app · Ana" y "web-app · Luis".
+      for (const g of out) g.label = [...new Set(g.sessions.map((x) => x.project))].join(' / ');
+      const count = new Map();
+      for (const g of out) count.set(g.label, (count.get(g.label) || 0) + 1);
+      for (const g of out) if (count.get(g.label) > 1) g.label += ` · ${[...g.owners].join(', ')}`;
+    }
+    return out;
+  }
+
+  function groupHtml(g, mode) {
+    const open = !!ui.filter.trim() || !ui.collapsed.has(g.key); // al filtrar, se ven todos los resultados
+    const all = ui.expanded.has(g.key);
+    const shown = all ? g.sessions : g.sessions.slice(0, GROUP_PREVIEW);
+    const rest = g.sessions.length - shown.length;
+    const count = T(g.sessions.length === 1 ? '{v1} sesión' : '{v1} sesiones', { v1: g.sessions.length });
+    const who = mode === 'person' ? [...g.projects].join(', ') : ui.tab === 'mine' ? '' : [...g.owners].join(', ');
+    return `<section class="group">
+      <button class="group-head" data-group="${esc(g.key)}" aria-expanded="${open}">
+        <span class="chev" aria-hidden="true">${open ? '▾' : '▸'}</span>
+        <span class="g-name">${esc(g.label)}</span>
+        <span class="muted small g-sub">${count}${who ? ` · ${esc(who)}` : ''} · ${ago(g.latest)}</span>
+      </button>
+      ${open ? shown.map(cardHtml).join('') + (rest > 0 ? `<button class="link more" data-more="${esc(g.key)}">${T('Ver {v1} más', { v1: rest })}</button>` : all && g.sessions.length > GROUP_PREVIEW ? `<button class="link more" data-more="${esc(g.key)}">${T('Ver menos')}</button>` : '') : ''}
+    </section>`;
+  }
+
   function listHtml() {
     const list = sessionsForTab();
     if (!list.length) {
       const msg = {
         mine: state.sharing.projects.length ? 'No tienes sesiones en tus proyectos compartidos en este rango.' : 'Comparte un proyecto para que tus sesiones aparezcan aquí.',
         following: 'Sigue a una persona o sesión con ☆ para verla aquí.',
-        team: state.members.some((m) => !m.self && m.online) ? 'Tus compañeros no tienen sesiones compartidas contigo en este rango.' : 'No hay compañeros en línea. Revisa “Estado” a la izquierda.',
+        team: state.members.some((m) => !m.self && m.online) ? 'Tus compañeros no tienen sesiones compartidas contigo en este rango.' : 'No hay compañeros en línea. Revisa la pestaña “Estado”.',
       };
       return `<p class="empty">${T(msg[ui.tab])}</p>`;
     }
-    const { items, pager } = paginate(list, ui.tab);
-    return (
-      items
-        .map((s) => {
-          const mine = ui.tab === 'mine';
-          const readers = mine ? readersOf(s.id) : [];
-          const followed = isFollowed(s);
-          const action = mine
-            ? `<button class="icon ${s.hidden ? '' : 'on'}" data-cmd="sessionHub.toggleSessionVisibility" data-args="${esc(JSON.stringify([s.id]))}" title="${T(s.hidden ? 'Oculta al equipo: clic para mostrar' : 'Visible para el equipo: clic para ocultar')}">${s.hidden ? '🚫' : '👁'}</button>`
-            : `<button class="icon ${state.follows.sessions.includes(s.id) ? 'on' : ''}" data-follow="session" data-id="${esc(s.id)}" title="${T('Seguir sesión')}">${followed ? '★' : '☆'}</button>`;
-          return `<div class="card ${ui.selected === s.id ? 'sel' : ''} ${s.hidden ? 'dim' : ''}" data-open="${esc(s.id)}" data-peer="${esc(s.ownerId)}">
-          <span class="t" title="${esc(s.title)}">${esc(s.title)}</span>
-          ${action}
-          <span class="meta muted small">
-            ${mine ? '' : `<b>${esc(s.owner)}</b> · `}<span class="src ${esc(s.source)}">${srcLabel(s)}</span>
-            ${esc(s.project)} · ${ago(s.updatedAt)} · ${T('{v1} archivos', { v1: s.filesChanged.length })}${s.hidden ? ` · <b>${T('oculta al equipo')}</b>` : ''}
-            ${readers.length ? `<br><span class="seen">👁 ${readers.map((r) => esc(r.who)).join(', ')}</span>` : ''}
-          </span>
-        </div>`;
-        })
-        .join('') + pager
-    );
+    const mode = groupMode();
+    if (mode === 'none') {
+      const { items, pager } = paginate(list, ui.tab);
+      return items.map(cardHtml).join('') + pager;
+    }
+    const groups = groupsOf(list, mode);
+    const allClosed = groups.every((g) => ui.collapsed.has(g.key));
+    const tools = groups.length > 1 ? `<div class="group-tools"><button class="link" data-groups="${allClosed ? 'open' : 'close'}">${T(allClosed ? 'Abrir todos' : 'Cerrar todos')}</button></div>` : '';
+    const { items: pageGroups, pager } = paginate(groups, 'groups');
+    return tools + pageGroups.map((g) => groupHtml(g, mode)).join('') + pager;
   }
 
   function detailHtml() {
@@ -319,7 +538,11 @@
             : `<button data-follow="session" data-id="${esc(s.id)}">${followed ? `★ ${T('Siguiendo')}` : `☆ ${T('Seguir esta sesión')}`}</button>`
         }
         <button data-open="${esc(s.id)}" data-peer="${esc(s.ownerId)}">⟳ ${T('Recargar')}</button>
+        ${cmd('sessionHub.exportSession', `⤓ ${T('Exportar')}`, '', [s.id, s.ownerId])}
+        ${(s.archived && mine) || s.copy ? cmd('sessionHub.removeFromBackup', T('Borrar del respaldo'), 'link danger', [s.id, mine ? null : s.ownerId, s.title]) : ''}
       </div>
+      ${s.copy ? `<p class="banner-inline">💾 ${T('Copia local guardada {v1}: {v2} no está conectado. Puede no tener lo último.', { v1: ago(s.copy.syncedAt), v2: esc(s.owner) })}</p>` : ''}
+      ${s.archived ? `<p class="banner-inline">🗄 ${T('El original ya no existe en {v1}; se muestra desde el respaldo de {v2}.', { v1: srcLabel(s), v2: esc(s.owner) })}</p>` : ''}
       ${hidden ? `<p class="small warn-txt">${T('Esta sesión está oculta: nadie del equipo la ve.')}</p>` : ''}
       ${readers.length ? `<p class="small seen">👁 ${T('Leída por: {v1}', { v1: readers.map((r) => `${esc(r.who)} (${ago(r.at)}${r.client ? ', ' + esc(r.client) : ''})`).join(' · ') })}</p>` : ''}
       ${s.filesChanged.length ? `<details><summary>${T('Archivos modificados ({v1})', { v1: s.filesChanged.length })}</summary><pre>${s.filesChanged.map(esc).join('\n')}</pre></details>` : ''}
@@ -337,20 +560,35 @@
     ui.selected = id;
     ui.loading = true;
     ui.error = null;
-    document.getElementById('detail').innerHTML = detailHtml();
+    const detail = document.getElementById('detail');
+    if (detail) detail.innerHTML = detailHtml();
     document.querySelectorAll('.card').forEach((c) => c.classList.toggle('sel', c.dataset.open === id));
     vscode.postMessage({ type: 'open', id, peer });
   }
 
   document.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-page],[data-follow],[data-cmd],[data-act],[data-tab],[data-open],[data-person]');
+    const t = e.target.closest('[data-page],[data-follow],[data-cmd],[data-act],[data-view],[data-group],[data-more],[data-groups],[data-tab],[data-open],[data-person]');
     if (!t) return;
+    if (t.dataset.group || t.dataset.more || t.dataset.groups) {
+      if (t.dataset.group) ui.collapsed.has(t.dataset.group) ? ui.collapsed.delete(t.dataset.group) : ui.collapsed.add(t.dataset.group);
+      if (t.dataset.more) ui.expanded.has(t.dataset.more) ? ui.expanded.delete(t.dataset.more) : ui.expanded.add(t.dataset.more);
+      if (t.dataset.groups) for (const g of groupsOf(sessionsForTab(), groupMode())) t.dataset.groups === 'close' ? ui.collapsed.add(g.key) : ui.collapsed.delete(g.key);
+      persist();
+      const list = document.getElementById('list');
+      if (list) list.innerHTML = listHtml();
+      if (t.dataset.group) [...document.querySelectorAll('[data-group]')].find((x) => x.dataset.group === t.dataset.group)?.focus();
+      return;
+    }
+    if (t.dataset.view) return setView(t.dataset.view);
     if (t.dataset.page) {
       const [key, dir] = t.dataset.page.split(':');
       ui.page[key] = Math.max(0, (ui.page[key] || 0) + Number(dir));
-      if (key === 'reads') document.getElementById('reads').innerHTML = readsHtml();
-      else if (key === 'inbox') document.getElementById('messages').innerHTML = messagesHtml();
-      else document.getElementById('list').innerHTML = listHtml();
+      const box = BOXES[key] && document.getElementById(`lb-${key}`);
+      if (box) box.innerHTML = boxBody(key);
+      else {
+        const list = document.getElementById('list');
+        if (list) list.innerHTML = listHtml();
+      }
       return;
     }
     if (t.dataset.follow) {
@@ -369,49 +607,88 @@
     }
     if (t.dataset.open) return open(t.dataset.open, t.dataset.peer);
     if (t.dataset.person) {
+      ui.view = 'sessions';
       ui.tab = 'team';
       ui.person = t.dataset.person;
+      ui.page.team = 0;
       persist();
       render();
     }
   });
 
+  // Teclado: flechas, Inicio y Fin entre pestañas (patrón ARIA "tabs"); Enter en una persona.
+  document.addEventListener('keydown', (e) => {
+    const tab = e.target.closest?.('[role="tab"][data-view]');
+    if (tab) {
+      const i = VIEWS.indexOf(tab.dataset.view);
+      const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: VIEWS.length - 1 }[e.key];
+      if (next == null) return;
+      e.preventDefault();
+      return setView(VIEWS[(next + VIEWS.length) % VIEWS.length], true);
+    }
+    if ((e.key === 'Enter' || e.key === ' ') && e.target.dataset?.person) {
+      e.preventDefault();
+      e.target.click();
+    }
+  });
+
   document.addEventListener('input', (e) => {
+    const k = e.target.dataset?.search;
+    if (k && BOXES[k]) {
+      ui.q[k] = e.target.value;
+      ui.page[k] = 0;
+      const box = document.getElementById(`lb-${k}`);
+      if (box) box.innerHTML = boxBody(k);
+      return;
+    }
     if (e.target.id === 'filter') {
       ui.filter = e.target.value;
       ui.page[ui.tab] = 0;
-      document.getElementById('list').innerHTML = listHtml();
+      const list = document.getElementById('list');
+      if (list) list.innerHTML = listHtml();
     }
   });
   document.addEventListener('change', (e) => {
+    if (e.target.id === 'group') {
+      ui.group = e.target.value;
+      ui.page[ui.tab] = 0;
+      persist();
+      const list = document.getElementById('list');
+      if (list) list.innerHTML = listHtml();
+      return;
+    }
     if (e.target.id === 'person') {
       ui.person = e.target.value;
       ui.page.team = 0;
       persist();
-      document.getElementById('list').innerHTML = listHtml();
+      const list = document.getElementById('list');
+      if (list) list.innerHTML = listHtml();
     }
   });
 
   window.addEventListener('message', ({ data: m }) => {
     if (m.type === 'state') {
-      const focused = document.activeElement?.id === 'filter';
+      const a = document.activeElement;
+      const focus = a?.id === 'filter' ? '#filter' : a?.dataset?.search ? `[data-search="${a.dataset.search}"]` : null;
       state = m.state;
       render();
-      if (focused) {
-        const f = document.getElementById('filter');
+      const f = focus && document.querySelector(focus);
+      if (f) {
         f.focus();
         f.setSelectionRange(f.value.length, f.value.length);
       }
     }
+    if (m.type === 'view') setView(m.view);
+    const detail = document.getElementById('detail');
     if (m.type === 'session') {
       ui.loading = false;
       ui.detail = m.data;
-      document.getElementById('detail').innerHTML = detailHtml();
+      if (detail) detail.innerHTML = detailHtml();
     }
     if (m.type === 'error' && m.context === 'open') {
       ui.loading = false;
       ui.error = m.error;
-      document.getElementById('detail').innerHTML = detailHtml();
+      if (detail) detail.innerHTML = detailHtml();
     }
   });
 

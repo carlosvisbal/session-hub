@@ -14,7 +14,8 @@ Respondemos en un máximo de 5 días hábiles y acordamos contigo la fecha de di
 
 | Versión | Soporte |
 | --- | --- |
-| 0.8.x | Sí (piloto) |
+| 0.8.1+ | Sí (piloto) |
+| 0.8.0 | Actualiza: una carpeta no compartida con nombre parecido podía verse (corregido en 0.8.1) |
 | 0.6.x – 0.7.x | Actualiza: en 0.7.x el MCP fallaba (corregido en 0.8.0) |
 | < 0.6 | No: usaban un token de equipo compartido; actualiza y vuelve a invitar |
 
@@ -28,6 +29,7 @@ Respondemos en un máximo de 5 días hábiles y acordamos contigo la fecha de di
 - **API local:** solo en 127.0.0.1, con un token local. El MCP no se expone a la red.
 - **Auditoría:** lecturas, accesos denegados y conexiones rechazadas quedan en disco (90 días).
 - **Mensajes (0.8):** firmados por quien los envía y verificados contra la clave de la conexión; solo para un miembro del equipo, con límite de tamaño (20 000 caracteres), de frecuencia (10 por minuto) y de plazo (24 h). Por defecto quedan retenidos hasta que el destinatario los aprueba. Nunca ejecutan nada.
+- **Respaldo (0.8.1):** tu respaldo y las copias de tu equipo se guardan solo en tu computadora (0600, comprimidos). Un respaldo nunca amplía el acceso: lo respaldado pasa por los mismos permisos, y una copia se borra cuando el dueño retira el acceso o desactiva las copias. Mientras el dueño está desconectado no puede retirarlo: la copia sigue legible hasta el siguiente contacto o hasta su vencimiento (180 días).
 - **Sesiones abiertas:** de Claude Code solo se leen los `~/.claude/sessions/<pid>.json`; nunca sus claves ni sus sockets.
 
 ## Limitaciones conocidas

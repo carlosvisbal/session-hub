@@ -2,6 +2,35 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versiones con [SemVer](https://semver.org/lang/es/).
 
+## [0.8.1] — 2026-09-24
+
+### Añadido
+- **Respaldo local en dos capas.**
+  - **Tus sesiones:** tu hub guarda una copia de las sesiones que compartes. Si Claude Code (que borra a los 30 días) o Cursor las borran, siguen disponibles para ti y para quien las compartes, marcadas "solo en respaldo". Mientras el original existe, el respaldo es un espejo exacto; si se acorta (restaurar en Cursor) se guarda la versión anterior; si una fuente falla, nada se marca como borrado.
+  - **Copias de tu equipo:** copias de lectura de las sesiones de tus compañeros, para leerlas aunque estén desconectados (marcadas "copia de hace…"). Se ponen al día solo con lo nuevo. Solo mientras tengas acceso: si el dueño las oculta, deja de compartirlas o desactiva las copias (`sessionHub.allowTeamCopies`), se borran en el siguiente contacto. El dueño ve en su auditoría "guardó una copia", una vez y sin avisos.
+  - Borrar del respaldo (una sesión o todo), **exportar** una sesión a Markdown o JSON y **exportar todo** a una carpeta. **"Solo yo (respaldo)"** en *Quién lo ve* respalda un proyecto sin compartirlo.
+  - Escritura atómica y comprimida (0600), retención y tamaño máximo configurables, purga al salir del equipo o al expulsar a alguien.
+- Pruebas de la extensión y del panel dentro del repositorio (`npm run test:ext`), también en la integración continua.
+- **Buscador y paginación en todas las listas del panel:** personas, mensajes, enviados, lecturas, proyectos, estado, copias y grupos de sesiones.
+
+### Seguridad
+- **Una carpeta no compartida podía verse.** Claude Code guarda el historial en una carpeta con la ruta "codificada" (todo lo que no es letra o número pasa a `-`), así que `/x/my.app` y `/x/my-app` comparten carpeta. Si compartías una, tu equipo veía también las sesiones de la otra. Ahora cada sesión se asigna por la carpeta real donde empezó.
+
+### Corregido
+- **El MCP de Cursor se cortaba con varias ventanas abiertas:** cada ventana anulaba y volvía a registrar el servidor, y cortaba la conexión que abría la otra; al cerrar una ventana se anulaba para todas. Ahora hay un solo registro, que solo se renueva si cambia la URL.
+- **El token local podía cambiar** si el llavero del sistema no respondía al arrancar, y eso rompía la conexión de Claude Code. Ahora se reutiliza el de la configuración. *Estado* avisa si Claude Code quedó desactualizado, y **Conectar Claude Code** lo registra directamente con su línea de comandos.
+- `list_sessions` y `search_sessions` con "yo" devolvían vacío o un solo resultado: el MCP usa `limit: 0` para decir "todos".
+- **Proyectos con el mismo nombre ya no se mezclan.** Cada proyecto tiene una clave (`projectKey`). Si es un repositorio git, sale del remoto `origin` normalizado; solo viaja un hash, nunca la URL. El mismo repo coincide aunque cada persona lo llame distinto, y dos proyectos distintos con el mismo nombre quedan separados en el panel ("web-app · Ana" y "web-app · Luis") y en el MCP, que le indica a la IA no combinarlos. Dos carpetas tuyas con el mismo nombre se distinguen: "api (pagos)".
+- **El MCP nunca conectaba en Cursor** (en ninguna versión): Cursor descarta las cabeceras de los servidores MCP que registran las extensiones y solo conserva la URL, así que el token no llegaba y el hub respondía 401. Ahora el token va también en la URL. VS Code y Claude Code no cambian, porque sí respetan las cabeceras.
+
+### Cambiado
+- **"Pasar a mi IA" deja el mensaje escrito en el chat**, sin enviarlo, también en Cursor (antes solo lo copiaba) y en **Claude Code**: en la sesión a la que iba el mensaje o en tu sesión más reciente de ese proyecto. En modo automático elige el chat de la pestaña activa, el único abierto o el último que usaste; si hay varios, pregunta una vez. Ajuste `sessionHub.aiChat`.
+- **Panel organizado en pestañas:** *Sesiones*, *Mensajes*, *Equipo*, *Privacidad* y *Estado*, cada una con un contador que avisa si hay algo que mirar. No se quitó nada: solo se reorganizó.
+  - Aspecto de las pestañas del panel de VS Code, colores del tema (también en alto contraste), navegación con teclado (flechas, Inicio y Fin) y roles ARIA. Respeta "reducir movimiento".
+  - Los avisos abren la pestaña que corresponde. El panel recuerda la última pestaña.
+  - En ventanas estrechas, la conversación pasa debajo de la lista.
+- **Sesiones agrupadas por proyecto** (o por persona, o sin agrupar). Cada grupo se abre y cierra, dice cuántas sesiones tiene, de quién son y cuándo fue la última actividad, y muestra las 5 más recientes con *Ver más*. Al filtrar, los grupos se abren solos. El panel recuerda cómo lo dejaste.
+
 ## [0.8.0] — 2026-09-23
 
 ### Añadido

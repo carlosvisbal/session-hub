@@ -12,6 +12,7 @@ import { createMcpServer } from './mcp.js';
 import { createTeam } from './team.js';
 import { createAccessLog, friendlyClient } from './access.js';
 import { createInbox } from './inbox.js';
+import { createCopies } from './archive.js';
 import { handleSource, sourceInfo } from './source.js';
 import { setExtraPatterns } from './redact.js';
 import { cursorUnavailable } from './sources/cursor.js';
@@ -40,11 +41,12 @@ export function startServer(cfg, { log = console.log } = {}) {
   const t = makeT(cfg); // idioma de los mensajes (sigue a cfg.language en caliente)
   const teamState = openTeamState(cfg.stateFile);
   cfg.id = teamState.me(); // mi identidad es mi clave pública
-  const hub = createHub(cfg);
+  const hub = createHub(cfg, { log });
+  const copies = createCopies({ dir: cfg.archiveDir, log });
   const access = createAccessLog({ file: cfg.auditFile, retentionDays: cfg.auditRetentionDays });
   const inbox = createInbox({ file: cfg.inboxFile, teamState, policy: () => cfg.inbound });
   const transport = createSwarmTransport({ cfg, teamState, onRequest: serveRemote, onEvent, log });
-  const team = createTeam(cfg, hub, transport, teamState, t, inbox);
+  const team = createTeam(cfg, hub, transport, teamState, t, inbox, copies, log);
   const panelOrigin = { via: 'panel', client: process.env.SESSION_HUB_EDITOR || 'visor web' };
   const mcpClients = new Map(); // en modo sin estado, clientInfo solo llega en "initialize"
   const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'));
@@ -67,7 +69,11 @@ export function startServer(cfg, { log = console.log } = {}) {
       case 'session':
         try {
           const s = hub.getSession(String(args.id), { ...readOpts(args), viewer });
-          if (!s.offset) access.record(viewer, 'session', { sessionId: s.id, title: s.title, project: s.project }); // una vez por lectura, no por página
+          const detail = { sessionId: s.id, title: s.title, project: s.project };
+          // Copia de respaldo del compañero: se registra una vez al día por sesión, sin avisos de lectura.
+          if (args.origin?.via === 'backup') {
+            if (!s.offset) access.recordOnce(viewer, 'copy', detail);
+          } else if (!s.offset) access.record(viewer, 'session', detail); // una vez por lectura, no por página
           return s;
         } catch (err) {
           if (err instanceof AccessDenied) access.record(viewer, 'denied', { sessionId: err.session.id, title: err.session.title, project: err.session.project });
@@ -79,6 +85,8 @@ export function startServer(cfg, { log = console.log } = {}) {
       case 'search':
         access.record(viewer, 'search', { query: String(args.q || '').slice(0, 200) });
         return hub.search(String(args.q || ''), { project: args.project, limit: lim(args.limit), viewer });
+      case 'copystatus':
+        return hub.copyStatus(Array.isArray(args.ids) ? args.ids : [], viewer);
       case 'agents':
         access.record(viewer); // solo presencia
         return hub.liveAgents(viewer);
@@ -95,7 +103,11 @@ export function startServer(cfg, { log = console.log } = {}) {
   function onEvent(type, data) {
     if (type === 'rejected') access.record({ id: `key:${data.id}`, name: `Clave desconocida ${data.fingerprint}`, via: 'red' }, 'rejected', { reason: data.reason });
     if (type === 'conn-issue') log(`[red] no se pudo conectar con ${data.peer}: ${data.code}`);
-    if (type === 'joined') team.flushQueue(data.id).catch(() => {});
+    if (type === 'joined') {
+      team.flushQueue(data.id).catch(() => {});
+      setTimeout(() => team.syncCopies().catch(() => {}), 5000); // al volver alguien, se ponen al día sus copias
+    }
+    if (type === 'revoked') copies.purgeOwner(data.member, 'expulsado del equipo');
     if (type === 'receipt') inbox.receipt(data.from, data.id, data.status);
     if (type === 'revoked') log(`[equipo] ${fingerprint(data.member)} fue expulsado por ${fingerprint(data.by)}`);
   }
@@ -169,6 +181,27 @@ export function startServer(cfg, { log = console.log } = {}) {
     'GET /api/agents': () => hub.liveAgents(),
 
     'GET /api/inbox': () => inbox.list(),
+
+    // Respaldo: mis sesiones (capa 1) y copias de mis compañeros (capa 2).
+    'GET /api/archive': () => ({
+      own: hub.archiveStatus(),
+      copies: { enabled: cfg.teamCopies !== false, allowOthers: cfg.allowCopies !== false, owners: copies.status(), bytes: copies.bytes() },
+      settings: { archiveRetentionDays: cfg.archiveRetentionDays, copiesRetentionDays: cfg.copiesRetentionDays, archiveMaxMB: cfg.archiveMaxMB },
+    }),
+    'POST /api/archive/sync': async () => {
+      hub.syncArchive();
+      await team.syncCopies();
+      return { ok: true };
+    },
+    'POST /api/archive/remove': (q, body) => {
+      if (body.owner && body.owner !== teamState.me()) return { ok: copies.remove(String(body.owner), String(body.id), { ignore: true }) };
+      return hub.removeArchived(String(body.id));
+    },
+    'POST /api/archive/purge': (q, body) => {
+      if (body.scope === 'own') return hub.purgeArchive(true);
+      if (body.owner) return { removed: copies.purgeOwner(String(body.owner), 'borradas a mano') };
+      return { removed: copies.purgeAll() };
+    },
     'POST /api/messages/send': (q, body) => team.sendMessage(body, panelOrigin),
     // Permitir que mi IA lo lea (check_inbox), pasarlo al chat de mi IA (leído) o descartarlo.
     'POST /api/inbox/approve': (q, body) => messageStatus(body.id, 'delivered'),
@@ -194,6 +227,7 @@ export function startServer(cfg, { log = console.log } = {}) {
       await transport.stop();
       teamState.leave();
       inbox.clear();
+      copies.purgeAll(); // las copias eran del equipo que dejo; mi propio respaldo se conserva
       return teamInfo();
     },
     'POST /api/members/block': (q, body) => {
@@ -287,6 +321,13 @@ export function startServer(cfg, { log = console.log } = {}) {
 
   // Avisa al visor web de sesiones nuevas o actualizadas.
   let lastSeen = new Map(hub.listSessions({ limit: 200 }).map((s) => [s.id, s.updatedAt]));
+  // Respaldo: mis sesiones cada minuto; las copias de mis compañeros cada 2 minutos (y al conectarse alguien).
+  const ARCHIVE_MS = 60_000;
+  const COPIES_MS = 120_000;
+  const archiveTimer = setInterval(() => hub.syncArchive(), ARCHIVE_MS);
+  const copiesTimer = setInterval(() => team.syncCopies().catch(() => {}), COPIES_MS);
+  setTimeout(() => hub.syncArchive(), 2000);
+
   const timer = setInterval(() => {
     if (!sseClients.size) return;
     const now = hub.listSessions({ limit: 200 });
@@ -330,6 +371,8 @@ export function startServer(cfg, { log = console.log } = {}) {
     if (closing) return;
     closing = true;
     clearInterval(timer);
+    clearInterval(archiveTimer);
+    clearInterval(copiesTimer);
     fs.unwatchFile(CONFIG_PATH);
     for (const c of sseClients) c.end();
     server.close();

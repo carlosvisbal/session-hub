@@ -10,11 +10,17 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'); /
 const NM = path.join(ROOT, 'node_modules');
 const COMPATIBLE = new Set(['MIT', 'ISC', 'BSD-2-Clause', 'BSD-3-Clause', 'Apache-2.0', '0BSD', 'BlueOak-1.0.0', 'CC0-1.0', 'Unlicense']);
 
+// Solo lo que viaja en la extensión: las dependencias de desarrollo (p. ej. jsdom, para las pruebas del
+// panel) no se distribuyen. Se sabe por la marca "dev" del package-lock.json.
+const lock = JSON.parse(fs.readFileSync(path.join(ROOT, 'package-lock.json'), 'utf8'));
+const devOnly = new Set(Object.entries(lock.packages || {}).filter(([k, v]) => k.startsWith('node_modules/') && v.dev).map(([k]) => k.slice('node_modules/'.length)));
+
 const pkgs = [];
 for (const d of fs.readdirSync(NM)) {
   if (d.startsWith('.')) continue;
   const names = d.startsWith('@') ? fs.readdirSync(path.join(NM, d)).map((x) => `${d}/${x}`) : [d];
   for (const name of names) {
+    if (devOnly.has(name)) continue;
     const dir = path.join(NM, name);
     const pj = path.join(dir, 'package.json');
     if (!fs.existsSync(pj)) continue;

@@ -84,10 +84,18 @@ async function activate(context) {
     lang,
   });
   // Token solo para la API local de esta máquina (el equipo se identifica con claves, no con tokens).
-  token = (await ctx.secrets.get(TOKEN_KEY)) || '';
+  // Si el llavero del sistema no responde al arrancar, se reutiliza el token de la configuración del hub
+  // antes de crear uno nuevo: cambiarlo rompería las conexiones ya registradas (p. ej. Claude Code).
+  token = (await ctx.secrets.get(TOKEN_KEY).then((v) => v, () => '')) || '';
   if (!token) {
-    token = crypto.randomBytes(24).toString('base64url');
-    await ctx.secrets.store(TOKEN_KEY, token);
+    try {
+      token = JSON.parse(fs.readFileSync(path.join(ctx.globalStorageUri.fsPath, 'config.json'), 'utf8')).localToken || '';
+    } catch {}
+    token ||= crypto.randomBytes(24).toString('base64url');
+    await ctx.secrets.store(TOKEN_KEY, token).then(
+      () => {},
+      () => {},
+    );
   }
 
   const reg = (id, fn) => ctx.subscriptions.push(vscode.commands.registerCommand(id, fn));
@@ -117,6 +125,12 @@ async function activate(context) {
   reg('sessionHub.handoffMessage', handoffMessage);
   reg('sessionHub.approveMessage', (id) => messageAction('approve', id));
   reg('sessionHub.dismissMessage', (id) => messageAction('dismiss', id));
+  reg('sessionHub.syncBackup', syncBackup);
+  reg('sessionHub.removeFromBackup', removeFromBackup);
+  reg('sessionHub.purgeCopies', purgeCopies);
+  reg('sessionHub.purgeOwnBackup', purgeOwnBackup);
+  reg('sessionHub.exportSession', exportSession);
+  reg('sessionHub.exportAll', exportAll);
   reg('sessionHub.openSource', () => vscode.env.openExternal(vscode.Uri.parse(`${base()}/source`)));
   reg('sessionHub.openWebViewer', () => vscode.env.openExternal(vscode.Uri.parse(`${base()}/?token=${encodeURIComponent(token)}`)));
 
@@ -232,6 +246,12 @@ function writeHubConfig() {
     paused: c.get('paused'),
     excludedSessions: c.get('excludedSessions'),
     inbound: c.get('inboundMessages'),
+    archive: c.get('backupOwnSessions'),
+    archiveRetentionDays: c.get('backupRetentionDays'),
+    teamCopies: c.get('keepTeamCopies'),
+    copiesRetentionDays: c.get('teamCopiesRetentionDays'),
+    allowCopies: c.get('allowTeamCopies'),
+    archiveMaxMB: c.get('backupMaxMB'),
     redactExtra: c.get('redactExtra'),
   };
   fs.writeFileSync(file, JSON.stringify(data, null, 2), { mode: 0o600 });
@@ -371,9 +391,12 @@ function restartHub() {
 // Prueba el MCP como lo haría la IA: un "initialize" real por HTTP. Si falla, la IA no ve las herramientas.
 async function probeMcp() {
   try {
-    const res = await fetch(`${base()}/mcp`, {
+    // En Cursor se prueba lo mismo que envía Cursor: token en la URL y sin cabecera (ver registerCursorMcp).
+    const cursor = !!vscode.cursor?.mcp?.registerServer;
+    const url = cursor ? `${base()}/mcp?token=${encodeURIComponent(token)}` : `${base()}/mcp`;
+    const res = await fetch(url, {
       method: 'POST',
-      headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+      headers: { ...(cursor ? {} : { authorization: `Bearer ${token}` }), 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'session-hub-check', version: '1' } } }),
       signal: AbortSignal.timeout(5000),
     });
@@ -492,7 +515,7 @@ async function verifyJoin(team) {
     const online = (await api('/api/peers').catch(() => [])).filter((m) => !m.self && m.online);
     const msg = t('Ya eres miembro de "{v1}".', { v1: team }) + (online.length ? ' ' + t('En línea: {v1}.', { v1: online.map((m) => m.name).join(', ') }) : '');
     const pick = await info(msg, 'Abrir panel');
-    if (pick) dashboard.show();
+    if (pick) dashboard.show('team');
   } else {
     const pick = await warn(
       `Tu entrada a "${team}" está pendiente: quien te invitó debe tener Session Hub abierto para confirmarla. Se completará sola en cuanto esté en línea.`,
@@ -500,7 +523,7 @@ async function verifyJoin(team) {
       'Abrir panel',
     );
     if (pick === 'Diagnosticar') runDoctor();
-    if (pick === 'Abrir panel') dashboard.show();
+    if (pick === 'Abrir panel') dashboard.show('status');
   }
 }
 
@@ -562,7 +585,7 @@ async function shareWorkspace() {
   const allow = await pickAudience(['*']);
   if (!allow) return;
   await saveShared([...sharedList().filter((p) => p.path !== folder.uri.fsPath), { path: folder.uri.fsPath, name, allow }]);
-  info(`Compartiendo "${name}" con ${audienceLabel(allow, await teamMembers())}. Puedes ocultar sesiones concretas o pausar desde el panel.`, 'Abrir panel').then((p) => p && dashboard.show());
+  info(`Compartiendo "${name}" con ${audienceLabel(allow, await teamMembers())}. Puedes ocultar sesiones concretas o pausar desde el panel.`, 'Abrir panel').then((p) => p && dashboard.show('privacy'));
 }
 
 async function unshareProject(fsPath) {
@@ -602,13 +625,14 @@ async function pickAudience(current, projectName) {
   const known = new Map(members.map((m) => [m.id, m]));
   for (const id of current) if (id !== '*' && !known.has(id)) known.set(id, { id, name: id, role: '', online: false });
   const everyone = { label: '$(organization) Todo el equipo', description: 'incluye a quien se una después', id: '*', picked: current.includes('*') };
+  const onlyMe = { label: '$(lock) Solo yo (respaldo)', description: 'nadie más lo ve; tus sesiones quedan respaldadas', id: 'me', picked: current.includes('me') };
   const people = [...known.values()].map((m) => ({
     label: `$(person) ${m.name}`,
     description: [m.role, m.online ? '' : 'desconectado'].filter(Boolean).join(' · '),
     id: m.id,
     picked: !current.includes('*') && current.includes(m.id),
   }));
-  const picks = await pick([everyone, ...people], {
+  const picks = await pick([everyone, onlyMe, ...people], {
     canPickMany: true,
     title: projectName ? `Quién puede ver "${projectName}"` : 'Compartir proyecto (2/2): quién puede verlo',
     placeHolder: people.length ? 'Marca "Todo el equipo" o personas concretas' : 'Aún no hay compañeros conectados: se compartirá con todo el equipo',
@@ -619,13 +643,16 @@ async function pickAudience(current, projectName) {
     warn('Elige al menos una opción. Para no compartir, usa "Dejar de compartir".');
     return null;
   }
-  return picks.some((p) => p.id === '*') ? ['*'] : picks.map((p) => p.id);
+  if (picks.some((p) => p.id === '*')) return ['*'];
+  if (picks.some((p) => p.id === 'me')) return ['me'];
+  return picks.map((p) => p.id);
 }
 
 const teamMembers = () => api('/api/peers').catch(() => []);
 
 function audienceLabel(allow, members = []) {
   if (!allow || allow.includes('*')) return t('todo el equipo');
+  if (allow.includes('me')) return t('solo tú (respaldo)');
   return allow.map((id) => members.find((m) => m.id === id)?.name || id.split('@')[0]).join(', ');
 }
 
@@ -652,14 +679,14 @@ async function toggleFollow(kind, id) {
 
 async function buildState() {
   const offline = { running: false, hasTeam: false, teamInfo: null, members: [], mine: [], team: [], teamErrors: [], access: { viewers: [], reads: [] }, sharing: { paused: cfg().get('paused'), projects: [] }, checks: [], inbox: EMPTY_INBOX, agents: [] };
-  const base = { follows: follows(), workspace: currentWorkspace() };
+  const base = { follows: follows(), workspace: currentWorkspace(), claude: hubUp() ? claudeCodeLink() : 'unknown' };
   if (!hubUp()) return { ...offline, ...base };
   const teamInfo = await api('/api/team').catch(() => null);
   if (!teamInfo) return { ...offline, ...base, running: true, starting: true };
   if (!teamInfo.hasTeam) return { ...offline, ...base, running: true, teamInfo };
   const since = cfg().get('listSince');
   // Cada dato por separado: si uno falla o tarda, el panel muestra el resto (y el error).
-  const [members, mine, team, access, sharing, diag, inbox, agents] = await Promise.allSettled([
+  const [members, mine, team, access, sharing, diag, inbox, agents, archive] = await Promise.allSettled([
     api('/api/peers'),
     api(`/api/sessions?since=${since}`),
     api(`/api/team/sessions?since=${since}`, { timeout: 25000 }),
@@ -668,6 +695,7 @@ async function buildState() {
     api('/api/diagnostics'),
     api('/api/inbox'),
     api('/api/team/agents?peer=todos'),
+    api('/api/archive'),
   ]);
   const mcp = await probeMcp();
   const val = (r, dflt) => (r.status === 'fulfilled' ? r.value : dflt);
@@ -687,10 +715,11 @@ async function buildState() {
     access: val(access, offline.access),
     sharing: { ...sh, projects: sh.projects.map((p) => ({ ...p, audience: audienceLabel(p.allow, m) })) },
     mcp,
-    checks: diag.status === 'fulfilled' ? healthChecks(diag.value, mcp) : [{ status: 'error', label: 'No pude leer el estado del hub', hint: diag.reason.message }],
+    checks: diag.status === 'fulfilled' ? healthChecks(diag.value, mcp, claudeCodeLink()) : [{ status: 'error', label: 'No pude leer el estado del hub', hint: diag.reason.message }],
     networkIssues: diag.status === 'fulfilled' ? diag.value.networkIssues || [] : [],
     inbox: val(inbox, EMPTY_INBOX),
     agents: val(agents, []).filter((a) => a.session),
+    archive: val(archive, null),
   };
 }
 
@@ -703,10 +732,13 @@ function currentWorkspace() {
 }
 
 // Comprobaciones con estado ok / warn / error y qué hacer en cada caso.
-function healthChecks(d, mcp) {
+function healthChecks(d, mcp, claude) {
   const out = [];
   const add = (status, label, hint = '') => out.push({ status, label: t(label), hint: t(hint) });
   const net = d.network;
+  if (claude === 'ok') add('ok', 'Claude Code conectado a Session Hub');
+  if (claude === 'stale') add('error', 'Claude Code apunta a otro token o puerto: no puede consultar Session Hub', 'Pulsa "Conectar Claude Code" para actualizarlo.');
+  if (claude === 'missing') add('warn', 'Claude Code no está conectado a Session Hub', 'Si usas Claude Code, pulsa "Conectar Claude Code".');
   if (mcp) {
     if (mcp.ok) add('ok', 'Tu IA puede consultar Session Hub (MCP)', 'Pídele, por ejemplo: "busca en Session Hub la sesión de Carlos sobre firmas".');
     else add('error', 'El MCP no responde: tu IA no puede consultar Session Hub', t('Error: {v1}. Reinicia Session Hub o actualiza la extensión; si sigue, copia el diagnóstico.', { v1: mcp.error }));
@@ -747,12 +779,12 @@ async function runDoctor() {
     return;
   }
   try {
-    const checks = healthChecks(await api('/api/diagnostics'), await probeMcp());
+    const checks = healthChecks(await api('/api/diagnostics'), await probeMcp(), claudeCodeLink());
     output.appendLine(`\n== ${t('Diagnóstico de Session Hub')} ==`);
     for (const c of checks) output.appendLine(`${{ ok: '✔', warn: '!', error: '✖' }[c.status]} ${c.label}${c.hint ? '\n    ' + c.hint : ''}`);
     output.appendLine(`MCP: ${t(vscode.cursor?.mcp ? 'registrado en Cursor' : vscode.lm?.registerMcpServerDefinitionProvider ? 'disponible en VS Code' : 'usa "Conectar Claude Code"')}`);
     const bad = checks.filter((c) => c.status !== 'ok');
-    dashboard.show();
+    dashboard.show('status');
     const msg = bad.length ? `Diagnóstico: ${bad.length} punto(s) a revisar. Detalle en el panel y en la salida "Session Hub".` : 'Diagnóstico: todo en orden.';
     (bad.length ? warn : info)(msg, 'Ver salida').then((p) => p && output.show());
   } catch (err) {
@@ -767,6 +799,7 @@ function readMessage(r) {
   if (r.what === 'session') return t('👁 {v1} está leyendo tu sesión "{v2}" de {v3} — {v4}', { v1: who, v2: r.title, v3: r.project, v4: from });
   if (r.what === 'changes') return r.project ? t('👁 {v1} revisó tus novedades ({v2}) de {v3} — {v4}', { v1: who, v2: r.since, v3: r.project, v4: from }) : t('👁 {v1} revisó tus novedades ({v2}) — {v3}', { v1: who, v2: r.since, v3: from });
   if (r.what === 'search') return t('👁 {v1} buscó "{v2}" en tus sesiones — {v3}', { v1: who, v2: r.query, v3: from });
+  if (r.what === 'copy') return t('💾 {v1} guardó una copia de tu sesión "{v2}" de {v3}', { v1: who, v2: r.title, v3: r.project });
   if (r.what === 'denied') return t('⛔ {v1} intentó leer "{v2}" de {v3}, sin permiso — {v4}', { v1: who, v2: r.title, v3: r.project, v4: from });
   return t('👁 {v1} consultó tus sesiones — {v2}', { v1: who, v2: from });
 }
@@ -813,7 +846,7 @@ function notifyMcp(mcp) {
   mcpAlerted = true;
   error(t('Session Hub: el MCP no responde y tu IA no puede consultar las sesiones del equipo ({v1}).', { v1: mcp.error }), 'Reiniciar', 'Ver detalle').then((p) => {
     if (p === 'Reiniciar') restartHub();
-    if (p === 'Ver detalle') dashboard.show();
+    if (p === 'Ver detalle') dashboard.show('status');
   });
 }
 
@@ -825,7 +858,7 @@ function notifyNetworkIssues(checksSource) {
     const show = x.severity === 'error' ? error : warn;
     show(`Session Hub: ${x.title}. ${x.cause}`, 'Copiar informe para TI', 'Ver detalle').then((p) => {
       if (p === 'Copiar informe para TI') copyNetReport();
-      if (p === 'Ver detalle') dashboard.show();
+      if (p === 'Ver detalle') dashboard.show('status');
     });
   }
 }
@@ -846,6 +879,7 @@ async function pollUpdates() {
     notifyReads(state.access.reads);
     notifyMessages(state.inbox);
     notifyMcp(state.mcp);
+    notifyClaude(state.claude);
     unreadMessages = state.inbox.unread;
     if (dashboard.visible) dashboard.update(state);
     tree.refresh();
@@ -908,11 +942,139 @@ function notifyReads(reads) {
   if (fresh.length) lastReadAt = fresh[0].at;
   if (!cfg().get('notifyReads')) return;
   for (const r of fresh.reverse()) {
+    if (r.what === 'copy') continue;
     const key = `${r.whoId}|${r.what}|${r.sessionId || r.query || r.since || ''}`;
     if (Date.now() - (readNotified.get(key) || 0) < READ_NOTIFY_COOLDOWN_MS) continue;
     readNotified.set(key, Date.now());
-    (r.what === 'denied' ? warn : info)(readMessage(r), 'Abrir panel').then((p) => p && dashboard.show());
+    (r.what === 'denied' ? warn : info)(readMessage(r), 'Abrir panel').then((p) => p && dashboard.show('privacy'));
   }
+}
+
+// ---------- respaldo, borrado y exportación ----------
+
+async function syncBackup() {
+  try {
+    await progress({ location: vscode.ProgressLocation.Notification, title: 'Actualizando el respaldo…' }, () => post('/api/archive/sync', {}, 600000));
+    info('Respaldo al día.');
+    pollUpdates();
+  } catch (err) {
+    error(t('No pude actualizar el respaldo: {v1}', { v1: t(err.message) }));
+  }
+}
+
+// owner vacío o yo = mi respaldo (solo lo que ya no existe en el original); si no, mi copia de esa persona.
+async function removeFromBackup(id, owner, title = '') {
+  const mine = !owner || owner === (await api('/api/team').catch(() => null))?.me?.id;
+  const msg = mine
+    ? t('¿Borrar "{v1}" de tu respaldo? El original ya no existe en su herramienta: no se podrá recuperar.', { v1: title || id })
+    : t('¿Borrar tu copia de "{v1}"? No se volverá a copiar (puedes reactivarlo con "Borrar todas las copias").', { v1: title || id });
+  if (!(await warn(msg, { modal: true }, 'Borrar'))) return;
+  try {
+    await post('/api/archive/remove', mine ? { id } : { id, owner });
+    info('Borrada del respaldo.');
+    pollUpdates();
+  } catch (err) {
+    error(t(err.message));
+  }
+}
+
+async function purgeCopies(owner, name) {
+  const msg = owner ? t('¿Borrar todas tus copias de las sesiones de {v1}?', { v1: name || '' }) : '¿Borrar todas las copias de las sesiones de tus compañeros? Tu propio respaldo no se toca.';
+  if (!(await warn(msg, { modal: true }, 'Borrar'))) return;
+  const r = await post('/api/archive/purge', owner ? { owner } : { scope: 'copies' }).catch((err) => error(t(err.message)));
+  if (r) info(t('{v1} copia(s) borrada(s).', { v1: r.removed }));
+  pollUpdates();
+}
+
+async function purgeOwnBackup() {
+  if (!(await warn('¿Borrar de tu respaldo todas las sesiones cuyo original ya no existe? No se podrán recuperar.', { modal: true }, 'Borrar'))) return;
+  const r = await post('/api/archive/purge', { scope: 'own' }).catch((err) => error(t(err.message)));
+  if (r) info(t('{v1} sesión(es) borrada(s) del respaldo.', { v1: r.removed }));
+  pollUpdates();
+}
+
+const fileSafe = (s) => String(s || 'sesion').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80) || 'sesion';
+
+// Markdown legible, con de quién es, de dónde viene (en vivo, respaldo o copia) y cada acción de la IA.
+function sessionMarkdown(s) {
+  const when = (x) => (x ? new Date(x).toLocaleString(lang() === 'en' ? 'en' : 'es') : '');
+  const origin = s.copy ? t('copia local guardada el {v1}', { v1: when(s.copy.syncedAt) }) : s.archived ? t('respaldo (el original ya no existe en {v1})', { v1: s.source === 'cursor' ? 'Cursor' : 'Claude Code' }) : t('en vivo');
+  const lines = [
+    `# ${s.title}`,
+    '',
+    `- **${t('Dueño')}:** ${s.owner}`,
+    `- **${t('Herramienta')}:** ${s.source === 'cursor' ? 'Cursor' : 'Claude Code'}`,
+    `- **${t('Proyecto')}:** ${s.project}${s.projectKey ? ` (\`${s.projectKey}\`)` : ''}${s.branch ? ` · ${t('rama')} \`${s.branch}\`` : ''}`,
+    `- **${t('Mensajes')}:** ${s.total ?? s.conversation.length} · ${t('actualizada {v1}', { v1: when(s.updatedAt) })}`,
+    `- **${t('Origen')}:** ${origin}`,
+    `- **Id:** \`${s.id}\``,
+    '',
+  ];
+  for (const m of s.conversation) {
+    lines.push('---', '', `### ${m.role === 'user' ? `👤 ${s.owner}` : `🤖 ${t('IA')}`} · ${when(m.at)}`, '', m.text || '');
+    if (m.actions?.length) lines.push('', ...m.actions.map((a) => `- ${a.kind === 'edit' ? '✎' : '$'} \`${a.target}\``));
+    lines.push('');
+  }
+  lines.push('---', '', `_${t('Exportado con Session Hub · los secretos aparecen como [REDACTED]')}_`, '');
+  return lines.join('\n');
+}
+
+async function fullSession(id, peer) {
+  return api(`/api/sessions/${encodeURIComponent(id)}${peer ? `?peer=${encodeURIComponent(peer)}&full=1` : '?full=1'}`, { timeout: 120000 });
+}
+
+async function exportSession(id, peer) {
+  try {
+    const s = await fullSession(id, peer);
+    const target = await vscode.window.showSaveDialog({
+      defaultUri: vscode.Uri.file(path.join(os.homedir(), `${fileSafe(s.title)}.md`)),
+      filters: { Markdown: ['md'], JSON: ['json'] },
+      title: t('Exportar sesión'),
+    });
+    if (!target) return;
+    const asJson = target.fsPath.toLowerCase().endsWith('.json');
+    fs.writeFileSync(target.fsPath, asJson ? JSON.stringify(s, null, 2) : sessionMarkdown(s), { mode: 0o600 });
+    const pickOpen = await info(t('Sesión exportada: {v1}', { v1: target.fsPath }), 'Abrir');
+    if (pickOpen) vscode.commands.executeCommand('vscode.open', target);
+  } catch (err) {
+    error(t('No pude exportar la sesión: {v1}', { v1: t(err.message) }));
+  }
+}
+
+// Todo lo que veo (mis sesiones, con el respaldo, y las del equipo, con las copias) en una carpeta:
+// <persona>/<proyecto>/<título>.md + .json, e index.json con el resumen.
+async function exportAll() {
+  const where = await vscode.window.showOpenDialog({ canSelectFolders: true, canSelectFiles: false, canSelectMany: false, title: t('Carpeta donde exportar'), openLabel: t('Exportar aquí') });
+  if (!where?.[0]) return;
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+  const root = path.join(where[0].fsPath, `session-hub-${stamp}`);
+  const index = [];
+  const failed = [];
+  await progress({ location: vscode.ProgressLocation.Notification, title: 'Exportando sesiones…', cancellable: true }, async (bar, cancel) => {
+    const mine = await api('/api/sessions').catch(() => []);
+    const team = (await api('/api/team/sessions', { timeout: 60000 }).catch(() => [])).filter((x) => x.id);
+    const all = [...mine.map((s) => ({ s, peer: null })), ...team.map((s) => ({ s, peer: s.ownerId }))];
+    for (const [i, { s, peer }] of all.entries()) {
+      if (cancel.isCancellationRequested) break;
+      bar.report({ message: `${i + 1}/${all.length} · ${s.title}`, increment: 100 / all.length });
+      try {
+        const full = await fullSession(s.id, peer);
+        const dir = path.join(root, fileSafe(full.owner), fileSafe(full.project));
+        fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+        const name = `${fileSafe(full.title)} (${String(full.id).split(':').pop().replace(/[^a-zA-Z0-9-]/g, '').slice(0, 8)})`;
+        fs.writeFileSync(path.join(dir, `${name}.md`), sessionMarkdown(full), { mode: 0o600 });
+        fs.writeFileSync(path.join(dir, `${name}.json`), JSON.stringify(full, null, 2), { mode: 0o600 });
+        index.push({ id: full.id, owner: full.owner, project: full.project, projectKey: full.projectKey, title: full.title, source: full.source, messages: full.total, updatedAt: full.updatedAt, origin: full.copy ? 'copy' : full.archived ? 'backup' : 'live', file: path.relative(root, path.join(dir, `${name}.md`)) });
+      } catch (err) {
+        failed.push(`${s.title}: ${t(err.message)}`);
+      }
+    }
+  });
+  if (!index.length && !failed.length) return info('No hay sesiones para exportar.');
+  fs.mkdirSync(root, { recursive: true, mode: 0o700 });
+  fs.writeFileSync(path.join(root, 'index.json'), JSON.stringify({ exportedAt: new Date().toISOString(), sessions: index, failed }, null, 2), { mode: 0o600 });
+  const msg = t('{v1} sesión(es) exportada(s) en {v2}', { v1: index.length, v2: root }) + (failed.length ? ' · ' + t('{v1} con error (ver index.json)', { v1: failed.length }) : '');
+  (failed.length ? warn : info)(msg, 'Abrir carpeta').then((p) => p && vscode.env.openExternal(vscode.Uri.file(root)));
 }
 
 // ---------- mensajes entre compañeros ----------
@@ -933,7 +1095,7 @@ function notifyMessages(inbox) {
     info(t('✉ {v1} te escribió: "{v2}"', { v1: who, v2: preview }), 'Pasar a mi IA', 'Responder', 'Ver').then((p) => {
       if (p === 'Pasar a mi IA') handoffMessage(m.id);
       if (p === 'Responder') sendMessage(null, m.id);
-      if (p === 'Ver') dashboard.show();
+      if (p === 'Ver') dashboard.show('messages');
     });
   }
 }
@@ -1009,21 +1171,99 @@ function aiPrompt(m) {
   return lines.join('\n');
 }
 
-// Abre el chat de la IA del editor. VS Code admite dejar el texto escrito; en Cursor se pega.
-async function openChat(prompt) {
+// ---------- "Pasar a mi IA": dejar el mensaje escrito en el chat de la IA (nunca se envía solo) ----------
+//   claude — Claude Code: claude-vscode.editor.open(sesión, texto) deja el texto en el campo de esa sesión.
+//   editor — el chat del editor: Copilot en VS Code, el chat de Cursor en Cursor
+//            (workbench.action.chat.open con { query } abre un chat con el texto escrito).
+const isCursor = () => /cursor/i.test(vscode.env.appName);
+const CHAT_LABEL = { claude: 'Claude Code', editor: () => (isCursor() ? 'Chat de Cursor' : 'Chat de Copilot (VS Code)'), clipboard: 'Solo copiar al portapapeles' };
+const chatLabel = (k) => t(typeof CHAT_LABEL[k] === 'function' ? CHAT_LABEL[k]() : CHAT_LABEL[k]);
+
+async function availableChats() {
   const cmds = new Set(await vscode.commands.getCommands(true));
-  if (!/cursor/i.test(vscode.env.appName) && cmds.has('workbench.action.chat.open')) {
-    try {
-      await vscode.commands.executeCommand('workbench.action.chat.open', { query: prompt, isPartialQuery: true });
-      return 'prefilled';
-    } catch {}
+  return ['claude', 'editor'].filter((k) => cmds.has(k === 'claude' ? 'claude-vscode.editor.open' : 'workbench.action.chat.open'));
+}
+
+// Chats abiertos en pestañas del editor y cuál es la pestaña activa (la vista lateral no se puede ver).
+function openChatTabs() {
+  const open = new Set();
+  let active = null;
+  for (const g of vscode.window.tabGroups?.all || [])
+    for (const tab of g.tabs) {
+      const vt = String(tab.input?.viewType || '');
+      const kind = /claudeVSCodePanel/i.test(vt) ? 'claude' : (vscode.TabInputChat && tab.input instanceof vscode.TabInputChat) || /chat/i.test(vt) ? 'editor' : null;
+      if (!kind) continue;
+      open.add(kind);
+      if (tab.isActive && g.isActive) active = kind;
+    }
+  return { open, active };
+}
+
+// Sesión de Claude Code a la que dirigir el texto: la del mensaje si es mía; si no, la más reciente
+// abierta en esta carpeta desde el editor (registro de Claude Code en ~/.claude/sessions).
+function claudeSessionFor(m) {
+  if (m?.toSession?.startsWith('claude:')) return m.toSession.slice(7);
+  const dir = path.join(os.homedir(), '.claude', 'sessions');
+  const folders = (vscode.workspace.workspaceFolders || []).map((f) => f.uri.fsPath);
+  let best = null;
+  try {
+    for (const f of fs.readdirSync(dir)) {
+      if (!/^\d+\.json$/.test(f)) continue;
+      try {
+        const d = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+        if (!d.sessionId || d.entrypoint !== 'claude-vscode' || !folders.includes(d.cwd)) continue;
+        try {
+          process.kill(d.pid, 0);
+        } catch (err) {
+          if (err.code !== 'EPERM') continue; // proceso terminado
+        }
+        const at = d.updatedAt || d.statusUpdatedAt || d.startedAt || 0;
+        if (!best || at > best.at) best = { id: String(d.sessionId), at };
+      } catch {}
+    }
+  } catch {}
+  return best?.id;
+}
+
+async function chooseChat(m) {
+  const available = await availableChats();
+  const pref = cfg().get('aiChat') || 'auto';
+  if (pref === 'clipboard') return 'clipboard';
+  if (pref !== 'auto' && pref !== 'ask' && available.includes(pref)) return pref;
+  if (pref === 'auto') {
+    if (m?.toSession?.startsWith('claude:') && available.includes('claude')) return 'claude';
+    const tabs = openChatTabs();
+    if (tabs.active && available.includes(tabs.active)) return tabs.active;
+    const opened = available.filter((k) => tabs.open.has(k));
+    if (opened.length === 1) return opened[0];
+    const last = ctx.globalState.get('lastChat');
+    if (last && available.includes(last)) return last;
+    if (available.length <= 1) return available[0] || 'clipboard';
   }
-  for (const c of ['aichat.newchataction', 'composer.startComposerPrompt', 'workbench.action.chat.open']) {
-    if (!cmds.has(c)) continue;
-    try {
-      await vscode.commands.executeCommand(c);
-      return 'opened';
-    } catch {}
+  const picked = await pick(
+    [...available, 'clipboard'].map((k) => ({ label: chatLabel(k), description: k === 'claude' ? t('en tu sesión de este proyecto, o en una nueva') : k === 'editor' ? t('en un chat nuevo') : '', k })),
+    { placeHolder: 'Dónde dejo el mensaje (lo recordaré)' },
+  );
+  if (!picked) return null;
+  await ctx.globalState.update('lastChat', picked.k);
+  return picked.k;
+}
+
+// Devuelve dónde quedó el texto: 'claude' | 'editor' | 'clipboard' (o null si la persona canceló).
+async function openChat(prompt, m) {
+  const target = await chooseChat(m);
+  if (!target) return null;
+  try {
+    if (target === 'claude') {
+      await vscode.commands.executeCommand('claude-vscode.editor.open', claudeSessionFor(m), prompt);
+      return 'claude';
+    }
+    if (target === 'editor') {
+      await vscode.commands.executeCommand('workbench.action.chat.open', { query: prompt, isPartialQuery: true });
+      return 'editor';
+    }
+  } catch (err) {
+    output.appendLine(t('[chat] no pude abrir {v1}: {v2}', { v1: chatLabel(target), v2: err.message }));
   }
   return 'clipboard';
 }
@@ -1034,16 +1274,11 @@ async function handoffMessage(id) {
     const m = (await api('/api/inbox')).received.find((x) => x.id === id);
     if (!m) return warn('Ese mensaje ya no está en tu bandeja.');
     const prompt = aiPrompt(m);
-    await vscode.env.clipboard.writeText(prompt);
+    await vscode.env.clipboard.writeText(prompt); // respaldo, pase lo que pase con el chat
+    const where = await openChat(prompt, m);
+    if (!where) return; // canceló la elección de chat: el mensaje sigue pendiente
     await post('/api/inbox/handoff', { id });
-    const how = await openChat(prompt);
-    info(
-      how === 'prefilled'
-        ? 'Mensaje puesto en el chat de tu IA: revísalo y pulsa Enviar.'
-        : how === 'opened'
-          ? 'Chat abierto y mensaje copiado: pégalo (Ctrl+V), revísalo y envíalo.'
-          : 'Mensaje copiado: pégalo en el chat de tu IA (Ctrl+V) y envíalo.',
-    );
+    info(where === 'clipboard' ? 'Mensaje copiado: pégalo en el chat de tu IA (Ctrl+V) y envíalo.' : t('Mensaje puesto en {v1}: revísalo y pulsa Enviar.', { v1: chatLabel(where) }));
     pollUpdates();
   } catch (err) {
     error(t(err.message));
@@ -1190,24 +1425,91 @@ function registerMcp() {
       }),
     );
   }
-  ctx.subscriptions.push({ dispose: () => vscode.cursor?.mcp?.unregisterServer?.(MCP_NAME) });
+  // En Cursor no se anula el registro al cerrar una ventana: es uno solo para todas las ventanas y lo usan las demás.
 }
 
 // Cursor
-function registerCursorMcp() {
+// El registro de Cursor es uno solo para todas sus ventanas. Si cada ventana lo anulara y volviera a
+// registrar, una cortaría la conexión que abre la otra; por eso solo se anula si la URL cambió
+// (otro puerto o token), esperando a que termine, y registrar lo mismo dos veces no hace nada.
+async function registerCursorMcp() {
   const api = vscode.cursor?.mcp;
   if (!api?.registerServer || !hubUp()) return;
+  // Cursor descarta las cabeceras de los servidores registrados por extensiones (solo guarda la url),
+  // así que el token va también en la URL; el hub lo acepta igual. La cabecera queda por si algún día la respeta.
+  const url = `${base()}/mcp?token=${encodeURIComponent(token)}`;
+  const urlKey = crypto.createHash('sha256').update(url).digest('hex'); // no se guarda el token en claro
+  if (ctx.globalState.get('cursorMcpUrl') !== urlKey) {
+    try {
+      await api.unregisterServer?.(MCP_NAME);
+    } catch {}
+  }
   try {
-    api.unregisterServer?.(MCP_NAME);
-  } catch {}
-  api.registerServer({ name: MCP_NAME, server: { url: `${base()}/mcp`, headers: { Authorization: `Bearer ${token}` } } });
-  output.appendLine(t('[mcp] registrado en Cursor como "session-hub"'));
+    await api.registerServer({ name: MCP_NAME, server: { url, headers: { Authorization: `Bearer ${token}` } } });
+    await ctx.globalState.update('cursorMcpUrl', urlKey);
+    output.appendLine(t('[mcp] registrado en Cursor como "session-hub"'));
+  } catch (err) {
+    output.appendLine(t('[mcp] no pude registrar en Cursor: {v1}', { v1: err.message }));
+  }
 }
 
+// ---------- Claude Code ----------
+// Claude Code no lee los MCP del editor: tiene su propia configuración (~/.claude.json, alcance usuario).
+// 'ok' | 'stale' (apunta a otro puerto o token) | 'missing' | 'unknown' (no hay Claude Code o no se pudo leer)
+function claudeCodeLink() {
+  try {
+    const c = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude.json'), 'utf8'));
+    const srv = c.mcpServers?.[MCP_NAME];
+    if (!srv) return 'missing';
+    const auth = srv.headers?.Authorization || srv.headers?.authorization || '';
+    const url = String(srv.url || '');
+    const ok = url.startsWith(`${base()}/mcp`) && (auth === `Bearer ${token}` || url.includes(`token=${encodeURIComponent(token)}`));
+    return ok ? 'ok' : 'stale';
+  } catch {
+    return 'unknown';
+  }
+}
+
+function claudeCli() {
+  for (const cmd of ['claude', path.join(os.homedir(), '.local', 'bin', 'claude'), path.join(os.homedir(), '.claude', 'local', 'claude')]) {
+    try {
+      cp.execFileSync(cmd, ['--version'], { timeout: 8000, stdio: 'ignore' });
+      return cmd;
+    } catch {}
+  }
+  return null;
+}
+
+// Registra (o actualiza) Session Hub en Claude Code. Si no está su línea de comandos, copia el comando.
 async function copyClaudeCommand() {
-  const cmd = `claude mcp add --transport http --scope user ${MCP_NAME} ${base()}/mcp --header "Authorization: Bearer ${token}"`;
-  await vscode.env.clipboard.writeText(cmd);
+  const cmdText = `claude mcp add --transport http --scope user ${MCP_NAME} ${base()}/mcp --header "Authorization: Bearer ${token}"`;
+  const cli = claudeCli();
+  if (cli) {
+    try {
+      const run = (args) => cp.execFileSync(cli, args, { timeout: 20000, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+      try {
+        run(['mcp', 'remove', MCP_NAME, '--scope', 'user']);
+      } catch {} // no estaba
+      run(['mcp', 'add', '--transport', 'http', '--scope', 'user', MCP_NAME, `${base()}/mcp`, '--header', `Authorization: Bearer ${token}`]);
+      claudeAlerted = false;
+      info('Claude Code conectado a Session Hub. Abre una sesión nueva de Claude para ver sus herramientas (/mcp).');
+      pollUpdates();
+      return;
+    } catch (err) {
+      output.appendLine(t('[claude] no pude registrar el MCP: {v1}', { v1: String(err.stderr || err.message).replace(token, '***') }));
+    }
+  }
+  await vscode.env.clipboard.writeText(cmdText);
   info('Comando para Claude Code copiado. Pégalo en una terminal.');
+}
+
+// Avisa una vez si Claude Code quedó apuntando a otro token o puerto (p. ej. tras reinstalar).
+let claudeAlerted = false;
+function notifyClaude(link) {
+  if (link !== 'stale') return void (claudeAlerted = false);
+  if (claudeAlerted) return;
+  claudeAlerted = true;
+  warn('Session Hub: la conexión de Claude Code quedó desactualizada (otro token o puerto) y su IA no puede consultar Session Hub.', 'Actualizar conexión').then((p) => p && copyClaudeCommand());
 }
 
 module.exports = { activate, deactivate };

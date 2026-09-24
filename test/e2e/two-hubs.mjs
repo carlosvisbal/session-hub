@@ -65,6 +65,11 @@ try {
   assert.deepEqual(remote.conversation, local.conversation);
   assert.equal(remote.conversation.length, local.total);
   step(`lectura completa por el canal cifrado: ${remote.conversation.length}/${local.total} mensajes, idéntica`);
+  assert.match(remote.projectKey, /^(git|local):[0-9a-f]{12}$/);
+  assert.equal(remote.projectKey, local.projectKey);
+  const listed = await mcp('ana', 'list_sessions', { peer: 'Carlos' });
+  assert.equal(listed[0].projectKey, local.projectKey);
+  step(`cada resultado identifica su proyecto sin ambigüedad (projectKey ${local.projectKey})`);
 
   const audit = await call('carlos', 'GET', '/api/access');
   assert.ok(audit.reads.some((r) => r.what === 'session' && r.who === 'Ana'));

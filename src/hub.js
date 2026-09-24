@@ -10,6 +10,8 @@ import path from 'node:path';
 import { encodeProject, listClaudeLive, listClaudeSessions } from './sources/claude.js';
 import { cursorUnavailable, listCursorSessions } from './sources/cursor.js';
 import { redact, setExtraPatterns } from './redact.js';
+import { projectKey } from './projectkey.js';
+import { createOwnArchive } from './archive.js';
 import { iso, parseSince, relPath, truncate } from './util.js';
 
 const CURSOR_ACTIVE_MS = 10 * 60_000; // Cursor no deja registro de sesiones abiertas: cuenta la actividad reciente
@@ -22,8 +24,11 @@ export class AccessDenied extends Error {
   }
 }
 
-export function createHub(cfg) {
+export function createHub(cfg, { log = () => {} } = {}) {
   setExtraPatterns(cfg.redactExtra);
+  // Respaldo de mis sesiones (capa 1). Sin carpeta configurada (pruebas) no hay respaldo.
+  const own = cfg.archiveDir ? createOwnArchive({ dir: cfg.archiveDir, log }) : null;
+  const archiveOn = () => !!own && cfg.archive !== false;
 
   // Dinámico: el nombre y el rol pueden cambiar en caliente.
   const owner = {
@@ -50,20 +55,42 @@ export function createHub(cfg) {
   const visibleProjects = (viewer) => cfg.projects.filter((p) => canSee(p, viewer));
   const isExcluded = (s) => cfg.excludedSessions.includes(s.id);
 
+  // Por nombre, carpeta o clave de proyecto (projectKey).
   function resolveProject(name, viewer) {
-    const p = visibleProjects(viewer).find((x) => x.name === name || x.path === name);
+    const p = visibleProjects(viewer).find((x) => x.name === name || x.path === name || keyOf(x.path) === name);
     // Mismo mensaje exista o no: no se revela qué proyectos están restringidos.
     if (!p) throw new Error(`Proyecto "${name}" no compartido por ${owner.name}. Disponibles: ${visibleProjects(viewer).map((x) => x.name).join(', ') || 'ninguno'}`);
     return p;
   }
 
   const nameOf = (projectPath) => cfg.projects.find((x) => x.path === projectPath)?.name || path.basename(projectPath);
+  const keyOf = (projectPath) => projectKey(projectPath, cfg.id);
 
+  // Fuentes de un proyecto; ok=false si alguna falló (base de Cursor bloqueada, disco…).
+  function listing(p, source) {
+    let ok = true;
+    const read = (fn) => {
+      try {
+        return fn();
+      } catch (err) {
+        ok = false;
+        console.error('[session-hub] error leyendo fuente:', err.message);
+        return [];
+      }
+    };
+    const sessions = [];
+    if (!source || source === 'claude-code') sessions.push(...read(() => listClaudeSessions(cfg, p.path)));
+    if ((!source || source === 'cursor') && !cursorUnavailable) sessions.push(...read(() => listCursorSessions(cfg, p.path)));
+    return { ok, sessions };
+  }
+
+  // Lo que hay en Claude Code y Cursor, más lo que ya solo existe en mi respaldo.
   function rawSessions(projects, source) {
     const out = [];
     for (const p of projects) {
-      if (!source || source === 'claude-code') out.push(...safe(() => listClaudeSessions(cfg, p.path)));
-      if (!source || source === 'cursor') out.push(...safe(() => listCursorSessions(cfg, p.path)));
+      const { sessions } = listing(p, source);
+      out.push(...sessions);
+      if (archiveOn()) out.push(...own.goneFor(p.path, source, new Set(sessions.map((s) => s.id))));
     }
     return out.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   }
@@ -75,27 +102,31 @@ export function createHub(cfg) {
   }
 
   function summary(s) {
-    const edits = new Set();
-    let commands = 0;
-    for (const m of s.messages)
-      for (const a of m.actions) {
-        if (a.kind === 'edit' && a.target) edits.add(relPath(a.target, s.project));
-        if (a.kind === 'command') commands++;
-      }
+    const edits = new Set(s.stats?.edits || []);
+    let commands = s.stats?.commands || 0;
+    if (!s.stats)
+      for (const m of s.messages)
+        for (const a of m.actions) {
+          if (a.kind === 'edit' && a.target) edits.add(relPath(a.target, s.project));
+          if (a.kind === 'command') commands++;
+        }
     return {
       id: s.id,
       owner: owner.name,
       ownerId: owner.id,
       source: s.source,
       project: nameOf(s.project),
+      projectKey: keyOf(s.project),
       title: redact(s.title),
       branch: s.branch,
       createdAt: iso(s.createdAt),
       updatedAt: iso(s.updatedAt),
-      messages: s.messages.length,
+      messages: s.stats ? s.stats.count : s.messages.length,
       filesChanged: [...edits].sort(),
       commandsRun: commands,
       ...(isExcluded(s) ? { hidden: true } : {}),
+      // El original ya no está en Claude Code / Cursor: se sirve desde mi respaldo.
+      ...(s.archived ? { archived: true, goneSince: s.goneSince } : {}),
     };
   }
 
@@ -116,12 +147,40 @@ export function createHub(cfg) {
   }
 
   return {
+    // ---------- respaldo (capa 1) ----------
+    syncArchive() {
+      if (!archiveOn()) return;
+      own.sync(cfg.projects, (p) => listing(p), { retentionDays: cfg.archiveRetentionDays });
+      own.trimTo(Math.max(50, cfg.archiveMaxMB || 2048) * 1024 * 1024);
+    },
+    archiveStatus: () => (own ? { enabled: archiveOn(), ...own.status() } : { enabled: false, sessions: 0, onlyInBackup: 0, bytes: 0 }),
+    // Borrar del respaldo: solo lo que ya no existe en el original (lo demás se volvería a respaldar).
+    removeArchived(id) {
+      if (!own?.has(id)) throw new Error('Esa sesión no está en tu respaldo.');
+      if (!own.isGone(id)) throw new Error('La sesión todavía existe en su herramienta; para que el equipo no la vea, ocúltala.');
+      own.remove(id);
+      return { ok: true };
+    },
+    purgeArchive: (onlyGone = true) => ({ removed: own ? own.purge({ onlyGone }) : 0 }),
+
+    // Para las copias de un compañero: qué pasó con cada sesión que tiene copiada.
+    //   ok (la sigue viendo) · withdrawn (existe, pero ya no es para él o no permito copias) · gone (ya no existe) · paused
+    copyStatus(ids, viewer) {
+      const list = [...new Set((ids || []).map(String))].slice(0, 500);
+      if (cfg.paused) return Object.fromEntries(list.map((id) => [id, 'paused']));
+      const visible = new Set(allSessions({ viewer }).map((s) => s.id));
+      const exists = new Set(rawSessions(cfg.projects).map((s) => s.id));
+      const allowed = cfg.allowCopies !== false;
+      return Object.fromEntries(list.map((id) => [id, !allowed ? 'withdrawn' : visible.has(id) ? 'ok' : exists.has(id) ? 'withdrawn' : 'gone']));
+    },
+
     whoami(viewer = null) {
-      return { ...owner, team: cfg.team, paused: !!cfg.paused, projects: visibleProjects(viewer).map((p) => p.name) };
+      const visible = visibleProjects(viewer);
+      return { ...owner, team: cfg.team, paused: !!cfg.paused, allowCopies: cfg.allowCopies !== false, projects: visible.map((p) => p.name), projectKeys: Object.fromEntries(visible.map((p) => [p.name, keyOf(p.path)])) };
     },
 
     projects(viewer = null) {
-      return visibleProjects(viewer).map((p) => ({ name: p.name, owner: owner.name }));
+      return visibleProjects(viewer).map((p) => ({ name: p.name, projectKey: keyOf(p.path), owner: owner.name }));
     },
 
     // Para el panel del dueño: qué comparte, con quién y cuánto está oculto.
@@ -173,13 +232,13 @@ export function createHub(cfg) {
         const session = 'claude:' + a.sessionId;
         if (!p || (viewer && cfg.excludedSessions.includes(session))) continue;
         const s = safe(() => listClaudeSessions(cfg, p.path)).find((x) => x.id === session);
-        out.push({ session, owner: owner.name, ownerId: owner.id, tool: 'Claude Code', name: a.name, project: p.name, status: a.status, title: s ? redact(s.title) : null, since: iso(a.statusAt) });
+        out.push({ session, owner: owner.name, ownerId: owner.id, tool: 'Claude Code', name: a.name, project: p.name, projectKey: keyOf(p.path), status: a.status, title: s ? redact(s.title) : null, since: iso(a.statusAt) });
       }
       const recent = Date.now() - CURSOR_ACTIVE_MS;
       for (const s of rawSessions(projects, 'cursor')) {
         if ((s.updatedAt || 0) < recent) break;
         if (viewer && isExcluded(s)) continue;
-        out.push({ session: s.id, owner: owner.name, ownerId: owner.id, tool: 'Cursor', name: null, project: nameOf(s.project), status: 'recent', title: redact(s.title), since: iso(s.updatedAt) });
+        out.push({ session: s.id, owner: owner.name, ownerId: owner.id, tool: 'Cursor', name: null, project: nameOf(s.project), projectKey: keyOf(s.project), status: 'recent', title: redact(s.title), since: iso(s.updatedAt) });
       }
       return out;
     },
@@ -235,6 +294,7 @@ export function createHub(cfg) {
           ownerId: owner.id,
           source: s.source,
           project: nameOf(s.project),
+          projectKey: keyOf(s.project),
           title: redact(s.title),
           branch: s.branch,
           updatedAt: iso(s.updatedAt),
@@ -265,6 +325,8 @@ export function createHub(cfg) {
             owner: owner.name,
             ownerId: owner.id,
             title: redact(s.title),
+            project: nameOf(s.project),
+            projectKey: keyOf(s.project),
             source: s.source,
             role: m.role,
             at: iso(m.at),

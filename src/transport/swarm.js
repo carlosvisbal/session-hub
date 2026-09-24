@@ -134,7 +134,7 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
   }
 
   function info(p) {
-    return { id: p.id, fingerprint: p.fingerprint, name: p.name, role: p.role, invitedBy: p.invitedBy, paused: !!p.paused, projects: p.projects || [], online: true, since: p.since };
+    return { id: p.id, fingerprint: p.fingerprint, name: p.name, role: p.role, invitedBy: p.invitedBy, paused: !!p.paused, allowCopies: p.allowCopies !== false, projects: p.projects || [], projectKeys: p.projectKeys || {}, online: true, since: p.since };
   }
 
   function handleMessage(peer, msg) {
@@ -219,7 +219,7 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
   async function refreshWhoami(peer) {
     try {
       const w = await peer.rpc.call('whoami', { origin: { via: 'hub' } }, 8000);
-      Object.assign(peer, { paused: !!w.paused, projects: w.projects || [] });
+      Object.assign(peer, { paused: !!w.paused, allowCopies: w.allowCopies !== false, projects: w.projects || [], projectKeys: w.projectKeys || {} });
     } catch {
       // sin respuesta: se reintenta en el próximo ciclo
     }

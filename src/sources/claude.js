@@ -10,6 +10,8 @@ const NOISE_TAGS = /<(system-reminder|ide_opened_file|ide_selection|ide_diagnost
 
 const cache = new Map(); // file -> { key, session }
 
+// Claude Code guarda el historial en una carpeta con la ruta "codificada": todo lo que no es letra o
+// número pasa a "-". Por eso /x/my.app y /x/my-app comparten carpeta; cada sesión se asigna por su cwd real.
 export const encodeProject = (project) => project.replace(/[^a-zA-Z0-9]/g, '-');
 
 export function listClaudeSessions(cfg, project) {
@@ -19,7 +21,7 @@ export function listClaudeSessions(cfg, project) {
     .readdirSync(dir)
     .filter((f) => f.endsWith('.jsonl'))
     .map((f) => readSession(path.join(dir, f), project))
-    .filter((s) => s && s.messages.length);
+    .filter((s) => s && s.messages.length && (!s.cwd || path.resolve(s.cwd) === path.resolve(project)));
 }
 
 function readSession(file, project) {
@@ -32,6 +34,7 @@ function readSession(file, project) {
     id: 'claude:' + path.basename(file, '.jsonl'),
     source: 'claude-code',
     project,
+    cwd: null, // carpeta donde empezó la sesión (la primera que registra Claude Code)
     title: null,
     branch: null,
     createdAt: null,
@@ -58,6 +61,7 @@ function readSession(file, project) {
       session.updatedAt = at;
     }
     if (d.gitBranch) session.branch = d.gitBranch;
+    if (d.cwd && !session.cwd) session.cwd = String(d.cwd);
     const content = d.message?.content;
 
     if (d.type === 'user') {

@@ -40,6 +40,7 @@ Your backend teammate spent the morning with Claude Code changing an API. You, o
 | 🛰️ **No central server** | Each person runs their own hub; hubs talk directly over Hyperswarm, encrypted with Noise. Works on a LAN with no internet. |
 | 🎛️ **Personal control** | Choose which projects you share and with whom, hide single sessions, pause everything, block someone just for you. |
 | ✉️ **Messages between people** | Write to a teammate — or to one of their open AI sessions — from the panel or by asking your AI. Signed, held until they approve it, and one click passes it to their AI. Nothing runs by itself. |
+| 🗄️ **Local backup** | Your sessions stay available even after Claude Code (30 days) or Cursor delete them, and you can keep copies of your teammates' sessions to read offline — only while you still have access. Export to Markdown/JSON. |
 | 👁️ **Transparency** | Get notified when someone reads your session — who, which one, which project, from which tool. 90‑day audit log. |
 | 🧹 **Secret redaction** | Tokens, passwords, keys and credentialed URLs leave your machine as `[REDACTED]`. |
 | 📜 **Free software** | AGPL‑3.0‑or‑later. The running hub serves its own source at `/source`. |

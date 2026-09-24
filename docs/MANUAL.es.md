@@ -12,6 +12,7 @@ Con Session Hub ves, desde tu editor, lo que tus compañeros hicieron con su IA 
 - [El panel](#recorrido-por-el-panel)
 - [Leer sesiones y preguntarle a tu IA](#leer-la-sesión-de-un-compañero-y-preguntarle-a-tu-ia)
 - [Mensajes entre compañeros](#mensajes-entre-compañeros)
+- [Respaldo y exportar](#respaldo-y-exportar)
 - [Tu privacidad](#tu-privacidad-tú-tienes-el-control)
 - [Avisos](#los-avisos-que-vas-a-ver)
 - [Si algo no funciona](#si-algo-no-funciona)
@@ -86,15 +87,17 @@ Desde ese momento, esas personas pueden ver tus conversaciones con la IA **en es
 
 Ábrelo haciendo clic en **Session Hub** en la barra de estado.
 
-| Zona | Qué muestra |
+Arriba está la **cabecera**: tu nombre, el equipo, tu **huella** y los botones *¿Qué hay nuevo?*, *✉ Escribir*, *Pausar* e *Invitar*. Debajo, cinco **pestañas**. El número junto a cada una avisa si hay algo que mirar:
+
+| Pestaña | Qué tiene |
 | --- | --- |
-| Cabecera | Tu nombre, el equipo, tu **huella**, y los botones *¿Qué hay nuevo?*, *Pausar* e *Invitar* |
-| Lo que comparto | Tus proyectos compartidos y quién ve cada uno |
-| Personas del equipo | Quién está en línea (punto verde), su rol, su huella y quién lo invitó |
-| Quién ha leído lo mío | Quién abrió tus sesiones, cuáles, de qué proyecto y con qué herramienta |
-| Estado | Comprobaciones automáticas: ✔ está bien, ! hay que revisar |
-| Pestañas | *Equipo*, *Siguiendo* (☆) y *Mis sesiones* |
-| Derecha | La conversación completa de la sesión que elijas |
+| **Sesiones** | A la izquierda, las sesiones *Del equipo*, las que *Sigues* (☆) y *Mis sesiones*, con filtro, **agrupadas por proyecto** (o por persona, o sin agrupar). Cada grupo muestra las 5 más recientes y *Ver más*. A la derecha, la conversación completa de la que elijas |
+| **Mensajes** | Los mensajes que recibiste (con *Pasar a mi IA*, *Responder*…), los que enviaste y cómo quieres recibirlos. El número es lo que falta revisar |
+| **Equipo** | Cada persona: si está en línea (punto verde), su rol, su huella, quién la invitó, sus sesiones de IA abiertas y los botones *Mensaje*, *Bloquear* y *Expulsar*. Haz clic en alguien para ver sus sesiones |
+| **Privacidad** | *Lo que comparto* (proyectos, quién los ve, pausa) y *Quién ha leído lo mío* |
+| **Estado** | Comprobaciones automáticas (✔ bien, ! revisar, ✖ error), *Diagnóstico completo*, *Copiar informe de conexión* y *Conectar Claude Code* |
+
+Los avisos te llevan a la pestaña que corresponde: un mensaje abre *Mensajes*; una lectura, *Privacidad*; un problema de red, *Estado*. Las pestañas se recorren también con las flechas del teclado.
 
 ## Leer la sesión de un compañero y preguntarle a tu IA
 
@@ -135,7 +138,7 @@ Te llega un aviso (*✉ Carlos te escribió: "…"*) y el mensaje aparece en **M
 
 | Botón | Qué pasa |
 | --- | --- |
-| **Pasar a mi IA** | Abre el chat de tu IA con el mensaje y una nota que dice que viene de un compañero, no de ti. En VS Code queda escrito; en Cursor se copia y lo pegas con `Ctrl+V`. Tú lo revisas y pulsas Enviar. |
+| **Pasar a mi IA** | Deja el mensaje **escrito** en el chat de tu IA, con una nota que dice que viene de un compañero y no de ti. Nunca se envía solo: tú lo revisas y pulsas Enviar. Funciona con **Claude Code** (en la sesión a la que iba el mensaje, o en tu sesión de ese proyecto), con **Copilot** en VS Code y con el **chat de Cursor**. Si tienes varios, usa el de la pestaña activa o te pregunta una vez. Para fijarlo: ajuste `sessionHub.aiChat`. |
 | **Permitir que mi IA lo lea** | Tu IA puede leerlo cuando le pidas *"revisa mis mensajes de Session Hub"* (herramienta `check_inbox`). Útil en Claude Code. |
 | **Responder** | Contestas; la respuesta queda enlazada al mensaje original. |
 | **Descartar** | Lo oculta. |
@@ -145,6 +148,23 @@ Quien lo envió ve qué pasó con su mensaje: *en cola*, *entregado, espera su a
 **Sesiones abiertas.** La tarjeta de cada persona muestra sus sesiones de IA abiertas: *Claude Code · api · ocupada* o *Cursor · web · activa hace poco*. Solo en los proyectos que comparte contigo.
 
 > Un mensaje es **texto para una persona**. Nunca ejecuta nada en tu computadora, y a tu IA se le indica que te lo explique y espere tu visto bueno antes de cambiar código. Para recibirlos sin retener, o no recibirlos: Ajustes → `sessionHub.inboundMessages`.
+
+## Respaldo y exportar
+
+Claude Code borra el historial a los 30 días, y en Cursor un chat se puede borrar o restaurar. Session Hub guarda una copia **en tu computadora** (pestaña **Privacidad → Respaldo**):
+
+| Qué | Cómo funciona |
+| --- | --- |
+| **Tus sesiones** | Las de los proyectos que compartes. Si Claude Code o Cursor las borran, siguen en *Mis sesiones* marcadas **🗄 solo en respaldo**, y tu equipo las sigue viendo con los mismos permisos. Para respaldar un proyecto sin compartirlo, elige **Solo yo (respaldo)** en *Quién lo ve*. |
+| **Copias de tu equipo** | Copias de lo que tus compañeros comparten contigo, para leerlo aunque estén desconectados (**💾 copia de hace…**: puede no tener lo último). Se borran solas si la persona oculta la sesión, deja de compartirla o desactiva las copias. |
+
+- **Siempre al día:** mientras el original existe, el respaldo es igual al original; se actualiza cada 1–2 minutos o con **Actualizar ahora**.
+- **Borrar:** en la conversación, **Borrar del respaldo**; o en *Respaldo*, **Borrar lo que ya no existe**, **Borrar sus copias** o **Borrar todas las copias**. Si borras una copia a mano, no se vuelve a copiar.
+- **Exportar:** en la conversación, **⤓ Exportar** (Markdown o JSON); en *Respaldo*, **Exportar todo…** crea una carpeta con un archivo por sesión e `index.json`.
+- **Tu decisión:** si no quieres que tus compañeros guarden copias de lo tuyo, desactiva `sessionHub.allowTeamCopies`. En *Quién ha leído lo mío* verás "💾 Ana guardó una copia de…".
+- Ajustes: `sessionHub.backupOwnSessions`, `sessionHub.keepTeamCopies`, `sessionHub.backupRetentionDays` (365), `sessionHub.teamCopiesRetentionDays` (180) y `sessionHub.backupMaxMB` (2048).
+
+Todas las listas del panel tienen **buscador** cuando crecen y se muestran por páginas.
 
 ## Tu privacidad: tú tienes el control
 

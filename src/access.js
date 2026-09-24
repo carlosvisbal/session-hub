@@ -63,6 +63,13 @@ export function createAccessLog({ file, retentionDays = 90 } = {}) {
         fs.appendFileSync(file, JSON.stringify(entry) + '\n', { mode: 0o600 });
       }
     },
+    // Igual que record, pero una sola vez por persona, acción y sesión dentro de la ventana (p. ej. copias).
+    recordOnce(caller, what, detail = {}, windowMs = 86400e3) {
+      if (!caller?.id) return;
+      const since = new Date(Date.now() - windowMs).toISOString();
+      if (reads.some((r) => r.whoId === caller.id && r.what === what && r.sessionId === detail.sessionId && r.at >= since)) return touchViewer(caller, new Date().toISOString());
+      this.record(caller, what, detail);
+    },
     snapshot() {
       return { viewers: [...viewers.values()].sort((a, b) => (b.lastSeen || '').localeCompare(a.lastSeen || '')), reads, file, retentionDays };
     },

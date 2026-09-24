@@ -14,6 +14,7 @@ Session Hub lets you see, from your editor, what your teammates did with their A
 - [The panel](#tour-of-the-panel)
 - [Read sessions and ask your AI](#read-a-teammates-session-and-ask-your-ai)
 - [Messages between teammates](#messages-between-teammates)
+- [Backup and export](#backup-and-export)
 - [Your privacy](#your-privacy-youre-in-control)
 - [Notifications](#notifications-youll-see)
 - [Troubleshooting](#troubleshooting)
@@ -88,15 +89,17 @@ From then on, those people can see your AI conversations **in that folder**. Oth
 
 Open it by clicking **Session Hub** in the status bar.
 
-| Area | What it shows |
+At the top is the **header**: your name, team, your **fingerprint** and the buttons *What's new?*, *✉ Write*, *Pause* and *Invite*. Below it, five **tabs**. The number next to each one tells you when there's something to look at:
+
+| Tab | What's in it |
 | --- | --- |
-| Header | Your name, team, your **fingerprint**, buttons *¿Qué hay nuevo?* (*What's new?*), *Pausar* (*Pause*), *Invitar* (*Invite*) |
-| What I share | Your shared projects and who sees each |
-| Team members | Who's online (green dot), role, fingerprint, who invited them |
-| Who read mine | Who opened your sessions, which, from which project and tool |
-| Status | Automatic checks: ✔ fine, ! needs attention |
-| Tabs | *Equipo* (*Team*), *Siguiendo* (*Following*, ☆), *Mis sesiones* (*My sessions*) |
-| Right side | The complete conversation of the selected session |
+| **Sessions** | On the left, *Team's* sessions, the ones you *Follow* (☆) and *My sessions*, with a filter, **grouped by project** (or by person, or ungrouped). Each group shows the 5 most recent and *Show more*. On the right, the complete conversation of the one you pick |
+| **Messages** | Messages you received (with *Pass to my AI*, *Reply*…), the ones you sent, and how you want to receive them. The number is what's left to review |
+| **Team** | Each person: online or not (green dot), role, fingerprint, who invited them, their open AI sessions, and *Message*, *Block* and *Expel*. Click someone to see their sessions |
+| **Privacy** | *What I share* (projects, who sees them, pause) and *Who read mine* |
+| **Status** | Automatic checks (✔ fine, ! review, ✖ error), *Full diagnostics*, *Copy connection report* and *Connect Claude Code* |
+
+Notifications take you to the right tab: a message opens *Messages*; a read, *Privacy*; a network problem, *Status*. You can also move between tabs with the arrow keys.
 
 ## Read a teammate's session and ask your AI
 
@@ -137,7 +140,7 @@ You get a notification (*✉ Carlos wrote to you: "…"*) and the message appear
 
 | Button | What happens |
 | --- | --- |
-| **Pasar a mi IA** (*Pass to my AI*) | Opens your AI's chat with the message and a note saying it comes from a teammate, not from you. In VS Code it's typed in for you; in Cursor it's copied, so paste it with `Ctrl+V`. You review it and press Send. |
+| **Pasar a mi IA** (*Pass to my AI*) | Leaves the message **typed in** your AI's chat, with a note saying it comes from a teammate, not from you. It's never sent by itself: you review it and press Send. Works with **Claude Code** (in the session the message was for, or your session for that project), **Copilot** in VS Code and **Cursor's chat**. If you have several, it uses the one in the active tab or asks once. To fix one: setting `sessionHub.aiChat`. |
 | **Permitir que mi IA lo lea** (*Let my AI read it*) | Your AI can read it when you ask *"check my Session Hub messages"* (tool `check_inbox`). Useful in Claude Code. |
 | **Responder** (*Reply*) | Write back; the reply is linked to the original message. |
 | **Descartar** (*Dismiss*) | Hides it. |
@@ -147,6 +150,23 @@ The sender sees what happened to their message: *queued*, *delivered, waiting fo
 **Open sessions.** Each person's card shows their open AI sessions: *Claude Code · api · busy* or *Cursor · web · recently active*. Only in projects they share with you.
 
 > A message is **text for a person**. It never runs anything on your computer, and your AI is told to explain it to you and wait for your OK before changing code. To receive messages without holding them, or not receive them at all: Settings → `sessionHub.inboundMessages`.
+
+## Backup and export
+
+Claude Code deletes history after 30 days, and in Cursor a chat can be deleted or restored. Session Hub keeps a copy **on your computer** (**Privacy → Backup** tab):
+
+| What | How it works |
+| --- | --- |
+| **Your sessions** | Those in projects you share. If Claude Code or Cursor delete them, they stay in *My sessions* marked **🗄 only in backup**, and your team still sees them with the same permissions. To back up a project without sharing it, choose **Only me (backup)** in *Who sees it*. |
+| **Your team's copies** | Copies of what teammates share with you, to read even when they're offline (**💾 copy from…**: it may not have the latest). They're deleted automatically if the person hides the session, stops sharing it or turns copies off. |
+
+- **Always up to date:** while the original exists, the backup equals it; it updates every 1–2 minutes or with **Update now**.
+- **Delete:** in the conversation, **Delete from backup**; or in *Backup*, **Delete what no longer exists**, **Delete their copies** or **Delete all copies**. A copy you delete by hand isn't copied again.
+- **Export:** in the conversation, **⤓ Export** (Markdown or JSON); in *Backup*, **Export all…** creates a folder with one file per session plus `index.json`.
+- **Your call:** if you don't want teammates to keep copies of yours, turn off `sessionHub.allowTeamCopies`. *Who read mine* shows "💾 Ana saved a copy of…".
+- Settings: `sessionHub.backupOwnSessions`, `sessionHub.keepTeamCopies`, `sessionHub.backupRetentionDays` (365), `sessionHub.teamCopiesRetentionDays` (180) and `sessionHub.backupMaxMB` (2048).
+
+Every list in the panel gets a **search box** when it grows, and is shown in pages.
 
 ## Your privacy: you're in control
 

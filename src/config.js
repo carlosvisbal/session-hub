@@ -32,10 +32,20 @@ const defaults = {
   excludedSessions: [],
   // Mensajes de compañeros: 'hold' (esperan a que los apruebe), 'accept' (mi IA los ve enseguida) o 'refuse'.
   inbound: 'hold',
+  // Respaldo local. archive: mis sesiones compartidas (siguen disponibles aunque Claude Code o Cursor
+  // las borren). teamCopies: copias de lectura de las de mis compañeros, mientras tenga acceso.
+  // allowCopies: si mis compañeros pueden guardar copia de mis sesiones.
+  archive: true,
+  archiveRetentionDays: 365, // lo que ya solo existe en el respaldo; 0 = sin límite
+  teamCopies: true,
+  copiesRetentionDays: 180, // copias que el dueño no confirma en este plazo se borran
+  allowCopies: true,
+  archiveMaxMB: 2048,
   // Archivos junto a la configuración si se dejan vacíos.
   stateFile: '', // claves, equipo, miembros, expulsiones (team.json)
   auditFile: '', // quién leyó qué (audit.jsonl)
   inboxFile: '', // mensajes recibidos y enviados (inbox.json)
+  archiveDir: '', // respaldo local (carpeta archive/)
   auditRetentionDays: 90,
   claudeDir: path.join(os.homedir(), '.claude', 'projects'),
   claudeSessionsDir: '', // sesiones de Claude Code abiertas; vacío = ~/.claude/sessions
@@ -63,10 +73,19 @@ export function normalizeConfig(raw) {
     const abs = path.resolve(p0);
     return { path: abs, name: name || path.basename(abs), allow: Array.isArray(allow) && allow.length ? allow : ['*'] };
   });
+  // Dos carpetas con el mismo nombre visible se distinguen ("api (clientes)"), para no confundirlas.
+  const seen = new Set();
+  for (const p of cfg.projects) {
+    let name = p.name;
+    if (seen.has(name)) name = `${p.name} (${path.basename(path.dirname(p.path))})`;
+    for (let i = 2; seen.has(name); i++) name = `${p.name} (${i})`;
+    seen.add((p.name = name));
+  }
   const dir = path.dirname(CONFIG_PATH);
   cfg.stateFile ||= path.join(dir, 'team.json');
   cfg.auditFile ||= path.join(dir, 'audit.jsonl');
   cfg.inboxFile ||= path.join(dir, 'inbox.json');
+  cfg.archiveDir ||= path.join(dir, 'archive');
   if (!['hold', 'accept', 'refuse'].includes(cfg.inbound)) cfg.inbound = 'hold';
   if (!cfg.localToken) throw new Error('La configuración no tiene localToken. Ejecuta npm run setup.');
   return cfg;
@@ -77,7 +96,7 @@ export function saveConfig(cfg) {
 }
 
 // Se recarga en caliente al cambiar el archivo. Las claves de red reinician solo la conexión entre hubs.
-export const HOT_RELOAD_KEYS = ['language', 'owner', 'projects', 'paused', 'excludedSessions', 'inbound', 'redactExtra', 'peers', 'auditRetentionDays', 'network', 'dhtPort', 'bootstrap', 'relay', 'forceRelay'];
+export const HOT_RELOAD_KEYS = ['language', 'owner', 'projects', 'paused', 'excludedSessions', 'inbound', 'archive', 'archiveRetentionDays', 'teamCopies', 'copiesRetentionDays', 'allowCopies', 'archiveMaxMB', 'redactExtra', 'peers', 'auditRetentionDays', 'network', 'dhtPort', 'bootstrap', 'relay', 'forceRelay'];
 export const NETWORK_KEYS = ['network', 'dhtPort', 'bootstrap', 'relay', 'forceRelay'];
 
 export { defaults };

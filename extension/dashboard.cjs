@@ -16,8 +16,14 @@ class Dashboard {
     return !!this.panel;
   }
 
-  async show() {
-    if (this.panel) return this.panel.reveal();
+  // view: 'sessions' | 'messages' | 'team' | 'privacy' | 'status' (opcional)
+  async show(view) {
+    if (this.panel) {
+      this.panel.reveal();
+      if (view) this.post({ type: 'view', view });
+      return;
+    }
+    this.pendingView = view;
     const media = vscode.Uri.joinPath(this.ctx.extensionUri, 'media');
     this.panel = vscode.window.createWebviewPanel('sessionHub.dashboard', 'Session Hub', vscode.ViewColumn.Active, {
       enableScripts: true,
@@ -32,7 +38,12 @@ class Dashboard {
 
   async onMessage(m) {
     try {
-      if (m.type === 'ready' || m.type === 'refresh') return this.update(await this.handlers.getState());
+      if (m.type === 'ready' || m.type === 'refresh') {
+        this.update(await this.handlers.getState());
+        if (m.type === 'ready' && this.pendingView) this.post({ type: 'view', view: this.pendingView });
+        this.pendingView = null;
+        return;
+      }
       if (m.type === 'open') return this.post({ type: 'session', data: await this.handlers.openSession(m.id, m.peer) });
       if (m.type === 'follow') {
         await this.handlers.toggleFollow(m.kind, m.id);

@@ -1,7 +1,7 @@
 {
   "name": "session-hub",
   "displayName": "Session Hub",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "%ext.description%",
   "publisher": "carlosvisbal",
   "author": {
@@ -53,7 +53,8 @@
     "package": "vsce package",
     "licenses": "node scripts/third-party-notices.mjs",
     "test": "node --test test/*.test.js",
-    "test:e2e": "node test/e2e/two-hubs.mjs && node test/e2e/relay.mjs",
+    "test:e2e": "node test/e2e/two-hubs.mjs && node test/e2e/relay.mjs && node test/e2e/backup.mjs",
+    "test:ext": "node test/panel.mjs && node test/extension/flows.mjs && node test/extension/cursor.mjs",
     "infra": "node --disable-warning=ExperimentalWarning src/infra.js"
   },
   "contributes": {
@@ -205,6 +206,36 @@
         "command": "sessionHub.dismissMessage",
         "title": "%cmd.dismissMessage%",
         "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.syncBackup",
+        "title": "%cmd.syncBackup%",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.exportAll",
+        "title": "%cmd.exportAll%",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.purgeCopies",
+        "title": "%cmd.purgeCopies%",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.purgeOwnBackup",
+        "title": "%cmd.purgeOwnBackup%",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.removeFromBackup",
+        "title": "%cmd.removeFromBackup%",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.exportSession",
+        "title": "%cmd.exportSession%",
+        "category": "Session Hub"
       }
     ],
     "menus": {
@@ -239,6 +270,14 @@
         },
         {
           "command": "sessionHub.dismissMessage",
+          "when": "false"
+        },
+        {
+          "command": "sessionHub.removeFromBackup",
+          "when": "false"
+        },
+        {
+          "command": "sessionHub.exportSession",
           "when": "false"
         }
       ],
@@ -548,6 +587,58 @@
           "type": "boolean",
           "default": true,
           "description": "%cfg.notifyMessages%"
+        },
+        "sessionHub.aiChat": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "claude",
+            "editor",
+            "ask",
+            "clipboard"
+          ],
+          "default": "auto",
+          "enumDescriptions": [
+            "%cfg.aiChat.enum0%",
+            "%cfg.aiChat.enum1%",
+            "%cfg.aiChat.enum2%",
+            "%cfg.aiChat.enum3%",
+            "%cfg.aiChat.enum4%"
+          ],
+          "description": "%cfg.aiChat%"
+        },
+        "sessionHub.backupOwnSessions": {
+          "type": "boolean",
+          "default": true,
+          "description": "%cfg.backupOwnSessions%"
+        },
+        "sessionHub.backupRetentionDays": {
+          "type": "number",
+          "default": 365,
+          "minimum": 0,
+          "description": "%cfg.backupRetentionDays%"
+        },
+        "sessionHub.keepTeamCopies": {
+          "type": "boolean",
+          "default": true,
+          "description": "%cfg.keepTeamCopies%"
+        },
+        "sessionHub.teamCopiesRetentionDays": {
+          "type": "number",
+          "default": 180,
+          "minimum": 0,
+          "description": "%cfg.teamCopiesRetentionDays%"
+        },
+        "sessionHub.allowTeamCopies": {
+          "type": "boolean",
+          "default": true,
+          "description": "%cfg.allowTeamCopies%"
+        },
+        "sessionHub.backupMaxMB": {
+          "type": "number",
+          "default": 2048,
+          "minimum": 50,
+          "description": "%cfg.backupMaxMB%"
         }
       }
     }
@@ -559,5 +650,8 @@
     "hyperdht": "^6.34.0",
     "hyperswarm": "^4.17.2",
     "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0"
   }
 }

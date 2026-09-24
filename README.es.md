@@ -40,6 +40,7 @@ Tu compañero del backend pasó la mañana con Claude Code cambiando una API. T�
 | 🛰️ **Sin servidor central** | Cada persona tiene su propio hub; los hubs hablan directo por Hyperswarm, cifrado con Noise. Funciona en la red local sin internet. |
 | 🎛️ **Control personal** | Eliges qué proyectos compartes y con quién, ocultas sesiones sueltas, pausas todo o bloqueas a alguien solo para ti. |
 | ✉️ **Mensajes entre personas** | Escríbele a un compañero, o a una de sus sesiones de IA abiertas, desde el panel o pidiéndoselo a tu IA. Van firmados, quedan retenidos hasta que los apruebe y con un clic los pasa a su IA. Nada se ejecuta solo. |
+| 🗄️ **Respaldo local** | Tus sesiones siguen disponibles aunque Claude Code (30 días) o Cursor las borren, y puedes guardar copias de las de tu equipo para leerlas sin conexión, solo mientras tengas acceso. Exporta a Markdown o JSON. |
 | 👁️ **Transparencia** | Te avisa cuando alguien lee tu sesión: quién, cuál, de qué proyecto y desde qué herramienta. Auditoría de 90 días. |
 | 🧹 **Oculta secretos** | Tokens, contraseñas, llaves y URLs con credenciales salen de tu máquina como `[REDACTED]`. |
 | 📜 **Software libre** | AGPL‑3.0‑or‑later. El hub en ejecución sirve su propio código en `/source`. |
