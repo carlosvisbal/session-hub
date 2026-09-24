@@ -1372,7 +1372,8 @@ function claudeSessionFor(m) {
       if (!/^\d+\.json$/.test(f)) continue;
       try {
         const d = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
-        if (!d.sessionId || d.entrypoint !== 'claude-vscode' || !folders.includes(d.cwd)) continue;
+        const same = (a, b) => (process.platform === 'win32' ? path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase() : path.resolve(a) === path.resolve(b));
+        if (!d.sessionId || d.entrypoint !== 'claude-vscode' || !folders.some((f) => same(f, String(d.cwd || '')))) continue;
         try {
           process.kill(d.pid, 0);
         } catch (err) {

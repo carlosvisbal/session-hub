@@ -7,6 +7,8 @@
 // La base se abre SIEMPRE en solo lectura.
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { samePath } from '../util.js';
 
 // node:sqlite existe desde Node 22.5. Si el runtime no lo trae, esta fuente queda
 // desactivada y el resto del hub sigue funcionando.
@@ -40,7 +42,8 @@ function workspaceIdsFor(cfg, project) {
   for (const hash of fs.readdirSync(dir)) {
     try {
       const { folder } = JSON.parse(fs.readFileSync(path.join(dir, hash, 'workspace.json'), 'utf8'));
-      if (folder && decodeURIComponent(new URL(folder).pathname) === project) ids.push(hash);
+      // Cursor guarda una URL ("file:///c%3A/Users/…" en Windows): se convierte a ruta antes de comparar.
+      if (folder?.startsWith('file:') && samePath(fileURLToPath(folder), project)) ids.push(hash);
     } catch {
       // workspace sin carpeta (ventana vacía) o remoto
     }

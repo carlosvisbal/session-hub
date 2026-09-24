@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { pathToFileURL } from 'node:url';
 import { createHub } from '../src/hub.js';
 
 function makeCursorFixture() {
@@ -15,7 +16,8 @@ function makeCursorFixture() {
   fs.mkdirSync(project);
   const user = path.join(root, 'Cursor', 'User');
   fs.mkdirSync(path.join(user, 'workspaceStorage', 'ws1'), { recursive: true });
-  fs.writeFileSync(path.join(user, 'workspaceStorage', 'ws1', 'workspace.json'), JSON.stringify({ folder: `file://${project}` }));
+  // Como la escribe Cursor: una URL (en Windows, "file:///c%3A/…").
+  fs.writeFileSync(path.join(user, 'workspaceStorage', 'ws1', 'workspace.json'), JSON.stringify({ folder: pathToFileURL(project).href.replace(/^file:\/\/\/([A-Za-z]):/, (m, d) => `file:///${d.toLowerCase()}%3A`) }));
   fs.mkdirSync(path.join(user, 'globalStorage'), { recursive: true });
   const file = path.join(user, 'globalStorage', 'state.vscdb');
   const db = new DatabaseSync(file);
@@ -67,4 +69,14 @@ test('Cursor: número de mensajes, archivos y comandos correctos (su campo "stat
   assert.deepEqual(gone.filesChanged, ['src/form.tsx']);
   assert.equal(gone.commandsRun, 1);
   assert.equal(hub.archiveList()[0].goneSince != null, true);
+});
+
+test('rutas: misma carpeta según el sistema (Windows no distingue mayúsculas)', async () => {
+  const { samePath, isInside } = await import('../src/util.js');
+  const base = path.resolve(os.tmpdir(), 'Proyecto');
+  assert.ok(samePath(base, base + path.sep + '.'));
+  assert.ok(isInside(path.join(base, 'src'), base));
+  assert.ok(!isInside(base + '-otro', base), 'prefijo de nombre no es "dentro"');
+  if (process.platform === 'win32') assert.ok(samePath(base.toUpperCase(), base.toLowerCase()));
+  else assert.ok(!samePath(base.toUpperCase(), base.toLowerCase()));
 });

@@ -3,6 +3,7 @@
 // Lector de sesiones de Claude Code: ~/.claude/projects/<ruta-codificada>/<sessionId>.jsonl
 import fs from 'node:fs';
 import path from 'node:path';
+import { samePath } from '../util.js';
 
 const EDIT_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 // Bloques que el IDE/harness inyecta en los mensajes del usuario y no son parte de la petición.
@@ -21,7 +22,7 @@ export function listClaudeSessions(cfg, project) {
     .readdirSync(dir)
     .filter((f) => f.endsWith('.jsonl'))
     .map((f) => readSession(path.join(dir, f), project))
-    .filter((s) => s && s.messages.length && (!s.cwd || path.resolve(s.cwd) === path.resolve(project)));
+    .filter((s) => s && s.messages.length && (!s.cwd || samePath(s.cwd, project)));
 }
 
 function readSession(file, project) {

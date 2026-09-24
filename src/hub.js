@@ -12,7 +12,7 @@ import { cursorUnavailable, listCursorSessions } from './sources/cursor.js';
 import { redact, setExtraPatterns } from './redact.js';
 import { projectKey } from './projectkey.js';
 import { createOwnArchive } from './archive.js';
-import { iso, parseSince, relPath, truncate } from './util.js';
+import { isInside, iso, parseSince, relPath, truncate } from './util.js';
 
 const CURSOR_ACTIVE_MS = 10 * 60_000; // Cursor no deja registro de sesiones abiertas: cuenta la actividad reciente
 
@@ -244,7 +244,7 @@ export function createHub(cfg, { log = () => {} } = {}) {
     // Claude Code: su registro de sesiones vivas (con estado ocupada/libre). Cursor: actividad reciente.
     liveAgents(viewer = null) {
       const projects = visibleProjects(viewer);
-      const projectOf = (cwd) => projects.find((p) => cwd === p.path || cwd.startsWith(p.path + path.sep));
+      const projectOf = (cwd) => projects.find((p) => isInside(cwd, p.path));
       const out = [];
       for (const a of safe(() => listClaudeLive(cfg))) {
         const p = projectOf(a.cwd);

@@ -28,4 +28,10 @@ export function truncate(text, max) {
   return text.slice(0, max) + ` … [+${text.length - max} caracteres]`;
 }
 
+// Misma carpeta: en Windows las rutas no distinguen mayúsculas (Claude Code guarda "C:\…" y el
+// editor da "c:\…"); en macOS y Linux se comparan tal cual.
+const norm = (p) => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
+export const samePath = (a, b) => !!a && !!b && norm(a) === norm(b);
+export const isInside = (child, parent) => !!child && !!parent && (samePath(child, parent) || norm(child).startsWith(norm(parent) + path.sep));
+
 export const iso = (ms) => (ms ? new Date(ms).toISOString() : null);
