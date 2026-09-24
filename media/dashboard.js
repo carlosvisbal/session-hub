@@ -5,9 +5,9 @@
   const vscode = acquireVsCodeApi();
   const saved = vscode.getState() || {};
   let state = null;
-  const VIEWS = ['sessions', 'messages', 'team', 'privacy', 'status'];
-  let ui = { view: VIEWS.includes(saved.view) ? saved.view : 'sessions', tab: saved.tab || 'team', filter: '', q: {}, person: saved.person || '', group: ['project', 'person', 'none'].includes(saved.group) ? saved.group : 'project', collapsed: new Set(saved.collapsed || []), expanded: new Set(), selected: null, detail: null, loading: false, error: null, page: { reads: 0, team: 0, following: 0, mine: 0, inbox: 0 } };
-  const PAGE_SIZE = { reads: 15, team: 15, following: 15, mine: 15, inbox: 10, sent: 10, people: 12, shares: 8, checks: 20, copyowners: 8, groups: 10 };
+  const VIEWS = ['sessions', 'messages', 'team', 'privacy', 'backup', 'status'];
+  let ui = { view: VIEWS.includes(saved.view) ? saved.view : 'sessions', tab: saved.tab || 'team', filter: '', q: {}, peopleFilter: 'all', backupFilter: 'all', copyOwner: '', person: saved.person || '', group: ['project', 'person', 'none'].includes(saved.group) ? saved.group : 'project', collapsed: new Set(saved.collapsed || []), expanded: new Set(), selected: null, detail: null, loading: false, error: null, page: { reads: 0, team: 0, following: 0, mine: 0, inbox: 0 } };
+  const PAGE_SIZE = { ownbackup: 10, copieslist: 10, reads: 15, team: 15, following: 15, mine: 15, inbox: 10, sent: 10, people: 12, shares: 8, checks: 20, copyowners: 8, groups: 10 };
   const BOXES = {}; // listas con buscador: clave -> { items, render, text, empty, wrap }
 
   // Traducción (media/i18n.js + diccionario que inyecta la extensión). El idioma llega con el estado.
@@ -29,11 +29,11 @@
   }
 
   // Lista con buscador (aparece cuando la lista pasa de una página, o si ya hay algo escrito) y paginación.
-  function listBox(key, items, { render, text, empty, placeholder, wrap = '' }) {
+  function listBox(key, items, { render, text, empty, placeholder, wrap = '', alwaysSearch = false }) {
     BOXES[key] = { items, render, text, empty, wrap };
     const size = PAGE_SIZE[key] || 10;
     const q = ui.q[key] || '';
-    const search = items.length > size || q ? `<input class="lsearch" type="search" data-search="${key}" placeholder="${esc(placeholder || T('Buscar…'))}" aria-label="${esc(placeholder || T('Buscar…'))}" value="${esc(q)}">` : '';
+    const search = alwaysSearch || items.length > size || q ? `<input class="lsearch" type="search" data-search="${key}" placeholder="${esc(placeholder || T('Buscar…'))}" aria-label="${esc(placeholder || T('Buscar…'))}" value="${esc(q)}">` : '';
     return `<div class="lbox">${search}<div id="lb-${key}">${boxBody(key)}</div></div>`;
   }
   function boxBody(key) {
@@ -61,6 +61,10 @@
   const GROUP_PREVIEW = 5; // sesiones visibles por grupo antes de "Ver más"
   const cmd = (command, label, cls = '', args) =>
     `<button class="${cls}" data-cmd="${command}"${args ? ` data-args="${esc(JSON.stringify(args))}"` : ''}>${label}</button>`;
+  // Abrir los ajustes con un enlace command: del propio webview. No se pide a la extensión: si ella
+  // ejecuta workbench.action.openSettings, el editor devuelve el panel de ajustes entero y serializarlo
+  // congela (y puede tumbar) la ventana.
+  const settingsLink = (query, label) => `<a class="link" href="command:workbench.action.openSettings?${esc(encodeURIComponent(JSON.stringify([query])))}">${label}</a>`;
   const srcLabel = (s) => (s.source === 'cursor' ? 'Cursor' : 'Claude Code');
   const me = () => state.members.find((m) => m.self) || {};
   const b = (x) => `<b>${esc(x)}</b>`;
@@ -166,6 +170,7 @@
       { id: 'messages', label: T('Mensajes'), badge: unread || '', cls: '', title: unread ? T('{v1} mensaje(s) sin revisar', { v1: unread }) : '' },
       { id: 'team', label: T('Equipo'), badge: others.length ? `${online}/${others.length}` : '', cls: 'muted-badge', title: T('{v1} compañero(s) en línea', { v1: online }) },
       { id: 'privacy', label: T('Privacidad'), badge: fresh || '', cls: '', title: fresh ? T('{v1} lectura(s) en los últimos 10 min', { v1: fresh }) : '' },
+      { id: 'backup', label: T('Respaldo'), badge: state.archive ? (state.archive.own.list || []).length + (state.archive.copies.list || []).length || '' : '', cls: 'muted-badge', title: state.archive?.own?.onlyInBackup ? T('{v1} solo en el respaldo', { v1: state.archive.own.onlyInBackup }) : '' },
       { id: 'status', label: T('Estado'), badge: bad.length || '', cls: bad.some((c) => c.status === 'error') ? 'err-badge' : 'warn-badge', title: bad.length ? T('{v1} por revisar', { v1: bad.length }) : T('todo en orden') },
     ];
     return tabs
@@ -216,7 +221,7 @@
 
   function messagesView() {
     const box = state.inbox || { received: [], sent: [], unread: 0, policy: 'hold' };
-    const actions = cmd('sessionHub.sendMessage', `✉ ${T('Escribir a un compañero')}`, 'primary') + cmd('workbench.action.openSettings', T('Cómo recibo mensajes'), 'link', ['sessionHub.inboundMessages']);
+    const actions = cmd('sessionHub.sendMessage', `✉ ${T('Escribir a un compañero')}`, 'primary') + settingsLink('sessionHub.inboundMessages', T('Cómo recibo mensajes'));
     return `<div class="page">
       ${pageHead(T('Mensajes'), T(POLICY_TEXT[box.policy] || POLICY_TEXT.hold), actions)}
       <h3>${T('Recibidos')}${box.unread ? ` <span class="badge">${box.unread}</span>` : ''}</h3>
@@ -230,15 +235,28 @@
     const others = state.members.filter((m) => !m.self);
     const online = others.filter((m) => m.online).length;
     const actions = cmd('sessionHub.copyInvite', T('Invitar'), 'primary') + cmd('sessionHub.sendMessage', `✉ ${T('Escribir')}`) + cmd('sessionHub.leaveTeam', T('Salir del equipo'), 'link danger');
+    // Filtros rápidos; tú primero, luego quien está en línea, y por nombre.
+    const filters = {
+      all: () => true,
+      online: (m) => m.self || m.online,
+      offline: (m) => !m.self && !m.online,
+      following: (m) => state.follows.people.includes(m.id),
+    };
+    const count = (k) => state.members.filter((m) => !m.self && filters[k](m)).length;
+    const list = state.members
+      .filter(filters[ui.peopleFilter] || filters.all)
+      .sort((a, b) => (b.self ? 1 : 0) - (a.self ? 1 : 0) || (b.online ? 1 : 0) - (a.online ? 1 : 0) || a.name.localeCompare(b.name));
+    const chip = (k, label) => `<button class="fchip ${ui.peopleFilter === k ? 'on' : ''}" data-pfilter="${k}" aria-pressed="${ui.peopleFilter === k}">${label} <span class="n">${count(k)}</span></button>`;
     return `<div class="page">
       ${pageHead(T('Personas del equipo'), T('{v1} compañero(s) en línea', { v1: online }) + ` · ${T('equipo {v1}', { v1: esc(state.teamInfo.team.name) })}`, actions)}
-      <p class="hint">${T('Haz clic en una persona para ver sus sesiones.')}</p>
-      ${listBox('people', state.members, {
+      <div class="fchips">${chip('all', T('Todos'))}${chip('online', T('En línea'))}${chip('offline', T('Desconectados'))}${chip('following', T('Siguiendo'))}</div>
+      ${listBox('people', list, {
         render: personHtml,
-        text: (m) => [m.name, m.role, ...(m.projects || []), m.fingerprint].join(' '),
-        empty: `<p class="empty">${T('Nadie más en la red todavía.')}</p>`,
+        text: (m) => [m.name, m.role, ...(m.projects || []), m.fingerprint, m.invitedByName].join(' '),
+        empty: `<p class="empty">${T(ui.peopleFilter === 'all' ? 'Nadie más en la red todavía.' : 'Nadie en este filtro.')}</p>`,
         placeholder: T('Buscar por nombre, rol o proyecto…'),
         wrap: 'people',
+        alwaysSearch: true,
       })}
     </div>`;
   }
@@ -261,52 +279,130 @@
           <div id="reads">${readsHtml()}</div>
         </section>
       </div>
-      ${backupHtml()}
+      <p class="hint">🗄 ${T('El respaldo de tus sesiones y las copias de tu equipo se administran en la pestaña')} <button class="link" data-view="backup">${T('Respaldo')}</button>.</p>
     </div>`;
   }
 
-  const mb = (bytes) => (bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round((bytes || 0) / 1024))} KB`);
+  const mb = (bytes) => (!bytes ? '0 KB' : bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
 
-  // Respaldo: mis sesiones (siguen disponibles aunque la herramienta las borre) y copias de mi equipo.
-  function backupHtml() {
+  // ---------- pestaña Respaldo: mis sesiones respaldadas, copias de mi equipo y configuración ----------
+  function backupView() {
     const a = state.archive;
-    if (!a) return '';
+    if (!a) return `<div class="page"><p class="empty">${T('Cargando…')}</p></div>`;
     const own = a.own;
     const cp = a.copies;
-    const actions = cmd('sessionHub.syncBackup', `⟳ ${T('Actualizar ahora')}`, 'primary') + cmd('sessionHub.exportAll', T('Exportar todo…')) + cmd('workbench.action.openSettings', T('Ajustes del respaldo'), 'link', ['sessionHub backup copies']);
-    const ownBox = own.enabled
-      ? `<div class="share">
-          <div><b>${T('Mis sesiones')}</b> <span class="muted small">${T('{v1} respaldada(s) · {v2} solo en el respaldo · {v3}', { v1: own.sessions, v2: own.onlyInBackup, v3: mb(own.bytes) })}</span></div>
-          <div class="small muted">${own.lastSync ? T('Actualizado {v1}', { v1: ago(own.lastSync) }) : T('Aún no se ha actualizado.')} ${own.lastError ? `<span class="err">${esc(T(own.lastError))}</span>` : ''}</div>
-          <div class="small">${T('Si Claude Code o Cursor borran una sesión, sigue disponible para ti y para quien la compartes (en Mis sesiones, marcada “solo en respaldo”).')}</div>
-          ${own.onlyInBackup ? `<div class="actions">${cmd('sessionHub.purgeOwnBackup', T('Borrar lo que ya no existe'), 'link danger')}</div>` : ''}
-        </div>`
-      : `<div class="share dim">${T('El respaldo de tus sesiones está desactivado (ajuste sessionHub.backupOwnSessions).')}</div>`;
+    const st = a.settings || {};
+    const meId = me().id;
+    const used = (own.bytes || 0) + (cp.bytes || 0);
+    const max = (st.archiveMaxMB || 2048) * 1024 * 1024;
+    const pct = Math.min(100, Math.round((used / max) * 100));
+    const actions = cmd('sessionHub.syncBackup', `⟳ ${T('Actualizar ahora')}`, 'primary') + cmd('sessionHub.exportAll', T('Exportar todo…')) + settingsLink('sessionHub backup copies', T('Ajustes del respaldo'));
+
+    // --- resumen ---
+    // Un hub de otra versión (se está reemplazando) no trae el detalle: se muestran sus totales, no ceros.
+    const stale = !own.list;
+    const staleNote = stale ? `<p class="banner warnbg">⟳ ${T('El hub que está corriendo es de otra versión y no trae el detalle del respaldo. Cierra todas las ventanas del editor y vuelve a abrirlo para actualizarlo.')}</p>` : '';
+    const summary = `${staleNote}<div class="bsum">
+      <div class="bstat"><div class="bnum">${stale ? own.sessions || 0 : own.list.length}</div><div class="muted small">${T('mis sesiones respaldadas')}</div></div>
+      <div class="bstat"><div class="bnum ${own.onlyInBackup ? 'warn-txt' : ''}">${own.onlyInBackup || 0}</div><div class="muted small">${T('solo en el respaldo')}</div></div>
+      <div class="bstat"><div class="bnum">${stale ? (cp.owners || []).reduce((n, o) => n + (o.sessions || 0), 0) : (cp.list || []).length}</div><div class="muted small">${T('copias de mi equipo')}</div></div>
+      <div class="bstat grow"><div class="small">${T('Espacio: {v1} de {v2}', { v1: mb(used), v2: mb(max) })}</div><div class="bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
+        <div class="muted small">${own.lastSync ? T('Actualizado {v1}', { v1: ago(own.lastSync) }) : T('Aún no se ha actualizado.')}${own.lastError ? ` · <span class="err">${esc(T(own.lastError))}</span>` : ''}</div></div>
+    </div>`;
+
+    // --- mis sesiones respaldadas ---
+    const ownFilters = { all: () => true, gone: (x) => !!x.goneSince, live: (x) => !x.goneSince };
+    const ownAll = (own.list || []).slice().sort((x, y) => (y.goneSince ? 1 : 0) - (x.goneSince ? 1 : 0) || (y.updatedAt || '').localeCompare(x.updatedAt || ''));
+    const ownList = ownAll.filter(ownFilters[ui.backupFilter] || ownFilters.all);
+    const ownCount = (k) => ownAll.filter(ownFilters[k]).length;
+    const ochip = (k, label) => `<button class="fchip ${ui.backupFilter === k ? 'on' : ''}" data-bfilter="${k}" aria-pressed="${ui.backupFilter === k}">${label} <span class="n">${ownCount(k)}</span></button>`;
+    const ownRow = (x) => `<div class="brow">
+        <div class="bmain">
+          <div class="btitle" title="${esc(x.title)}">${esc(x.title || x.id)}</div>
+          <div class="muted small">${esc(x.project)} · ${x.source === 'cursor' ? 'Cursor' : 'Claude Code'} · ${T('{v1} mensajes', { v1: x.messages })} · ${mb(x.bytes)} · ${T('actualizada {v1}', { v1: ago(x.updatedAt) })}</div>
+          <div class="small">${x.goneSince ? `<span class="tag archived">🗄 ${T('solo en respaldo desde {v1}', { v1: ago(x.goneSince) })}</span>` : `<span class="tag ok">✓ ${T('el original sigue en {v1}', { v1: x.source === 'cursor' ? 'Cursor' : 'Claude Code' })}</span>`}${x.shared ? '' : ` <span class="tag">${T('proyecto ya no compartido')}</span>`}${x.hasPrev ? ` <span class="tag" title="${T('Se acortó (p. ej. al restaurar en Cursor) y se guardó la versión anterior')}">${T('con versión anterior')}</span>` : ''}</div>
+        </div>
+        <div class="bacts">
+          <button class="small-btn" data-openin="${esc(x.id)}" data-peer="${esc(meId)}">${T('Ver')}</button>
+          ${cmd('sessionHub.useSessionInAi', `🤖 ${T('Usar en mi IA')}`, 'small-btn', [x.id, 'yo', x.title, x.goneSince ? 'archived' : ''])}
+          ${cmd('sessionHub.exportSession', `⤓ ${T('Exportar')}`, 'small-btn', [x.id, meId])}
+          ${x.goneSince ? cmd('sessionHub.removeFromBackup', T('Borrar'), 'link danger small', [x.id, null, x.title]) : ''}
+        </div>
+      </div>`;
+    const ownSection = !st.archive
+      ? `<div class="share dim">${T('El respaldo de tus sesiones está desactivado.')} ${cmd('sessionHub.setBackupOption', T('Activar'), 'link', ['archive', true])}</div>`
+      : `<div class="fchips">${ochip('all', T('Todas'))}${ochip('gone', T('Solo en respaldo'))}${ochip('live', T('Con original'))}</div>
+        ${listBox('ownbackup', ownList, {
+          render: ownRow,
+          text: (x) => [x.title, x.project, x.source].join(' '),
+          empty: `<p class="empty small">${T(ui.backupFilter === 'gone' ? 'Ninguna sesión existe solo en el respaldo: Claude Code y Cursor todavía tienen todas.' : 'Todavía no hay sesiones respaldadas. Se respaldan las de los proyectos que compartes (o que marcas “Solo yo”).')}</p>`,
+          placeholder: T('Buscar en mis sesiones respaldadas…'),
+          alwaysSearch: ownAll.length > 0,
+        })}
+        ${own.onlyInBackup ? `<div class="actions">${cmd('sessionHub.purgeOwnBackup', T('Borrar todo lo que ya no existe'), 'link danger')}</div>` : ''}`;
+
+    // --- copias de mi equipo ---
     const owners = cp.owners || [];
-    const copiesBox = cp.enabled
-      ? `<div class="share">
-          <div><b>${T('Copias de mi equipo')}</b> <span class="muted small">${T('{v1} copia(s) · {v2}', { v1: owners.reduce((n, o) => n + o.sessions, 0), v2: mb(cp.bytes) })}</span></div>
-          <div class="small">${T('Para leer sus sesiones aunque estén desconectados. Solo mientras sigas teniendo acceso: si las ocultan o dejan de compartirlas, se borran.')}</div>
-          ${listBox('copyowners', owners, {
-            text: (o) => `${o.name || ''} ${o.role || ''}`,
-            placeholder: T('Buscar persona…'),
-            empty: `<p class="muted small">${T('Todavía no hay copias: se guardan solas cuando tus compañeros están conectados.')}</p>`,
-            render: (o) => `<div class="read small"><b>${esc(o.name || o.id.slice(0, 12))}</b>${o.role ? ` <span class="muted">(${esc(o.role)})</span>` : ''} · ${T('{v1} copia(s)', { v1: o.sessions })} · ${mb(o.bytes)}
-              <div class="muted">${o.lastSync ? T('al día {v1}', { v1: ago(o.lastSync) }) : T('sin sincronizar')}${o.paused ? ` · ⏸ ${T('en pausa: ocultas')}` : ''}${o.gone ? ` · ${T('{v1} ya no existen en origen', { v1: o.gone })}` : ''}${o.ignored ? ` · ${T('{v1} borrada(s) por ti', { v1: o.ignored })}` : ''}${o.lastError ? ` · <span class="err">${esc(T(o.lastError))}</span>` : ''}</div>
-              <div class="actions person-actions">${cmd('sessionHub.purgeCopies', T('Borrar sus copias'), 'link danger', [o.id, o.name])}</div></div>`,
-          })}
-          ${owners.length ? `<div class="actions">${cmd('sessionHub.purgeCopies', T('Borrar todas las copias'), 'link danger')}</div>` : ''}
-        </div>`
-      : `<div class="share dim">${T('No guardas copias de tu equipo (ajuste sessionHub.keepTeamCopies).')}</div>`;
-    const consent = `<p class="hint">${cp.allowOthers ? T('Tus compañeros pueden guardar copia de lo que compartes con ellos (ajuste sessionHub.allowTeamCopies).') : T('No permites que tus compañeros guarden copias de tus sesiones.')}</p>`;
-    return `${pageHead(T('Respaldo'), T('Todo se guarda solo en este equipo, comprimido y sin secretos al compartir.'), actions)}<div class="cols">${ownBox}${copiesBox}</div>${consent}`;
+    const copyAll = (cp.list || []).slice().sort((x, y) => (y.syncedAt || '').localeCompare(x.syncedAt || ''));
+    const copyList = copyAll.filter((x) => !ui.copyOwner || x.ownerId === ui.copyOwner);
+    const COPY_STATUS = { ok: 'al día', gone: 'ya no existe en origen', unverified: 'sin confirmar con su dueño' };
+    const copyRow = (x) => `<div class="brow">
+        <div class="bmain">
+          <div class="btitle" title="${esc(x.title)}">${esc(x.title || x.id)}</div>
+          <div class="muted small"><b>${esc(x.owner || '')}</b> · ${esc(x.project || '')} · ${x.source === 'cursor' ? 'Cursor' : 'Claude Code'} · ${T('{v1} mensajes', { v1: x.messages })} · ${mb(x.bytes)}</div>
+          <div class="small"><span class="tag copy">💾 ${T('copiada {v1}', { v1: ago(x.syncedAt) })}</span> <span class="tag ${x.status === 'ok' ? 'ok' : 'archived'}">${T(COPY_STATUS[x.status] || x.status)}</span></div>
+        </div>
+        <div class="bacts">
+          <button class="small-btn" data-openin="${esc(x.id)}" data-peer="${esc(x.ownerId)}">${T('Ver')}</button>
+          ${cmd('sessionHub.useSessionInAi', `🤖 ${T('Usar en mi IA')}`, 'small-btn', [x.id, x.owner, x.title, 'copy'])}
+          ${cmd('sessionHub.exportSession', `⤓ ${T('Exportar')}`, 'small-btn', [x.id, x.ownerId])}
+          ${cmd('sessionHub.removeFromBackup', T('Borrar copia'), 'link danger small', [x.id, x.ownerId, x.title])}
+        </div>
+      </div>`;
+    const ownerChips = owners.length
+      ? `<div class="fchips"><button class="fchip ${!ui.copyOwner ? 'on' : ''}" data-cowner="">${T('Todos')} <span class="n">${copyAll.length}</span></button>${owners
+          .map((o) => `<button class="fchip ${ui.copyOwner === o.id ? 'on' : ''}" data-cowner="${esc(o.id)}" title="${o.lastSync ? T('al día {v1}', { v1: ago(o.lastSync) }) : ''}">${esc(o.name || o.id.slice(0, 8))} <span class="n">${o.sessions}</span>${o.paused ? ' ⏸' : ''}</button>`)
+          .join('')}</div>`
+      : '';
+    const sel = owners.find((o) => o.id === ui.copyOwner);
+    const copySection = !st.teamCopies
+      ? `<div class="share dim">${T('No guardas copias de tu equipo.')} ${cmd('sessionHub.setBackupOption', T('Activar'), 'link', ['teamCopies', true])}</div>`
+      : `${ownerChips}
+        ${listBox('copieslist', copyList, {
+          render: copyRow,
+          text: (x) => [x.title, x.owner, x.project].join(' '),
+          empty: `<p class="empty small">${T('Todavía no hay copias. Se guardan solas de lo que tus compañeros comparten contigo mientras están conectados.')}</p>`,
+          placeholder: T('Buscar en las copias…'),
+          alwaysSearch: copyAll.length > 0,
+        })}
+        ${owners.length ? `<div class="actions">${sel ? cmd('sessionHub.purgeCopies', T('Borrar las copias de {v1}', { v1: esc(sel.name || '') }), 'link danger', [sel.id, sel.name]) : ''}${cmd('sessionHub.purgeCopies', T('Borrar todas las copias'), 'link danger')}</div>` : ''}`;
+
+    // --- configuración ---
+    const toggle = (key, on, label, hint) => `<div class="bset"><div><div>${label}</div><div class="muted small">${hint}</div></div>${cmd('sessionHub.setBackupOption', on ? `✓ ${T('Activado')}` : T('Desactivado'), on ? 'primary small-btn' : 'small-btn', [key, !on])}</div>`;
+    const number = (key, value, label, unit) => `<div class="bset"><div><div>${label}</div><div class="muted small">${value === 0 ? T('sin límite') : `${value} ${unit}`}</div></div>${cmd('sessionHub.editBackupNumber', T('Cambiar'), 'small-btn', [key])}</div>`;
+    const settings = `<div class="bsettings">
+      ${toggle('archive', st.archive, T('Respaldar mis sesiones'), T('Siguen disponibles aunque Claude Code o Cursor las borren.'))}
+      ${toggle('teamCopies', st.teamCopies, T('Guardar copias de mi equipo'), T('Para leer sus sesiones cuando estén desconectados.'))}
+      ${toggle('allowCopies', st.allowCopies, T('Permitir que mi equipo copie lo mío'), T('Si lo desactivas, sus copias se borran en el siguiente contacto.'))}
+      ${number('archiveRetentionDays', st.archiveRetentionDays, T('Conservar lo que solo está en el respaldo'), T('días'))}
+      ${number('copiesRetentionDays', st.copiesRetentionDays, T('Conservar copias sin confirmar'), T('días'))}
+      ${number('archiveMaxMB', st.archiveMaxMB, T('Espacio máximo'), 'MB')}
+    </div>`;
+
+    return `<div class="page">
+      ${pageHead(T('Respaldo'), T('Todo se guarda solo en este equipo, comprimido y sin secretos al compartir.'), actions)}
+      ${summary}
+      <h3>${T('Mis sesiones respaldadas')}</h3>${ownSection}
+      <h3>${T('Copias de mi equipo')}</h3>${copySection}
+      <h3>${T('Configuración')}</h3>${settings}
+    </div>`;
   }
 
   function statusView() {
     return `<div class="page">${checksHtml()}</div>`;
   }
 
-  const VIEW_HTML = { sessions: sessionsView, messages: messagesView, team: teamView, privacy: privacyView, status: statusView };
+  const VIEW_HTML = { sessions: sessionsView, messages: messagesView, team: teamView, privacy: privacyView, backup: backupView, status: statusView };
 
   function setView(view, focus) {
     if (!VIEWS.includes(view)) return;
@@ -402,28 +498,60 @@
 
   const tabBtn = (id, label, n) => `<button class="tab ${ui.tab === id ? 'sel' : ''}" role="tab" aria-selected="${ui.tab === id}" data-tab="${id}">${label} <span class="muted">${n}</span></button>`;
 
+  // Color estable por persona (a partir de su clave) e iniciales para el avatar.
+  const hueOf = (key) => [...String(key)].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) % 360;
+  const initials = (name) =>
+    String(name || '?')
+      .trim()
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((w) => w[0])
+      .join('')
+      .toUpperCase() || '?';
+
   function personHtml(m) {
     const viewer = state.access.viewers.find((v) => v.id === m.id);
     const followed = state.follows.people.includes(m.id);
     const live = (state.agents || []).filter((a) => a.ownerId === m.id);
+    const status = m.self ? T('tú') : m.online ? T('en línea') : T('desconectado');
+    const badges = [
+      m.founder ? `<span class="badge-soft">${T('fundador')}</span>` : '',
+      m.paused && !m.self ? `<span class="badge-soft warn">⏸ ${T('en pausa')}</span>` : '',
+      m.blocked ? `<span class="badge-soft err">🚫 ${T('bloqueado por ti')}</span>` : '',
+      viewer && viewer.reads ? `<span class="badge-soft seen" title="${esc(viewer.lastClient || '')}">👁 ${T('te leyó {v1}', { v1: ago(viewer.lastSeen) })}</span>` : '',
+    ].join('');
     const liveHtml = live.length
-      ? `<div class="live">${live.map((a) => `<div class="small" title="${esc(a.title || a.session)}"><span class="dot ${a.status === 'busy' ? 'busy' : 'on'}"></span>${esc(a.tool)} · ${esc(a.project)} · ${T(AGENT_STATUS[a.status] || a.status)}${a.title ? ` · <span class="muted">${esc(clip(a.title, 40))}</span>` : ''}</div>`).join('')}</div>`
+      ? `<div class="pblock"><div class="plabel">${T('Sesiones abiertas')}</div>${live
+          .map((a) => `<div class="prow" title="${esc(a.title || a.session)}"><span class="dot ${a.status === 'busy' ? 'busy' : 'on'}"></span><b>${esc(a.tool)}</b> · ${esc(a.project)} · ${T(AGENT_STATUS[a.status] || a.status)}${a.title ? `<div class="muted small ellipsis">${esc(a.title)}</div>` : ''}</div>`)
+          .join('')}</div>`
       : '';
-    return `<div class="person ${m.self ? '' : 'clickable'}" data-person="${m.self ? '' : esc(m.id)}"${m.self ? '' : ` tabindex="0" role="button" aria-label="${T('Ver las sesiones de {v1}', { v1: esc(m.name) })}"`}>
-      <span class="dot ${m.online ? 'on' : ''}"></span>
-      <span><span class="name">${esc(m.name)}</span>${m.self ? ` <span class="muted">(${T('tú')})</span>` : ''} <span class="muted small">${esc(m.role || '')}</span>${m.founder ? ` <span class="chip">${T('fundador')}</span>` : ''}</span>
-      ${m.self ? '<span></span>' : `<button class="icon ${followed ? 'on' : ''}" data-follow="person" data-id="${esc(m.id)}" title="${T(followed ? 'Dejar de seguir' : 'Seguir')}">${followed ? '★' : '☆'}</button>`}
-      <div class="sub">
-        ${liveHtml}
-        <div class="chips">${(m.projects || []).map((p) => `<span class="chip">${esc(p)}</span>`).join('') || `<span class="muted small">${T('no comparte proyectos contigo')}</span>`}</div>
-        <div class="muted small" title="${T('Huella de su clave')}">${esc(m.fingerprint || '')}${m.invitedByName ? ` · ${T('lo invitó {v1}', { v1: esc(m.invitedByName === 'ti' ? T('ti') : m.invitedByName) })}` : ''}</div>
-        ${m.paused && !m.self ? `<div class="muted small">⏸ ${T('en pausa')}</div>` : ''}
-        ${m.blocked ? `<div class="small warn-txt">🚫 ${T('bloqueado por ti')}</div>` : ''}
-        ${m.self ? '' : `<div class="actions person-actions">${m.blocked ? '' : cmd('sessionHub.sendMessage', `✉ ${T('Mensaje')}`, 'link', [m.id])}${cmd('sessionHub.blockMember', T(m.blocked ? 'Desbloquear' : 'Bloquear (solo para mí)'), 'link', [m.id])}${m.canRevoke ? cmd('sessionHub.revokeMember', T('Expulsar del equipo'), 'link danger', [m.id]) : ''}</div>`}
-        ${viewer && viewer.reads ? `<div class="muted small seen">👁 ${T('te leyó {v1}', { v1: ago(viewer.lastSeen) })}${viewer.lastClient ? ' · ' + esc(viewer.lastClient) : ''}</div>` : ''}
-        ${m.online ? '' : `<div class="muted small">${T('desconectado')}</div>`}
-      </div>
-    </div>`;
+    const projects = (m.projects || []).length
+      ? `<div class="chips">${m.projects.map((p) => `<span class="chip">${esc(p)}</span>`).join('')}</div>`
+      : `<span class="muted small">${T(m.self ? 'no compartes proyectos' : 'no comparte proyectos contigo')}</span>`;
+    const footer = m.self
+      ? ''
+      : `<footer class="pfoot">
+          ${m.blocked ? '' : cmd('sessionHub.sendMessage', `✉ ${T('Mensaje')}`, 'primary small-btn', [m.id])}
+          <button class="small-btn" data-person="${esc(m.id)}">${T('Ver sesiones')} →</button>
+          <span class="spacer"></span>
+          ${cmd('sessionHub.blockMember', T(m.blocked ? 'Desbloquear' : 'Bloquear (solo para mí)'), 'link small', [m.id])}
+          ${m.canRevoke ? cmd('sessionHub.revokeMember', T('Expulsar del equipo'), 'link danger small', [m.id]) : ''}
+        </footer>`;
+    return `<article class="pcard ${m.self ? 'self' : 'clickable'} ${m.online || m.self ? '' : 'offline'} ${m.blocked ? 'blocked' : ''}" data-person="${m.self ? '' : esc(m.id)}"${m.self ? '' : ` tabindex="0" role="button" aria-label="${T('Ver las sesiones de {v1}', { v1: esc(m.name) })}"`}>
+      <header class="phead">
+        <span class="avatar" style="--h:${hueOf(m.id)}" aria-hidden="true">${esc(initials(m.name))}<span class="presence ${m.online || m.self ? 'on' : ''}"></span></span>
+        <div class="who">
+          <div class="pname">${esc(m.name)}</div>
+          <div class="muted small">${m.role ? `${esc(m.role)} · ` : ''}<span class="${m.online || m.self ? 'ok-txt' : ''}">${status}</span></div>
+        </div>
+        ${m.self ? '' : `<button class="icon star ${followed ? 'on' : ''}" data-follow="person" data-id="${esc(m.id)}" title="${T(followed ? 'Dejar de seguir' : 'Seguir')}" aria-label="${T(followed ? 'Dejar de seguir' : 'Seguir')}">${followed ? '★' : '☆'}</button>`}
+      </header>
+      ${badges ? `<div class="pbadges">${badges}</div>` : ''}
+      ${liveHtml}
+      <div class="pblock"><div class="plabel">${T(m.self ? 'Compartes' : 'Comparte contigo')}</div>${projects}</div>
+      ${footer}
+      <div class="pfp muted" title="${T('Huella de su clave')}">${esc(m.fingerprint || '')}${m.invitedByName ? ` · ${T('lo invitó {v1}', { v1: esc(m.invitedByName === 'ti' ? T('ti') : m.invitedByName) })}` : ''}</div>
+    </article>`;
   }
 
   // En "Mis sesiones" no tiene sentido agrupar por persona: se agrupa por proyecto.
@@ -538,6 +666,7 @@
             : `<button data-follow="session" data-id="${esc(s.id)}">${followed ? `★ ${T('Siguiendo')}` : `☆ ${T('Seguir esta sesión')}`}</button>`
         }
         <button data-open="${esc(s.id)}" data-peer="${esc(s.ownerId)}">⟳ ${T('Recargar')}</button>
+        ${cmd('sessionHub.useSessionInAi', `🤖 ${T('Usar en mi IA')}`, 'primary', [s.id, mine ? 'yo' : s.owner, s.title, s.copy ? 'copy' : s.archived ? 'archived' : ''])}
         ${cmd('sessionHub.exportSession', `⤓ ${T('Exportar')}`, '', [s.id, s.ownerId])}
         ${(s.archived && mine) || s.copy ? cmd('sessionHub.removeFromBackup', T('Borrar del respaldo'), 'link danger', [s.id, mine ? null : s.ownerId, s.title]) : ''}
       </div>
@@ -567,7 +696,7 @@
   }
 
   document.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-page],[data-follow],[data-cmd],[data-act],[data-view],[data-group],[data-more],[data-groups],[data-tab],[data-open],[data-person]');
+    const t = e.target.closest('[data-page],[data-follow],[data-cmd],[data-act],[data-view],[data-bfilter],[data-cowner],[data-openin],[data-pfilter],[data-group],[data-more],[data-groups],[data-tab],[data-open],[data-person]');
     if (!t) return;
     if (t.dataset.group || t.dataset.more || t.dataset.groups) {
       if (t.dataset.group) ui.collapsed.has(t.dataset.group) ? ui.collapsed.delete(t.dataset.group) : ui.collapsed.add(t.dataset.group);
@@ -580,6 +709,25 @@
       return;
     }
     if (t.dataset.view) return setView(t.dataset.view);
+    if (t.dataset.bfilter) {
+      ui.backupFilter = t.dataset.bfilter;
+      ui.page.ownbackup = 0;
+      return render();
+    }
+    if (t.dataset.cowner != null && t.matches('[data-cowner]')) {
+      ui.copyOwner = t.dataset.cowner;
+      ui.page.copieslist = 0;
+      return render();
+    }
+    if (t.dataset.openin) {
+      setView('sessions');
+      return open(t.dataset.openin, t.dataset.peer);
+    }
+    if (t.dataset.pfilter) {
+      ui.peopleFilter = t.dataset.pfilter;
+      ui.page.people = 0;
+      return render();
+    }
     if (t.dataset.page) {
       const [key, dir] = t.dataset.page.split(':');
       ui.page[key] = Math.max(0, (ui.page[key] || 0) + Number(dir));

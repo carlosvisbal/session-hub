@@ -5,7 +5,7 @@
 # Session Hub
 
 **See what your teammates did with their AI — and let your AI ask them.**
-Share Claude Code and Cursor sessions across your team: peer‑to‑peer, end‑to‑end encrypted, with signed identities and an MCP server built in.
+Share Claude Code and Cursor sessions across your team, message each other, and keep every session backed up even after the tool deletes it — peer‑to‑peer, end‑to‑end encrypted, with signed identities and an MCP server built in.
 
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/carlosvisbal/session-hub?color=1f5fd6)](https://github.com/carlosvisbal/session-hub/releases)
@@ -29,6 +29,17 @@ Share Claude Code and Cursor sessions across your team: peer‑to‑peer, end‑
 Your backend teammate spent the morning with Claude Code changing an API. You, on the frontend, find out hours later — or never. **Session Hub** turns those AI conversations into shared, searchable team context:
 
 > *"What did Carlos change in the backend today?"* — ask your own AI, get the answer from his real sessions.
+
+### What it covers
+
+| | |
+|---|---|
+| 👀 **See** | Every teammate's Claude Code and Cursor sessions (complete, grouped by project), who's online and which AI sessions they have open. |
+| ✉️ **Talk** | Signed messages to a teammate or one of their sessions; they choose whether to pass them to their AI. |
+| 🗄️ **Keep** | A local backup of your sessions (Claude Code deletes history after 30 days) and read copies of your team's, with delete and export. |
+| 🤖 **Use** | Any session — live, backed up or copied — in your AI chat (Claude Code, Copilot, Cursor) with one click or through MCP. |
+
+Always under your control: nothing is shared until you choose, it's read‑only, and there's no central server.
 
 ## Features
 
@@ -112,6 +123,10 @@ VPNs (WireGuard, Tailscale, corporate) are detected and advertised automatically
 | `list_agents` | AI sessions each teammate has open right now (tool, project, busy/idle) |
 | `send_message` | A signed text message to one teammate (queued up to 24 h if they're offline) |
 | `check_inbox` | Messages you approved for your AI, marked as coming from a teammate, not from you |
+
+`list_sessions` accepts `origen: "respaldo"` to list only what comes from backups (originals already deleted) or local copies. Results carry `projectKey` (same repo = same key), `archived` and `copy`, so the AI never mixes projects and knows when it reads a copy.
+
+**Use any session in any chat:** click **🤖 Use in my AI** on a session (also in the *Backup* tab) and the request to read it with `get_session` is typed into Claude Code, Copilot or Cursor — just add your question. Or ask directly: *"Read in Session Hub my backed‑up session about signatures and summarize what changed."*
 
 All tools accept `peer` (name, fingerprint, `"me"` or `"all"`). Empty results explain *why* (nobody online vs. nothing shared).
 

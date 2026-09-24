@@ -2,7 +2,7 @@
 
 **English** · [Español](MANUAL.es.md)
 
-Session Hub lets you see, from your editor, what your teammates did with their AI (Claude Code or Cursor) — and lets them see yours. Only what each person chooses to share.
+Session Hub lets you see, from your editor, what your teammates did with their AI (Claude Code or Cursor) — and lets them see yours. You can also message each other, and your sessions stay backed up even after the tool deletes them. Only what each person chooses to share.
 
 > The interface follows your editor's language (English or Spanish). To force one: Settings → `sessionHub.language`. Button names below are the English ones, with the Spanish label in parentheses when useful.
 
@@ -28,7 +28,8 @@ Session Hub is like a **shared window** between your team's editors: everyone ca
 **Example:** Carlos (backend) asked his AI to make the contacts form accept several files. Ana (frontend) opens Session Hub and sees exactly what Carlos asked, which files changed and how it ended. She can also ask her own AI: *"what changed in the backend today?"*.
 
 - **Nothing is shared by itself.** You choose which projects you share and with whom.
-- **Read‑only.** Nobody can modify your files or your conversations.
+- **Read‑only.** Nobody can modify your files or your conversations. Messages are just text: they never run anything.
+- **Nothing gets lost.** If Claude Code or Cursor delete a session, it stays in your backup, and you can use it in your AI chat.
 - **No third‑party servers.** Everything goes directly between your team's computers, encrypted.
 - **You know who read you.** When someone opens one of your sessions, you get a notification.
 - **Keys and passwords are hidden** before leaving your computer (they show as `[REDACTED]`).
@@ -89,7 +90,7 @@ From then on, those people can see your AI conversations **in that folder**. Oth
 
 Open it by clicking **Session Hub** in the status bar.
 
-At the top is the **header**: your name, team, your **fingerprint** and the buttons *What's new?*, *✉ Write*, *Pause* and *Invite*. Below it, five **tabs**. The number next to each one tells you when there's something to look at:
+At the top is the **header**: your name, team, your **fingerprint** and the buttons *What's new?*, *✉ Write*, *Pause* and *Invite*. Below it, six **tabs**. The number next to each one tells you when there's something to look at:
 
 | Tab | What's in it |
 | --- | --- |
@@ -97,6 +98,7 @@ At the top is the **header**: your name, team, your **fingerprint** and the butt
 | **Messages** | Messages you received (with *Pass to my AI*, *Reply*…), the ones you sent, and how you want to receive them. The number is what's left to review |
 | **Team** | Each person: online or not (green dot), role, fingerprint, who invited them, their open AI sessions, and *Message*, *Block* and *Expel*. Click someone to see their sessions |
 | **Privacy** | *What I share* (projects, who sees them, pause) and *Who read mine* |
+| **Backup** | Your backed‑up sessions and your team's copies, with search and filters. On each one: **View**, **🤖 Use in my AI**, **Export** and **Delete**. Below, the settings: back up, keep copies, allow copies of yours, retention and space |
 | **Status** | Automatic checks (✔ fine, ! review, ✖ error), *Full diagnostics*, *Copy connection report* and *Connect Claude Code* |
 
 Notifications take you to the right tab: a message opens *Messages*; a read, *Privacy*; a network problem, *Status*. You can also move between tabs with the arrow keys.
@@ -168,6 +170,8 @@ Claude Code deletes history after 30 days, and in Cursor a chat can be deleted o
 
 Every list in the panel gets a **search box** when it grows, and is shown in pages.
 
+**Use a session in any chat.** In a session's conversation, or on each row of the *Backup* tab, click **🤖 Use in my AI**. The request to read that session with Session Hub is typed into your AI's chat (Claude Code, Copilot or Cursor); just add your question and send. It also works by asking directly, e.g. *"Read in Session Hub my backed‑up session about signatures"* or *"list only my backup sessions"* (MCP uses `origen: "respaldo"`).
+
 ## Your privacy: you're in control
 
 | I want to… | How | What happens |
@@ -219,7 +223,7 @@ Opening the port — **Windows:** allow on *Private networks* when prompted. **m
 
 **Does it work from home?** Yes. With a company VPN it works as in the office. Without VPN, set `sessionHub.network` to **public** (over the internet, encrypted) or **private** (your own server, started with `npm run infra`). If something fails because of a network policy, click **Copy connection report** in the panel's *Status* section and send it to IT: it says what's failing, why and what to allow.
 
-**Cursor and VS Code at the same time?** Better just one — each editor has its own identity.
+**Cursor and VS Code at the same time?** For now, better just one: each editor has its own identity and both would use the same port. If you need both, give one a different `sessionHub.port` and `sessionHub.dhtPort` and invite it from the other (you'll appear twice in the team). The plan for them to share one identity and let their chats talk is in [Cursor and VS Code on the same computer](SAME-MACHINE.md).
 
 **Is it free?** Yes. Free software (AGPL‑3.0). Not affiliated with Cursor or Anthropic.
 

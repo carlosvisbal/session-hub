@@ -23,6 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # etiquetas: la prueba de actualización arranca el hub real de una versión anterior
       - uses: actions/setup-node@v5
         with:
           node-version: 22

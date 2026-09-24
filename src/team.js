@@ -150,7 +150,7 @@ export function createTeam(cfg, hub, transport, teamState, t = (s) => s, inbox =
     const o = copies.owner(m.id);
     const info = { name: m.name, role: m.role, fingerprint: m.fingerprint, paused: !!m.paused, allowCopies: m.allowCopies !== false, lastContact: new Date().toISOString() };
     if (m.allowCopies === false) {
-      if (o) copies.purgeOwner(m.id, 'el dueño no permite copias');
+      if (o) copies.purgeOwner(m.id, t('el dueño no permite copias'));
       return;
     }
     copies.setOwner(m.id, info);

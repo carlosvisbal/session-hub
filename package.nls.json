@@ -53,7 +53,7 @@
   "cmd.toggleSessionVisibility": "Hide / show session to the team",
   "cmd.unshareProject": "Stop sharing a project",
   "cmd.whatChanged": "What's new?",
-  "ext.description": "Share Claude Code and Cursor AI sessions with your team: peer-to-peer, encrypted, signed identities, MCP-ready.",
+  "ext.description": "Your team and its AI, connected: share Claude Code and Cursor sessions, message teammates, and keep a local backup even after the tool deletes them. Peer-to-peer, encrypted, signed identities, MCP built in.",
   "view.team": "Team",
   "view.welcome": "Share your Claude Code and Cursor sessions with your team.\n[Create team](command:sessionHub.createTeam)\n[Join with an invitation](command:sessionHub.joinTeam)\nAlready have a team: [Start hub](command:sessionHub.start) · [Open panel](command:sessionHub.openDashboard) · [Diagnostics](command:sessionHub.doctor)",
   "cmd.sendMessage": "Message a teammate",
@@ -83,5 +83,8 @@
   "cfg.keepTeamCopies": "Keep local copies of your teammates' sessions to read them offline. Only while you still have access: if they hide or stop sharing them, the copy is deleted.",
   "cfg.teamCopiesRetentionDays": "Copies the owner does not confirm within this many days are deleted (0 = no limit).",
   "cfg.allowTeamCopies": "Allow your teammates to keep copies of your sessions. If you turn it off, their copies are deleted the next time they connect.",
-  "cfg.backupMaxMB": "Maximum space for backup and copies (MB). Oldest items that only exist in the backup are deleted first."
+  "cfg.backupMaxMB": "Maximum space for backup and copies (MB). Oldest items that only exist in the backup are deleted first.",
+  "cmd.setBackupOption": "Change a backup option",
+  "cmd.editBackupNumber": "Edit a backup limit",
+  "cmd.useSessionInAi": "Use session in my AI"
 }

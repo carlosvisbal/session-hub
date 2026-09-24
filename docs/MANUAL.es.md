@@ -2,7 +2,7 @@
 
 [English](MANUAL.md) · **Español**
 
-Con Session Hub ves, desde tu editor, lo que tus compañeros hicieron con su IA (Claude Code o Cursor), y ellos ven lo tuyo. Cada uno ve solo lo que el otro decide compartir.
+Con Session Hub ves, desde tu editor, lo que tus compañeros hicieron con su IA (Claude Code o Cursor), y ellos ven lo tuyo. Además pueden escribirse mensajes, y tus sesiones quedan respaldadas aunque la herramienta las borre. Cada uno ve solo lo que el otro decide compartir.
 
 - [Qué es, en un minuto](#qué-es-en-un-minuto)
 - [Antes de empezar](#antes-de-empezar)
@@ -26,7 +26,8 @@ Session Hub es como una **ventana compartida** entre los editores de tu equipo. 
 **Un ejemplo:** Carlos (backend) le pidió a su IA que el formulario de contactos aceptara varios archivos. Ana (frontend) abre Session Hub y ve qué pidió Carlos, qué archivos cambió y en qué quedó. También puede preguntarle a su propia IA: *"¿qué cambió hoy en el backend?"*.
 
 - **Nada se comparte solo.** Tú eliges qué proyectos compartes y con quién.
-- **Solo lectura.** Nadie puede modificar tus archivos ni tus conversaciones.
+- **Solo lectura.** Nadie puede modificar tus archivos ni tus conversaciones. Los mensajes son solo texto: nunca ejecutan nada.
+- **Nada se pierde.** Si Claude Code o Cursor borran una sesión, queda en tu respaldo, y puedes usarla en el chat de tu IA.
 - **Sin servidores de terceros.** Todo va directo entre las computadoras del equipo, cifrado.
 - **Sabes quién te leyó.** Si alguien abre una de tus sesiones, te llega un aviso.
 - **Las claves y contraseñas se ocultan** antes de salir de tu computadora (aparecen como `[REDACTED]`).
@@ -87,7 +88,7 @@ Desde ese momento, esas personas pueden ver tus conversaciones con la IA **en es
 
 Ábrelo haciendo clic en **Session Hub** en la barra de estado.
 
-Arriba está la **cabecera**: tu nombre, el equipo, tu **huella** y los botones *¿Qué hay nuevo?*, *✉ Escribir*, *Pausar* e *Invitar*. Debajo, cinco **pestañas**. El número junto a cada una avisa si hay algo que mirar:
+Arriba está la **cabecera**: tu nombre, el equipo, tu **huella** y los botones *¿Qué hay nuevo?*, *✉ Escribir*, *Pausar* e *Invitar*. Debajo, seis **pestañas**. El número junto a cada una avisa si hay algo que mirar:
 
 | Pestaña | Qué tiene |
 | --- | --- |
@@ -95,6 +96,7 @@ Arriba está la **cabecera**: tu nombre, el equipo, tu **huella** y los botones 
 | **Mensajes** | Los mensajes que recibiste (con *Pasar a mi IA*, *Responder*…), los que enviaste y cómo quieres recibirlos. El número es lo que falta revisar |
 | **Equipo** | Cada persona: si está en línea (punto verde), su rol, su huella, quién la invitó, sus sesiones de IA abiertas y los botones *Mensaje*, *Bloquear* y *Expulsar*. Haz clic en alguien para ver sus sesiones |
 | **Privacidad** | *Lo que comparto* (proyectos, quién los ve, pausa) y *Quién ha leído lo mío* |
+| **Respaldo** | Tus sesiones respaldadas y las copias de tu equipo, con buscador y filtros. En cada una: **Ver**, **🤖 Usar en mi IA**, **Exportar** y **Borrar**. Abajo, la configuración: respaldar, guardar copias, permitir copias de lo tuyo, retención y espacio |
 | **Estado** | Comprobaciones automáticas (✔ bien, ! revisar, ✖ error), *Diagnóstico completo*, *Copiar informe de conexión* y *Conectar Claude Code* |
 
 Los avisos te llevan a la pestaña que corresponde: un mensaje abre *Mensajes*; una lectura, *Privacidad*; un problema de red, *Estado*. Las pestañas se recorren también con las flechas del teclado.
@@ -166,6 +168,8 @@ Claude Code borra el historial a los 30 días, y en Cursor un chat se puede borr
 
 Todas las listas del panel tienen **buscador** cuando crecen y se muestran por páginas.
 
+**Usar una sesión en cualquier chat.** En la conversación de una sesión, o en cada fila de la pestaña *Respaldo*, pulsa **🤖 Usar en mi IA**. En el chat de tu IA (Claude Code, Copilot o Cursor) queda escrito el pedido de leer esa sesión con Session Hub; solo agregas tu pregunta y envías. También funciona pidiéndolo directo, por ejemplo: *"Lee en Session Hub mi sesión respaldada sobre firmas"* o *"lista solo mis sesiones del respaldo"* (el MCP usa `origen: "respaldo"`).
+
 ## Tu privacidad: tú tienes el control
 
 | Quiero… | Cómo | Qué pasa |
@@ -219,7 +223,7 @@ Cómo abrir el puerto: en **Windows**, cuando pregunte, permite el acceso en *Re
 
 **¿Puedo cambiar el idioma?** Sí: la interfaz sigue el idioma del editor. Para fijarlo, en Ajustes busca `sessionHub.language` y elige español o inglés.
 
-**¿Puedo usarlo en Cursor y VS Code a la vez?** Mejor solo en uno. Cada editor tiene su propia identidad.
+**¿Puedo usarlo en Cursor y VS Code a la vez?** Por ahora, mejor solo en uno: cada editor tiene su propia identidad y los dos usarían el mismo puerto. Si necesitas los dos, dale a uno otro `sessionHub.port` y otro `sessionHub.dhtPort` e invítalo desde el otro (aparecerás dos veces en el equipo). El plan para que compartan una sola identidad y sus chats se hablen está en [Cursor y VS Code en la misma computadora](SAME-MACHINE.es.md).
 
 **¿Es gratis?** Sí. Es software libre (AGPL-3.0) y no está afiliado a Cursor ni a Anthropic.
 

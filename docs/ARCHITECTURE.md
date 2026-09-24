@@ -147,6 +147,10 @@ In the extension these live in the editor's `globalStorage` for the extension; a
 7. Two results are the same project only if their `projectKey` matches. A Claude Code session belongs to the folder it started in (`cwd`), not to the encoded history folder (which can be shared by `/x/my.app` and `/x/my-app`).
 8. A backup never widens access: archived sessions go through the same ACL, and copies are dropped as soon as the owner withdraws access.
 
+## Roadmap
+
+- [Cursor and VS Code on the same computer](SAME-MACHINE.md): one hub per computer shared by both editors, delivery to the right editor, and automatic conversations between chats through Claude Code and Cursor hooks.
+
 ## Tests
 
 - `npm test` — unit tests: identity and membership, readers (fixtures), redaction, hub permissions and paging, network diagnosis.

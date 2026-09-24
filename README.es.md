@@ -5,7 +5,7 @@
 # Session Hub
 
 **Mira lo que tus compañeros hicieron con su IA, y deja que tu IA les pregunte.**
-Comparte las sesiones de Claude Code y Cursor con tu equipo: de igual a igual, cifrado de extremo a extremo, con identidades firmadas y un servidor MCP incluido.
+Comparte las sesiones de Claude Code y Cursor con tu equipo, escríbanse entre ustedes y guarda un respaldo de cada sesión aunque la herramienta la borre: de igual a igual, cifrado de extremo a extremo, con identidades firmadas y un servidor MCP incluido.
 
 [![Licencia: AGPL-3.0-or-later](https://img.shields.io/badge/licencia-AGPL--3.0--or--later-blue.svg)](LICENSE)
 [![Versión](https://img.shields.io/github/v/release/carlosvisbal/session-hub?color=1f5fd6&label=versi%C3%B3n)](https://github.com/carlosvisbal/session-hub/releases)
@@ -29,6 +29,17 @@ Comparte las sesiones de Claude Code y Cursor con tu equipo: de igual a igual, c
 Tu compañero del backend pasó la mañana con Claude Code cambiando una API. Tú, en el frontend, te enteras horas después, o nunca. **Session Hub** convierte esas conversaciones con la IA en contexto compartido y fácil de buscar para todo el equipo:
 
 > *"¿Qué cambió Carlos hoy en el backend?"*: se lo preguntas a tu propia IA y te responde con sus sesiones reales.
+
+### Qué abarca
+
+| | |
+|---|---|
+| 👀 **Ver** | Las sesiones de Claude Code y Cursor de cada compañero (completas y agrupadas por proyecto), quién está en línea y qué sesiones de IA tiene abiertas. |
+| ✉️ **Hablar** | Mensajes firmados para un compañero o una de sus sesiones; esa persona decide si pasarlos a su IA. |
+| 🗄️ **Guardar** | Respaldo local de tus sesiones (Claude Code borra el historial a los 30 días) y copias de lectura de las de tu equipo, con borrar y exportar. |
+| 🤖 **Usar** | Cualquier sesión, en vivo, respaldada o copiada, en el chat de tu IA (Claude Code, Copilot o Cursor), con un clic o por MCP. |
+
+Siempre bajo tu control: nada se comparte hasta que tú lo eliges, es de solo lectura y no hay servidor central.
 
 ## Qué ofrece
 
@@ -112,6 +123,10 @@ Las VPN (WireGuard, Tailscale, la de la empresa) se detectan y anuncian solas. S
 | `list_agents` | Sesiones de IA que cada compañero tiene abiertas ahora (herramienta, proyecto, ocupada o libre) |
 | `send_message` | Un mensaje de texto firmado para un compañero (en cola hasta 24 h si está desconectado) |
 | `check_inbox` | Los mensajes que aprobaste para tu IA, marcados como de un compañero y no tuyos |
+
+`list_sessions` acepta `origen: "respaldo"` para listar solo lo que viene del respaldo (el original ya se borró) o de copias locales. Cada resultado lleva `projectKey` (mismo repo = misma clave), `archived` y `copy`: la IA no mezcla proyectos y sabe cuándo lee una copia.
+
+**Usar cualquier sesión en cualquier chat:** pulsa **🤖 Usar en mi IA** en una sesión (también en la pestaña *Respaldo*) y el pedido de leerla con `get_session` queda escrito en Claude Code, Copilot o Cursor; solo agregas tu pregunta. O pídeselo directo: *"Lee en Session Hub mi sesión respaldada sobre firmas y resume qué cambió."*
 
 Todas aceptan `peer` (nombre, huella, `"yo"` o `"todos"`). Si no hay resultados, explican *por qué* (nadie en línea o nada compartido).
 

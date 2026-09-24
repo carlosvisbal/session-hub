@@ -1,7 +1,7 @@
 {
   "name": "session-hub",
   "displayName": "Session Hub",
-  "version": "0.8.1",
+  "version": "0.8.2",
   "description": "%ext.description%",
   "publisher": "carlosvisbal",
   "author": {
@@ -27,7 +27,11 @@
     "p2p",
     "hyperswarm",
     "team",
-    "sessions"
+    "sessions",
+    "backup",
+    "messaging",
+    "copilot",
+    "knowledge-sharing"
   ],
   "categories": [
     "AI",
@@ -54,7 +58,7 @@
     "licenses": "node scripts/third-party-notices.mjs",
     "test": "node --test test/*.test.js",
     "test:e2e": "node test/e2e/two-hubs.mjs && node test/e2e/relay.mjs && node test/e2e/backup.mjs",
-    "test:ext": "node test/panel.mjs && node test/extension/flows.mjs && node test/extension/cursor.mjs",
+    "test:ext": "node test/panel.mjs && node test/extension/flows.mjs && node test/extension/cursor.mjs && node test/extension/upgrade.mjs",
     "infra": "node --disable-warning=ExperimentalWarning src/infra.js"
   },
   "contributes": {
@@ -236,6 +240,21 @@
         "command": "sessionHub.exportSession",
         "title": "%cmd.exportSession%",
         "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.setBackupOption",
+        "title": "%cmd.setBackupOption%",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.editBackupNumber",
+        "title": "%cmd.editBackupNumber%",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.useSessionInAi",
+        "title": "%cmd.useSessionInAi%",
+        "category": "Session Hub"
       }
     ],
     "menus": {
@@ -278,6 +297,18 @@
         },
         {
           "command": "sessionHub.exportSession",
+          "when": "false"
+        },
+        {
+          "command": "sessionHub.setBackupOption",
+          "when": "false"
+        },
+        {
+          "command": "sessionHub.editBackupNumber",
+          "when": "false"
+        },
+        {
+          "command": "sessionHub.useSessionInAi",
           "when": "false"
         }
       ],
@@ -652,6 +683,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "acorn": "^8.18.0",
     "jsdom": "^26.1.0"
   }
 }

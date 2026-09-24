@@ -24,7 +24,7 @@ const PENDING_RETRY_MS = 15_000; // quien espera su admisión reintenta pronto
 const START_TIMEOUT_MS = 15_000;
 const DIAL_MS = 15_000; // con pocos miembros la DHT no alcanza: se marca directo a los conocidos
 
-export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () => {}, log = console.log }) {
+export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () => {}, log = console.log, t = (s) => s }) {
   const peers = new Map(); // clave pública -> compañero conectado y verificado
   const bannedUntil = new Map();
   const rejections = [];
@@ -129,7 +129,7 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
     const r = { at: new Date().toISOString(), id: pub, fingerprint: fingerprint(pub), reason };
     rejections.unshift(r);
     rejections.length = Math.min(rejections.length, 50);
-    log(`[red] conexión rechazada ${r.fingerprint}: ${reason}`);
+    log(`[red] conexión rechazada ${r.fingerprint}: ${t(reason)}`);
     onEvent('rejected', r);
   }
 
@@ -237,10 +237,10 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
         discovery = swarm.join(topic(), { server: true, client: true });
         startedAt = new Date().toISOString();
         await withTimeout(discovery.flushed(), START_TIMEOUT_MS, 'La red tardó en responder; sigo intentando en segundo plano');
-        log(`[red] modo ${cfg.network} · puerto UDP ${cfg.network === 'lan' ? cfg.dhtPort : 'automático'} · equipo ${teamState.team().name}`);
+        log(`[red] modo ${cfg.network} · puerto UDP ${cfg.network === 'lan' ? cfg.dhtPort : t('automático')} · equipo ${teamState.team().name}`);
       } catch (err) {
         lastError = err.message;
-        log(`[red] ${err.message}`);
+        log(`[red] ${t(err.message)}`);
       }
       dialKnown();
       timers.push(

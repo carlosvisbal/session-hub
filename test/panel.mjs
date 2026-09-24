@@ -41,7 +41,11 @@ function demoState(lang) {
     checks: Array.from({ length: 25 }, (_, i) => ({ status: i < 2 ? 'warn' : 'ok', label: i === 9 ? 'Tu IA puede consultar Session Hub (MCP)' : `Comprobación ${i}` })),
     inbox: { policy: 'hold', held: 1, unread: 2, received: Array.from({ length: 23 }, (_, i) => ({ id: `m${i}`, from: 'x', fromName: `Persona ${i}`, fingerprint: 'F', text: i === 11 ? 'el endpoint de firmas cambió' : `hola ${i}`, at: ago(i), receivedAt: ago(i), status: i ? 'read' : 'held' })), sent: Array.from({ length: 14 }, (_, i) => ({ id: `s${i}`, toName: `Persona ${i}`, text: `enviado ${i}`, status: 'read', at: ago(i) })) },
     agents: [{ session: 'cursor:z', ownerId: id(0), tool: 'Cursor', project: 'web-app', status: 'recent', title: 'Login' }],
-    archive: { own: { enabled: true, sessions: 12, onlyInBackup: 1, bytes: 3456789, lastSync: ago(1) }, copies: { enabled: true, allowOthers: true, bytes: 999999, owners: Array.from({ length: 11 }, (_, i) => ({ id: id(i), name: `Persona ${i}`, sessions: i + 1, bytes: 1000 * i, lastSync: ago(i), paused: i === 2, gone: 0, ignored: 0 })) } },
+    archive: {
+      own: { enabled: true, sessions: 14, onlyInBackup: 3, bytes: 3456789, lastSync: ago(1), list: Array.from({ length: 14 }, (_, i) => ({ id: `claude:b${i}`, title: i === 4 ? 'Firma y anulación de documentos' : `Respaldada ${i}`, project: 'api', projectKey: 'git:111', shared: i !== 5, source: i % 2 ? 'cursor' : 'claude-code', messages: 10 + i, bytes: 20000 * (i + 1), updatedAt: ago(i * 60), syncedAt: ago(1), goneSince: i < 3 ? ago(60 * 24) : null, hasPrev: i === 7 })) },
+      copies: { enabled: true, allowOthers: true, bytes: 999999, owners: [{ id: id(0), name: 'Persona 0', sessions: 8, bytes: 5000, lastSync: ago(2) }, { id: id(3), name: 'Persona 3', sessions: 5, bytes: 3000, lastSync: ago(9), paused: true }], list: Array.from({ length: 13 }, (_, i) => ({ id: `cursor:k${i}`, ownerId: i < 8 ? id(0) : id(3), owner: i < 8 ? 'Persona 0' : 'Persona 3', title: `Copia ${i}`, project: 'web-app', source: 'cursor', messages: 4, bytes: 3000, syncedAt: ago(i), status: i === 2 ? 'gone' : 'ok' })) },
+      settings: { archive: true, teamCopies: true, allowCopies: true, archiveRetentionDays: 365, copiesRetentionDays: 180, archiveMaxMB: 2048 },
+    },
   };
 }
 
@@ -75,22 +79,39 @@ function mount(lang) {
 const p = mount('es');
 const commands = new Set();
 const seen = () => p.d.querySelectorAll('[data-cmd]').forEach((e) => commands.add(e.dataset.cmd));
-for (const v of ['sessions', 'messages', 'team', 'privacy', 'status']) {
+for (const v of ['sessions', 'messages', 'team', 'privacy', 'backup', 'status']) {
   p.view(v);
   seen();
   if (v === 'sessions') for (const tab of ['following', 'mine']) p.d.querySelector(`[data-tab="${tab}"]`).click(), seen();
 }
-const expected = ['whatChanged', 'sendMessage', 'togglePause', 'copyInvite', 'setLanguage', 'openSource', 'handoffMessage', 'approveMessage', 'replyMessage', 'dismissMessage', 'leaveTeam', 'blockMember', 'revokeMember', 'shareWorkspace', 'editProjectAccess', 'unshareProject', 'toggleSessionVisibility', 'doctor', 'copyNetReport', 'copyClaudeCommand', 'syncBackup', 'exportAll', 'purgeCopies', 'purgeOwnBackup'].map((c) => `sessionHub.${c}`);
+const expected = ['whatChanged', 'sendMessage', 'togglePause', 'copyInvite', 'setLanguage', 'openSource', 'handoffMessage', 'approveMessage', 'replyMessage', 'dismissMessage', 'leaveTeam', 'blockMember', 'revokeMember', 'shareWorkspace', 'editProjectAccess', 'unshareProject', 'toggleSessionVisibility', 'doctor', 'copyNetReport', 'copyClaudeCommand', 'syncBackup', 'exportAll', 'purgeCopies', 'purgeOwnBackup', 'exportSession', 'removeFromBackup', 'setBackupOption', 'editBackupNumber', 'useSessionInAi'].map((c) => `sessionHub.${c}`);
 assert.deepEqual(expected.filter((c) => !commands.has(c)), [], 'faltan acciones en el panel');
-ok(`las 5 pestañas reúnen las ${expected.length} acciones del panel`);
+assert.ok(![...commands].some((c) => !c.startsWith('sessionHub.')), 'el panel solo pide comandos de Session Hub');
+p.view('messages');
+const link = p.d.querySelector('a[href^="command:workbench.action.openSettings"]');
+assert.ok(link, 'los ajustes se abren con un enlace command: del webview');
+assert.deepEqual(JSON.parse(decodeURIComponent(link.getAttribute('href').split('?')[1])), ['sessionHub.inboundMessages']);
+ok(`las 6 pestañas reúnen las ${expected.length} acciones del panel; los ajustes se abren sin pasar por la extensión`);
 
 // ---------- buscadores y paginación ----------
 p.view('team');
 assert.equal(p.pager('people'), '1–12 de 31');
+assert.equal(p.d.querySelector('.people .pcard .pname').textContent, 'Carlos', 'tú primero');
+assert.match(p.d.querySelectorAll('.people .pcard')[1].textContent, /en línea/, 'luego quien está en línea');
 p.search('people', 'valentina');
-assert.equal(p.count('.people .person'), 1);
+assert.equal(p.count('.people .pcard'), 1);
 p.search('people', 'zzz');
 assert.match(p.d.getElementById('lb-people').textContent, /Nada coincide/);
+p.search('people', '');
+p.d.querySelector('[data-pfilter="offline"]').click();
+assert.ok(p.count('.people .pcard') > 0 && [...p.d.querySelectorAll('.people .pcard')].every((c) => c.classList.contains('offline')), 'filtro "Desconectados"');
+assert.ok(p.d.querySelector('[data-search="people"]'), 'el buscador de personas está siempre visible');
+p.d.querySelector('[data-pfilter="all"]').click();
+const card = p.d.querySelectorAll('.people .pcard')[1];
+assert.ok(card.querySelector('.avatar') && card.querySelector('[data-cmd="sessionHub.sendMessage"]') && card.querySelector('button[data-person]'), 'avatar, Mensaje y Ver sesiones');
+card.querySelector('button[data-person]').click();
+assert.equal(p.d.querySelector('[role=tab][aria-selected=true]').id, 'tab-sessions', '"Ver sesiones" lleva a sus sesiones');
+p.view('team');
 p.view('messages');
 assert.equal(p.pager('inbox'), '1–10 de 23');
 p.search('inbox', 'firmas');
@@ -98,20 +119,57 @@ assert.equal(p.count('#lb-inbox .msgbox'), 1);
 p.d.querySelector('[data-page="sent:1"]').click();
 assert.equal(p.pager('sent'), '11–14 de 14');
 p.view('privacy');
-assert.deepEqual([p.pager('shares'), p.pager('reads'), p.pager('copyowners')], ['1–8 de 12', '1–15 de 40', '1–8 de 11']);
+assert.deepEqual([p.pager('shares'), p.pager('reads')], ['1–8 de 12', '1–15 de 40']);
 assert.match(p.text(), /guardó una copia/);
-assert.match(p.text(), /12 respaldada\(s\) · 1 solo en el respaldo/);
+assert.ok(p.d.querySelector('.hint [data-view="backup"]'), 'Privacidad remite a la pestaña Respaldo');
 p.view('status');
 p.search('checks', 'mcp');
 p.d.querySelector('[data-search="checks"]').focus();
 p.w.dispatchEvent(new p.w.MessageEvent('message', { data: { type: 'state', state: p.state } }));
 assert.equal(p.d.activeElement?.dataset?.search, 'checks', 'el buscador conserva el foco al refrescar');
 assert.equal(p.count('#lb-checks .check'), 1);
-ok('buscador y paginación en equipo, mensajes, enviados, proyectos, lecturas, copias y estado (conserva el foco)');
+ok('buscador y paginación en equipo, mensajes, enviados, proyectos, lecturas y estado (conserva el foco)');
+
+// ---------- pestaña Respaldo ----------
+p.view('backup');
+assert.match(p.d.querySelector('.bsum').textContent.replace(/\s+/g, ' '), /14\s*mis sesiones respaldadas 3\s*solo en el respaldo 13\s*copias de mi equipo Espacio: 4\.3 MB de 2\.0 GB/);
+assert.equal(p.pager('ownbackup'), '1–10 de 14');
+assert.match(p.d.querySelector('#lb-ownbackup .brow').textContent, /solo en respaldo desde/, 'primero las que solo están en el respaldo');
+p.d.querySelector('[data-bfilter="gone"]').click();
+assert.equal(p.count('#lb-ownbackup .brow'), 3);
+assert.equal(p.count('#lb-ownbackup [data-cmd="sessionHub.removeFromBackup"]'), 3, 'se pueden borrar las que ya no existen');
+p.d.querySelector('[data-bfilter="live"]').click();
+assert.equal(p.count('#lb-ownbackup [data-cmd="sessionHub.removeFromBackup"]'), 0, 'las que tienen original no se borran desde aquí');
+p.d.querySelector('[data-bfilter="all"]').click();
+p.search('ownbackup', 'firma');
+assert.equal(p.count('#lb-ownbackup .brow'), 1);
+assert.equal(p.pager('copieslist'), '1–10 de 13');
+p.d.querySelector(`[data-cowner="${id(3)}"]`).click();
+assert.equal(p.count('#lb-copieslist .brow'), 5, 'filtro por persona');
+assert.ok(p.d.querySelector('[data-cmd="sessionHub.purgeCopies"][data-args*="Persona 3"]'), 'borrar las copias de esa persona');
+const toggles = [...p.d.querySelectorAll('[data-cmd="sessionHub.setBackupOption"]')].map((b) => JSON.parse(b.dataset.args));
+assert.deepEqual(toggles, [['archive', false], ['teamCopies', false], ['allowCopies', false]], 'interruptores con su valor contrario');
+assert.equal(p.count('[data-cmd="sessionHub.editBackupNumber"]'), 3);
+p.d.querySelector('#lb-copieslist [data-openin]').click();
+assert.equal(p.d.querySelector('[role=tab][aria-selected=true]').id, 'tab-sessions', '"Ver" abre la sesión en Sesiones');
+assert.equal(JSON.stringify(p.posted.filter((m) => m.type === 'open').at(-1)), JSON.stringify({ type: 'open', id: 'cursor:k8', peer: id(3) }));
+const staleState = JSON.parse(JSON.stringify(p.state));
+delete staleState.archive.own.list;
+delete staleState.archive.copies.list;
+p.w.dispatchEvent(new p.w.MessageEvent('message', { data: { type: 'state', state: staleState } }));
+p.view('backup');
+assert.match(p.d.querySelector('.bsum').textContent.replace(/\s+/g, ' '), /14\s*mis sesiones respaldadas/, 'con un hub de otra versión muestra sus totales, no ceros');
+assert.match(p.text(), /es de otra versión/);
+p.w.dispatchEvent(new p.w.MessageEvent('message', { data: { type: 'state', state: p.state } }));
+ok('pestaña Respaldo: resumen, filtros, búsqueda, paginación, Ver, borrar (solo lo que ya no existe), copias por persona y configuración');
 
 // ---------- sesiones agrupadas por proyecto (projectKey) ----------
 p.view('sessions');
 p.d.querySelector('[data-tab="team"]').click();
+const who = p.d.getElementById('person');
+assert.notEqual(who.value, '', '"Ver sesiones" dejó elegida a esa persona');
+who.value = '';
+who.dispatchEvent(new p.w.Event('change', { bubbles: true }));
 const heads = [...p.d.querySelectorAll('.group-head .g-name')].map((x) => x.textContent);
 assert.ok(heads.includes('web-app · Persona 0') && heads.includes('web-app · Persona 3'), 'dos "web-app" de repos distintos no se mezclan');
 assert.ok(heads.includes('qa-e2e / mobile') || heads.includes('mobile / qa-e2e'), 'el mismo repo con dos nombres va junto');
@@ -128,10 +186,11 @@ tab.dispatchEvent(new p.w.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles:
 assert.equal(p.d.activeElement.id, 'tab-messages');
 assert.deepEqual(p.errors, []);
 const en = mount('en');
-for (const v of ['sessions', 'messages', 'team', 'privacy', 'status']) en.view(v);
-en.view('privacy');
-assert.match(en.text(), /Backup/);
+for (const v of ['sessions', 'messages', 'team', 'privacy', 'backup', 'status']) en.view(v);
+en.view('backup');
+assert.match(en.text(), /My backed-up sessions/);
 assert.match(en.text(), /My team's copies/);
+assert.match(en.text(), /Let my team copy mine/);
 assert.deepEqual(en.errors, []);
 ok('flechas entre pestañas, sin errores de JavaScript, en español y en inglés');
 console.log('\nPANEL OK');

@@ -102,9 +102,12 @@ export function createHub(cfg, { log = () => {} } = {}) {
   }
 
   function summary(s) {
-    const edits = new Set(s.stats?.edits || []);
-    let commands = s.stats?.commands || 0;
-    if (!s.stats)
+    // Las del respaldo traen sus cifras precalculadas (archived.stats); las de Cursor tienen su propio
+    // campo "stats" (líneas agregadas y quitadas), que no es lo mismo: por eso se mira "archived".
+    const pre = s.archived ? s.stats : null;
+    const edits = new Set(pre?.edits || []);
+    let commands = pre?.commands || 0;
+    if (!pre)
       for (const m of s.messages)
         for (const a of m.actions) {
           if (a.kind === 'edit' && a.target) edits.add(relPath(a.target, s.project));
@@ -121,7 +124,7 @@ export function createHub(cfg, { log = () => {} } = {}) {
       branch: s.branch,
       createdAt: iso(s.createdAt),
       updatedAt: iso(s.updatedAt),
-      messages: s.stats ? s.stats.count : s.messages.length,
+      messages: pre ? pre.count : s.messages.length,
       filesChanged: [...edits].sort(),
       commandsRun: commands,
       ...(isExcluded(s) ? { hidden: true } : {}),
@@ -154,6 +157,22 @@ export function createHub(cfg, { log = () => {} } = {}) {
       own.trimTo(Math.max(50, cfg.archiveMaxMB || 2048) * 1024 * 1024);
     },
     archiveStatus: () => (own ? { enabled: archiveOn(), ...own.status() } : { enabled: false, sessions: 0, onlyInBackup: 0, bytes: 0 }),
+    // Detalle para administrar el respaldo desde el panel (sin mensajes: solo lo que se lista).
+    archiveList: () =>
+      (own ? own.all() : []).map((m) => ({
+        id: m.id,
+        title: redact(m.title || ''),
+        project: nameOf(m.project),
+        projectKey: keyOf(m.project),
+        shared: cfg.projects.some((p) => p.path === m.project),
+        source: m.source,
+        messages: m.stats?.count || 0,
+        bytes: m.bytes || 0,
+        updatedAt: iso(m.updatedAt),
+        syncedAt: m.syncedAt,
+        goneSince: m.goneSince,
+        hasPrev: !!m.hasPrev,
+      })),
     // Borrar del respaldo: solo lo que ya no existe en el original (lo demás se volvería a respaldar).
     removeArchived(id) {
       if (!own?.has(id)) throw new Error('Esa sesión no está en tu respaldo.');

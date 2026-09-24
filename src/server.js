@@ -39,14 +39,15 @@ const readOpts = (a) => ({
 
 export function startServer(cfg, { log = console.log } = {}) {
   const t = makeT(cfg); // idioma de los mensajes (sigue a cfg.language en caliente)
+  const say = (m) => log(t(String(m))); // registros de la salida "Session Hub", en el idioma elegido
   const teamState = openTeamState(cfg.stateFile);
   cfg.id = teamState.me(); // mi identidad es mi clave pública
-  const hub = createHub(cfg, { log });
-  const copies = createCopies({ dir: cfg.archiveDir, log });
+  const hub = createHub(cfg, { log: say });
+  const copies = createCopies({ dir: cfg.archiveDir, log: say });
   const access = createAccessLog({ file: cfg.auditFile, retentionDays: cfg.auditRetentionDays });
   const inbox = createInbox({ file: cfg.inboxFile, teamState, policy: () => cfg.inbound });
-  const transport = createSwarmTransport({ cfg, teamState, onRequest: serveRemote, onEvent, log });
-  const team = createTeam(cfg, hub, transport, teamState, t, inbox, copies, log);
+  const transport = createSwarmTransport({ cfg, teamState, onRequest: serveRemote, onEvent, log: say, t });
+  const team = createTeam(cfg, hub, transport, teamState, t, inbox, copies, say);
   const panelOrigin = { via: 'panel', client: process.env.SESSION_HUB_EDITOR || 'visor web' };
   const mcpClients = new Map(); // en modo sin estado, clientInfo solo llega en "initialize"
   const html = fs.readFileSync(path.join(ROOT, 'public', 'index.html'));
@@ -92,7 +93,7 @@ export function startServer(cfg, { log = console.log } = {}) {
         return hub.liveAgents(viewer);
       case 'message': {
         const r = inbox.receive(args.doc, peer);
-        log(`[mensajes] ${peer.name} te escribió (${r.status === 'held' ? 'retenido hasta que lo apruebes' : 'visible para tu IA'})`);
+        say(t('[mensajes] {v1} te escribió ({v2})', { v1: peer.name, v2: t(r.status === 'held' ? 'retenido hasta que lo apruebes' : 'visible para tu IA') }));
         return r;
       }
       default:
@@ -102,14 +103,14 @@ export function startServer(cfg, { log = console.log } = {}) {
 
   function onEvent(type, data) {
     if (type === 'rejected') access.record({ id: `key:${data.id}`, name: `Clave desconocida ${data.fingerprint}`, via: 'red' }, 'rejected', { reason: data.reason });
-    if (type === 'conn-issue') log(`[red] no se pudo conectar con ${data.peer}: ${data.code}`);
+    if (type === 'conn-issue') say(`[red] no se pudo conectar con ${data.peer}: ${data.code}`);
     if (type === 'joined') {
       team.flushQueue(data.id).catch(() => {});
       setTimeout(() => team.syncCopies().catch(() => {}), 5000); // al volver alguien, se ponen al día sus copias
     }
-    if (type === 'revoked') copies.purgeOwner(data.member, 'expulsado del equipo');
+    if (type === 'revoked') copies.purgeOwner(data.member, t('expulsado del equipo'));
     if (type === 'receipt') inbox.receipt(data.from, data.id, data.status);
-    if (type === 'revoked') log(`[equipo] ${fingerprint(data.member)} fue expulsado por ${fingerprint(data.by)}`);
+    if (type === 'revoked') say(`[equipo] ${fingerprint(data.member)} fue expulsado por ${fingerprint(data.by)}`);
   }
 
   function messageStatus(id, status) {
@@ -134,6 +135,7 @@ export function startServer(cfg, { log = console.log } = {}) {
   function diagnostics() {
     const peersInfo = team.peersInfo();
     return {
+      software: { version: sourceInfo(cfg).version },
       runtime: { node: process.versions.node, electron: process.versions.electron || null, sqlite: !cursorUnavailable, sqliteError: cursorUnavailable },
       api: { port: cfg.port, host: cfg.host },
       network: transport.status(),
@@ -163,7 +165,13 @@ export function startServer(cfg, { log = console.log } = {}) {
   const OPS = { '/api/sessions': 'sessions', '/api/changes': 'changes', '/api/search': 'search', '/api/projects': 'projects' };
 
   const routes = {
-    'GET /api/whoami': () => ({ ...hub.whoami(), fingerprint: fingerprint(teamState.me()), software: sourceInfo(cfg) }),
+    'GET /api/whoami': () => ({ ...hub.whoami(), fingerprint: fingerprint(teamState.me()), software: sourceInfo(cfg), pid: process.pid }),
+    // La extensión lo pide cuando se actualiza y encuentra corriendo un hub de otra versión.
+    'POST /api/shutdown': () => {
+      say('[hub] cierre pedido por la extensión (actualización)');
+      setTimeout(() => shutdown().finally(() => process.exit(0)), 100);
+      return { ok: true, pid: process.pid };
+    },
     'GET /api/team': () => teamInfo(),
     'GET /api/peers': () => team.peersInfo(),
     'GET /api/access': () => access.snapshot(),
@@ -183,10 +191,18 @@ export function startServer(cfg, { log = console.log } = {}) {
     'GET /api/inbox': () => inbox.list(),
 
     // Respaldo: mis sesiones (capa 1) y copias de mis compañeros (capa 2).
-    'GET /api/archive': () => ({
-      own: hub.archiveStatus(),
-      copies: { enabled: cfg.teamCopies !== false, allowOthers: cfg.allowCopies !== false, owners: copies.status(), bytes: copies.bytes() },
-      settings: { archiveRetentionDays: cfg.archiveRetentionDays, copiesRetentionDays: cfg.copiesRetentionDays, archiveMaxMB: cfg.archiveMaxMB },
+    'GET /api/archive': (q) => ({
+      own: { ...hub.archiveStatus(), ...(q.detail ? { list: hub.archiveList() } : {}) },
+      copies: {
+        enabled: cfg.teamCopies !== false,
+        allowOthers: cfg.allowCopies !== false,
+        owners: copies.status(),
+        bytes: copies.bytes(),
+        ...(q.detail
+          ? { list: copies.owners().flatMap((o) => copies.list(o.id).map((m) => ({ id: m.id, ownerId: o.id, owner: o.name || m.summary?.owner, title: m.summary?.title, project: m.summary?.project, projectKey: m.summary?.projectKey, source: m.summary?.source, messages: m.count, bytes: m.bytes || 0, updatedAt: m.remoteUpdatedAt, syncedAt: m.syncedAt, verifiedAt: m.verifiedAt, status: m.status }))) }
+          : {}),
+      },
+      settings: { archive: cfg.archive !== false, teamCopies: cfg.teamCopies !== false, allowCopies: cfg.allowCopies !== false, archiveRetentionDays: cfg.archiveRetentionDays, copiesRetentionDays: cfg.copiesRetentionDays, archiveMaxMB: cfg.archiveMaxMB },
     }),
     'POST /api/archive/sync': async () => {
       hub.syncArchive();
@@ -199,7 +215,7 @@ export function startServer(cfg, { log = console.log } = {}) {
     },
     'POST /api/archive/purge': (q, body) => {
       if (body.scope === 'own') return hub.purgeArchive(true);
-      if (body.owner) return { removed: copies.purgeOwner(String(body.owner), 'borradas a mano') };
+      if (body.owner) return { removed: copies.purgeOwner(String(body.owner), t('borradas a mano')) };
       return { removed: copies.purgeAll() };
     },
     'POST /api/messages/send': (q, body) => team.sendMessage(body, panelOrigin),
@@ -217,7 +233,7 @@ export function startServer(cfg, { log = console.log } = {}) {
     'POST /api/team/join': async (q, body) => {
       if (teamState.hasTeam()) throw new Error('Ya perteneces a un equipo. Sal de él antes de unirte a otro.');
       const r = teamState.join(String(body.code || ''));
-      if (r.network && r.network !== cfg.network) log(`[equipo] la invitación usa la red "${r.network}"; esta instalación usa "${cfg.network}"`);
+      if (r.network && r.network !== cfg.network) say(`[equipo] la invitación usa la red "${r.network}"; esta instalación usa "${cfg.network}"`);
       await transport.restart();
       return { ...teamInfo(), inviteNetwork: r.network };
     },
@@ -346,23 +362,23 @@ export function startServer(cfg, { log = console.log } = {}) {
       setExtraPatterns(cfg.redactExtra);
       if (netChanged) await transport.restart();
       else if (ownerChanged) transport.announceProfile();
-      log(`[config] recargada${cfg.paused ? ' · EN PAUSA' : ''}${netChanged ? ' · red reiniciada' : ''}`);
+      log(t('[config] recargada') + (cfg.paused ? ` · ${t('EN PAUSA')}` : '') + (netChanged ? ` · ${t('red reiniciada')}` : ''));
     } catch (err) {
-      log(`[config] no se pudo recargar: ${err.message}`);
+      say(`[config] no se pudo recargar: ${err.message}`);
     }
   });
 
   server.on('error', (err) => {
-    log(err.code === 'EADDRINUSE' ? `El puerto ${cfg.port} ya está en uso: ¿hay otro Session Hub abierto?` : `Error del servidor: ${err.message}`);
+    say(err.code === 'EADDRINUSE' ? `El puerto ${cfg.port} ya está en uso: ¿hay otro Session Hub abierto?` : `Error del servidor: ${err.message}`);
     process.exitCode = 2;
     shutdown().finally(() => process.exit(2));
   });
 
   server.listen(cfg.port, cfg.host, async () => {
-    log(`session-hub ${sourceInfo(cfg).version} · API local http://127.0.0.1:${cfg.port} · MCP http://127.0.0.1:${cfg.port}/mcp`);
-    log(`  Yo: ${cfg.owner.name}${cfg.owner.role ? ' · ' + cfg.owner.role : ''} · huella ${fingerprint(teamState.me())}`);
-    log(`  ${teamState.hasTeam() ? `Equipo: ${teamState.team().name}` : 'Sin equipo todavía: créalo o únete con una invitación'}`);
-    log(`  Proyectos compartidos: ${cfg.projects.map((p) => p.name).join(', ') || '(ninguno)'}`);
+    say(`session-hub ${sourceInfo(cfg).version} · API local http://127.0.0.1:${cfg.port} · MCP http://127.0.0.1:${cfg.port}/mcp`);
+    say(`  Yo: ${cfg.owner.name}${cfg.owner.role ? ' (' + cfg.owner.role + ')' : ''} · huella ${fingerprint(teamState.me())}`);
+    say(teamState.hasTeam() ? `  Equipo: ${teamState.team().name}` : '  Sin equipo todavía: créalo o únete con una invitación');
+    say(`  Proyectos compartidos: ${cfg.projects.map((p) => p.name).join(', ') || t('(ninguno)')}`);
     await transport.start();
   });
 

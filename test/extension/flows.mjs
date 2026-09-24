@@ -105,6 +105,14 @@ try {
   assert.equal(idx.sessions[0].origin, 'backup');
   assert.ok(fs.existsSync(path.join(out, folder, idx.sessions[0].file)));
   ok('sesión borrada por Claude Code → sigue en el respaldo; exportar a Markdown, JSON y carpeta completa');
+  S.commands = ['workbench.action.chat.open'];
+  S.executed.length = 0;
+  await cmds['sessionHub.useSessionInAi']('claude:s1', 'yo', 'Adjuntos múltiples en contactos', 'archived');
+  const ask = S.executed.find((e) => e.id === 'workbench.action.chat.open').a[0];
+  assert.match(ask.query, /get_session con id "claude:s1" y peer "yo"/);
+  assert.match(ask.query, /está en el respaldo/);
+  assert.match(ask.query, /Mi pregunta: $/);
+  ok('"Usar en mi IA" deja en el chat el pedido de leer la sesión respaldada por MCP, listo para la pregunta');
   S.answer = 'Borrar';
   await cmds['sessionHub.removeFromBackup']('claude:s1', null, 'Adjuntos');
   assert.equal((await call('carlos', 'GET', '/api/sessions')).length, 0);

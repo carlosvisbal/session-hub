@@ -53,7 +53,7 @@
   "cmd.toggleSessionVisibility": "Ocultar / mostrar sesión al equipo",
   "cmd.unshareProject": "Dejar de compartir un proyecto",
   "cmd.whatChanged": "¿Qué hay nuevo?",
-  "ext.description": "Comparte con tu equipo las sesiones de Claude Code y Cursor: de igual a igual, cifrado, con identidad firmada y listo para MCP.",
+  "ext.description": "Tu equipo y su IA, conectados: comparte las sesiones de Claude Code y Cursor, escríbele a tus compañeros y guarda un respaldo local aunque la herramienta las borre. De igual a igual, cifrado, con identidad firmada y MCP incluido.",
   "view.team": "Equipo",
   "view.welcome": "Comparte tus sesiones de Claude Code y Cursor con tu equipo.\n[Crear equipo](command:sessionHub.createTeam)\n[Unirme con una invitación](command:sessionHub.joinTeam)\nSi ya tienes equipo: [Iniciar hub](command:sessionHub.start) · [Abrir panel](command:sessionHub.openDashboard) · [Diagnóstico](command:sessionHub.doctor)",
   "cmd.sendMessage": "Escribir a un compañero",
@@ -83,5 +83,8 @@
   "cfg.keepTeamCopies": "Guardar copias locales de las sesiones de tus compañeros para leerlas sin conexión. Solo mientras sigas teniendo acceso: si las ocultan o dejan de compartirlas, la copia se borra.",
   "cfg.teamCopiesRetentionDays": "Las copias que el dueño no confirme en estos días se borran (0 = sin límite).",
   "cfg.allowTeamCopies": "Permitir que tus compañeros guarden copias de tus sesiones. Si lo desactivas, sus copias se borran la próxima vez que se conecten.",
-  "cfg.backupMaxMB": "Espacio máximo para el respaldo y las copias (MB). Se borra primero lo más viejo que ya solo existe en el respaldo."
+  "cfg.backupMaxMB": "Espacio máximo para el respaldo y las copias (MB). Se borra primero lo más viejo que ya solo existe en el respaldo.",
+  "cmd.setBackupOption": "Cambiar una opción del respaldo",
+  "cmd.editBackupNumber": "Editar un límite del respaldo",
+  "cmd.useSessionInAi": "Usar sesión en mi IA"
 }

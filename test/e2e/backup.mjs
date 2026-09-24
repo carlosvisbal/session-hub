@@ -93,6 +93,12 @@ try {
   assert.equal(remote.archived, true);
   assert.deepEqual(remote.conversation, local.conversation, 'idéntica a la original');
   step('Claude Code borró el original: Carlos la sigue sirviendo desde su respaldo, idéntica');
+  const ownBackup = await mcp('carlos', 'list_sessions', { peer: 'yo', origen: 'respaldo' });
+  assert.equal(ownBackup[0]?.id, 'claude:s1');
+  assert.equal(ownBackup[0].archived, true);
+  const ownFull = await mcp('carlos', 'get_session', { id: 'claude:s1', peer: 'yo' });
+  assert.equal(ownFull.total, 6);
+  step('por MCP, Carlos lista solo lo respaldado (origen: "respaldo") y lee completa su sesión borrada');
 
   const audit = await call('carlos', 'GET', '/api/access');
   const copyRecords = audit.reads.filter((r) => r.what === 'copy' && r.who === 'Ana');
@@ -109,6 +115,7 @@ try {
   assert.deepEqual(offline.conversation, local.conversation);
   const listed = await mcp('ana', 'list_sessions', {});
   assert.ok(listed[0].copy, 'el listado sin conexión viene de la copia');
+  assert.equal((await mcp('ana', 'list_sessions', { origen: 'respaldo' }))[0]?.id, 'claude:s1', 'origen "respaldo" incluye las copias');
   step(`Carlos desconectado: Ana lee la sesión completa desde su copia (guardada ${offline.copy.syncedAt})`);
 
   // ---- Carlos vuelve y oculta la sesión: la copia de Ana se borra ----

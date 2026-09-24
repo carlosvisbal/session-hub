@@ -2,6 +2,25 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versiones con [SemVer](https://semver.org/lang/es/).
 
+## [0.8.2] — 2026-09-24
+
+### Añadido
+- **Pestaña Respaldo:** resumen y espacio usado; tus sesiones respaldadas y las copias de tu equipo, con buscador, filtros (*Todas · Solo en respaldo · Con original*; por persona) y paginación. En cada una: **Ver**, **🤖 Usar en mi IA**, **Exportar** y **Borrar** (solo lo que ya no existe en el original). Configuración ahí mismo: respaldar, guardar copias, permitir que tu equipo copie lo tuyo, retención y espacio máximo.
+- **🤖 Usar en mi IA** en cualquier sesión (en vivo, respaldada o copia): deja escrito en Claude Code, Copilot o Cursor el pedido de leerla con `get_session`; solo agregas tu pregunta.
+- MCP: `list_sessions` con `origen: "respaldo"` lista solo lo que viene del respaldo o de copias.
+- Descripción y alcance actualizados: ver, hablar, guardar y usar.
+- Análisis y plan para usar **Cursor y VS Code en la misma computadora** y que sus chats se hablen, incluso de forma automática mediante hooks: [docs/SAME-MACHINE.es.md](docs/SAME-MACHINE.es.md).
+
+### Cambiado
+- **Personas del equipo, rediseñado:** buscador siempre visible, filtros rápidos (*Todos · En línea · Desconectados · Siguiendo*) y tarjetas con avatar y presencia, insignias (fundador, en pausa, bloqueado, "te leyó"), sesiones abiertas, lo que comparte contigo y los botones **Mensaje** y **Ver sesiones**. Tú primero, luego quien está en línea.
+
+### Corregido
+- **Al actualizar, la extensión nueva seguía usando el hub de la versión anterior** si había quedado corriendo (por ejemplo, tras un cierre inesperado del editor), y el panel mostraba el respaldo en cero. Ahora compara versiones y reemplaza el hub: se lo pide (`/api/shutdown`) o, si es anterior y no sabe cerrarse, termina su proceso tras comprobar que es un hub. *Estado* avisa si las versiones no coinciden, y el panel muestra los totales en vez de ceros. Probado con el hub real de 0.8.1.
+- **Traducción completa:** los registros de la salida "Session Hub", las descripciones de parámetros del MCP y el detalle de la conexión en *Estado* ahora respetan el idioma. Nueva prueba que falla si aparece un texto visible sin traducir.
+- **Las sesiones de Cursor mostraban `undefined` mensajes, sin archivos ni comandos** (desde 0.8.1): su campo propio `stats` se confundía con las cifras del respaldo. Nueva prueba con una base de Cursor sintética.
+- El tamaño de un respaldo vacío se mostraba como "1 KB".
+- **Cursor se congelaba (y podía cerrarse) al abrir "Cómo recibo mensajes" o "Ajustes del respaldo".** La extensión abría los ajustes con `workbench.action.openSettings`, y ese comando devuelve el editor de ajustes completo: la ventana intentaba serializarlo para enviarlo a la extensión y se quedaba sin memoria. Ahora el panel abre los ajustes con un enlace del propio webview, solo puede pedir comandos de Session Hub, y el error de puerto ocupado pide el puerto directamente.
+
 ## [0.8.1] — 2026-09-24
 
 ### Añadido

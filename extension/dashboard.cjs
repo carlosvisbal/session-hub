@@ -27,6 +27,7 @@ class Dashboard {
     const media = vscode.Uri.joinPath(this.ctx.extensionUri, 'media');
     this.panel = vscode.window.createWebviewPanel('sessionHub.dashboard', 'Session Hub', vscode.ViewColumn.Active, {
       enableScripts: true,
+      enableCommandUris: ['workbench.action.openSettings'], // solo los enlaces a ajustes (ver dashboard.js)
       retainContextWhenHidden: true,
       localResourceRoots: [media],
     });
@@ -49,7 +50,12 @@ class Dashboard {
         await this.handlers.toggleFollow(m.kind, m.id);
         return this.update(await this.handlers.getState());
       }
-      if (m.type === 'command') return vscode.commands.executeCommand(m.command, ...(m.args || []));
+      // El panel solo puede pedir comandos de Session Hub; los del editor que devuelven objetos grandes
+      // (p. ej. abrir ajustes) congelarían la ventana al serializar la respuesta.
+      if (m.type === 'command') {
+        if (typeof m.command !== 'string' || !m.command.startsWith('sessionHub.')) return;
+        return vscode.commands.executeCommand(m.command, ...(m.args || []));
+      }
     } catch (err) {
       this.post({ type: 'error', error: err.message, context: m.type });
     }

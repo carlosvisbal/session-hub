@@ -43,8 +43,7 @@ button:focus-visible, [tabindex]:focus-visible, input:focus-visible, select:focu
 .page .read { padding-left: 10px }
 .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 28px }
 .cols .share, .cols .offer { margin: 6px 0 }
-.people { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px }
-.people .person { border: 1px solid var(--vscode-panel-border); border-radius: 6px; align-items: start; align-content: start }
+.people { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; align-items: start }
 .badge.muted-badge { background: none; color: var(--vscode-descriptionForeground); font-weight: 400; padding: 0 }
 .badge.warn-badge { background: var(--vscode-editorWarning-foreground, #cca700); color: var(--vscode-editor-background) }
 .badge.err-badge { background: var(--vscode-errorForeground); color: var(--vscode-editor-background) }
@@ -167,3 +166,55 @@ button.danger { color: var(--vscode-errorForeground) }
 .tag.archived { color: var(--vscode-editorWarning-foreground, #cca700) }
 .banner-inline { margin: 6px 0; padding: 6px 10px; border-radius: 4px; background: var(--vscode-textBlockQuote-background); font-size: 12px }
 .list-pane .lbox .lsearch { margin: 4px 12px 6px; width: calc(100% - 24px) }
+
+/* Personas del equipo: filtros y tarjetas */
+.fchips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px }
+.fchip { background: transparent; border: 1px solid var(--vscode-panel-border); border-radius: 14px; padding: 2px 10px; color: var(--vscode-foreground) }
+.fchip:hover { background: var(--vscode-list-hoverBackground) }
+.fchip.on { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border-color: transparent }
+.fchip .n { opacity: .75; margin-left: 2px }
+.pcard { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px 10px; border: 1px solid var(--vscode-panel-border); border-radius: 8px; background: var(--vscode-sideBar-background, var(--vscode-editor-background)); transition: border-color .12s, box-shadow .12s }
+.pcard.clickable { cursor: pointer }
+.pcard.clickable:hover, .pcard.clickable:focus-visible { border-color: var(--vscode-focusBorder); box-shadow: 0 1px 6px color-mix(in srgb, var(--vscode-focusBorder) 25%, transparent) }
+.pcard.self { border-style: dashed }
+.pcard.offline .avatar { filter: grayscale(.7); opacity: .7 }
+.pcard.blocked { opacity: .7 }
+.phead { display: flex; align-items: center; gap: 10px }
+.avatar { position: relative; flex: none; width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 14px; letter-spacing: .02em; color: #fff; background: hsl(var(--h) 55% 42%) }
+.presence { position: absolute; right: -1px; bottom: -1px; width: 11px; height: 11px; border-radius: 50%; background: var(--vscode-disabledForeground, #888); border: 2px solid var(--vscode-sideBar-background, var(--vscode-editor-background)) }
+.presence.on { background: var(--vscode-testing-iconPassed, #3fb950) }
+.who { flex: 1; min-width: 0 }
+.pname { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.star { font-size: 16px }
+.pbadges { display: flex; flex-wrap: wrap; gap: 4px }
+.badge-soft { font-size: 11px; padding: 1px 7px; border-radius: 10px; background: var(--vscode-badge-background); color: var(--vscode-badge-foreground) }
+.badge-soft.warn { background: color-mix(in srgb, var(--vscode-editorWarning-foreground, #cca700) 25%, transparent); color: var(--vscode-foreground) }
+.badge-soft.err { background: color-mix(in srgb, var(--vscode-errorForeground) 22%, transparent); color: var(--vscode-foreground) }
+.badge-soft.seen { background: color-mix(in srgb, var(--vscode-textLink-foreground) 20%, transparent); color: var(--vscode-foreground) }
+.pblock { display: flex; flex-direction: column; gap: 4px }
+.plabel { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--vscode-descriptionForeground) }
+.prow { font-size: 12px; padding: 4px 8px; border-radius: 4px; background: var(--vscode-textBlockQuote-background) }
+.prow .dot { width: 7px; height: 7px; margin-right: 5px; vertical-align: middle }
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.pfoot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-top: 8px; border-top: 1px solid var(--vscode-panel-border) }
+.pfoot .spacer { flex: 1 }
+.small-btn { font-size: 12px; padding: 3px 9px }
+button.link.small { font-size: 11px; padding: 2px 4px }
+.pfp { font-size: 11px; font-family: var(--vscode-editor-font-family) }
+.vscode-high-contrast .pcard { border-color: var(--vscode-contrastBorder, var(--vscode-panel-border)) }
+@media (prefers-reduced-motion: reduce) { .pcard { transition: none } }
+
+/* Pestaña Respaldo */
+.bsum { display: grid; grid-template-columns: repeat(3, minmax(110px, auto)) 1fr; gap: 10px; margin: 8px 0 4px }
+.bstat { border: 1px solid var(--vscode-panel-border); border-radius: 8px; padding: 10px 12px; background: var(--vscode-sideBar-background, var(--vscode-editor-background)) }
+.bstat .bnum { font-size: 22px; font-weight: 700; line-height: 1.1 }
+.bar { height: 6px; border-radius: 3px; background: var(--vscode-input-background); margin: 6px 0 4px; overflow: hidden }
+.bar span { display: block; height: 100%; background: var(--vscode-progressBar-background, var(--vscode-button-background)) }
+.brow { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 9px 12px; border: 1px solid var(--vscode-panel-border); border-radius: 6px; margin: 6px 0; background: var(--vscode-sideBar-background, var(--vscode-editor-background)) }
+.bmain { min-width: 0; display: flex; flex-direction: column; gap: 3px }
+.btitle { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.bacts { display: flex; gap: 6px; align-items: center; flex: none }
+.tag.ok { color: var(--vscode-testing-iconPassed, #3fb950) }
+.bsettings { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 8px }
+.bset { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--vscode-panel-border); border-radius: 6px }
+@media (max-width: 800px) { .bsum { grid-template-columns: 1fr 1fr } .brow { flex-direction: column; align-items: stretch } }

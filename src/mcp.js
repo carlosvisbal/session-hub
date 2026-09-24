@@ -18,16 +18,16 @@ const explainWith = (t) => (result, peer) =>
   Array.isArray(result) && !result.length
     ? { resultado: [], nota: peer ? t('Sin resultados de {v1}.', { v1: peer }) : t('No hay compañeros en línea en este momento (usa list_peers para ver quién está conectado), o no tienen nada compartido contigo.') }
     : result;
-const peer = z
-  .string()
-  .optional()
-  .describe('De quién leer: nombre del compañero (ver list_peers), "yo" para mis sesiones o "todos". Vacío = todos los compañeros menos yo');
-const since = z.string().optional().describe('Desde cuándo: ISO 8601 o relativo como "30m", "2h", "3d"');
-const project = z.string().optional().describe('Proyecto: su projectKey (sin ambigüedad) o el nombre tal como lo comparte ese compañero (ver list_peers)');
-
 export function createMcpServer(team, software, origin = { via: 'mcp' }, t = (x) => x) {
   const notice = '\n' + t('Session Hub {v1} es software libre ({v2}); código fuente: {v3}', { v1: software.version, v2: software.license, v3: software.source });
   const explain = explainWith(t);
+  const peer = z
+    .string()
+    .optional()
+    .describe(t('De quién leer: nombre del compañero (ver list_peers), "yo" para mis sesiones o "todos". Vacío = todos los compañeros menos yo'));
+  const since = z.string().optional().describe(t('Desde cuándo: ISO 8601 o relativo como "30m", "2h", "3d"'));
+  const project = z.string().optional().describe(t('Proyecto: su projectKey (sin ambigüedad) o el nombre tal como lo comparte ese compañero (ver list_peers)'));
+
   const server = new McpServer({ name: 'session-hub', version: software.version }, { instructions: t(INSTRUCTIONS) + notice });
 
   server.registerTool(
@@ -60,10 +60,15 @@ export function createMcpServer(team, software, origin = { via: 'mcp' }, t = (x)
         project,
         source: z.enum(['claude-code', 'cursor']).optional(),
         since,
-        limit: z.number().int().min(0).default(0).describe('0 = todas'),
+        limit: z.number().int().min(0).default(0).describe(t('0 = todas')),
+        origen: z.enum(['todo', 'respaldo']).default('todo').describe(t('"respaldo" = solo las que vienen del respaldo (el original ya no existe) o de copias locales de compañeros desconectados')),
       },
     },
-    async (args) => json(explain(await team.listSessions(args, origin), args.peer)),
+    async ({ origen, ...args }) => {
+      const all = await team.listSessions(args, origin);
+      const list = origen === 'respaldo' ? all.filter((s) => s.archived || s.copy) : all;
+      return json(explain(list, args.peer));
+    },
   );
 
   server.registerTool(
@@ -73,10 +78,10 @@ export function createMcpServer(team, software, origin = { via: 'mcp' }, t = (x)
       description: t('Lee una sesión COMPLETA: todos los mensajes, en orden y sin recortar ninguno. ' +
         'Opcional: offset y limit para leerla por partes (si la respuesta trae siguiente_offset, sigue desde ahí).'),
       inputSchema: {
-        id: z.string().describe('Id de la sesión, p.ej. "claude:…" o "cursor:…"'),
-        peer: peer.describe('Dueño de la sesión, si lo sabes (acelera la búsqueda)'),
-        offset: z.number().int().min(0).default(0).describe('Primer mensaje (0 = el inicio)'),
-        limit: z.number().int().min(0).default(0).describe('0 = hasta el final, sin límite'),
+        id: z.string().describe(t('Id de la sesión, p.ej. "claude:…" o "cursor:…"')),
+        peer: peer.describe(t('Dueño de la sesión, si lo sabes (acelera la búsqueda)')),
+        offset: z.number().int().min(0).default(0).describe(t('Primer mensaje (0 = el inicio)')),
+        limit: z.number().int().min(0).default(0).describe(t('0 = hasta el final, sin límite')),
       },
     },
     async ({ id, peer, offset, limit }) => {
@@ -99,7 +104,7 @@ export function createMcpServer(team, software, origin = { via: 'mcp' }, t = (x)
     {
       title: t('Buscar en sesiones'),
       description: t('Busca un tema o texto (endpoint, modelo, archivo, funcionalidad…) en las conversaciones de IA del equipo. Úsalo cuando pregunten por la sesión, el doc o la conversación de un compañero sobre algo; luego lee la sesión con get_session.'),
-      inputSchema: { query: z.string().min(2), peer, project, limit: z.number().int().min(0).default(0).describe('0 = todos los resultados') },
+      inputSchema: { query: z.string().min(2), peer, project, limit: z.number().int().min(0).default(0).describe(t('0 = todos los resultados')) },
     },
     async ({ query, ...q }) => json(explain(await team.search(query, q, origin), q.peer)),
   );
@@ -121,11 +126,11 @@ export function createMcpServer(team, software, origin = { via: 'mcp' }, t = (x)
       description: t('Envía un mensaje de texto firmado a UN compañero. Úsalo solo si el usuario te lo pide, y muéstrale el texto. ' +
         'Llega a la bandeja de esa persona, que decide si pasárselo a su IA; no ejecuta nada en su equipo. Si está desconectada, queda en cola hasta 24 h.'),
       inputSchema: {
-        to: z.string().optional().describe('Destinatario: nombre, huella o id (ver list_peers). Se puede omitir si reply_to está presente'),
-        text: z.string().min(1).describe('El mensaje, claro y autocontenido (qué cambió, qué se necesita, dónde mirar)'),
-        to_session: z.string().optional().describe('Sesión del destinatario a la que va dirigido (ver list_agents), si aplica'),
-        about_session: z.string().optional().describe('Sesión tuya o del equipo que da contexto (el destinatario puede leerla con get_session)'),
-        reply_to: z.string().optional().describe('Id de un mensaje recibido al que respondes (ver check_inbox)'),
+        to: z.string().optional().describe(t('Destinatario: nombre, huella o id (ver list_peers). Se puede omitir si reply_to está presente')),
+        text: z.string().min(1).describe(t('El mensaje, claro y autocontenido (qué cambió, qué se necesita, dónde mirar)')),
+        to_session: z.string().optional().describe(t('Sesión del destinatario a la que va dirigido (ver list_agents), si aplica')),
+        about_session: z.string().optional().describe(t('Sesión tuya o del equipo que da contexto (el destinatario puede leerla con get_session)')),
+        reply_to: z.string().optional().describe(t('Id de un mensaje recibido al que respondes (ver check_inbox)')),
       },
     },
     async ({ to, text, to_session, about_session, reply_to }) => {
