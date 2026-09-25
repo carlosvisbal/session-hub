@@ -1,7 +1,7 @@
 {
   "name": "session-hub",
   "displayName": "Session Hub",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "%ext.description%",
   "publisher": "carlosvisbal",
   "author": {
@@ -748,6 +748,7 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@vscode/vsce": "^4.0.0",
     "acorn": "^8.18.0",
     "jsdom": "^26.1.0"
   }
