@@ -36,19 +36,25 @@ Session Hub es como una **ventana compartida** entre los editores de tu equipo. 
 ## Antes de empezar
 
 - [ ] **Cursor o VS Code** instalado.
-- [ ] **El archivo `session-hub.vsix`**. Descárgalo desde la [página de versiones](https://github.com/carlosvisbal/session-hub/releases/latest).
-- [ ] **Estar en la misma red** que tus compañeros: la oficina o el mismo Wi-Fi. Para trabajar desde casa, mira las [preguntas frecuentes](#preguntas-frecuentes).
+- [ ] **Estar en la misma red** que tus compañeros: la oficina o el mismo Wi-Fi. Para trabajar desde casa o desde redes distintas, mira [Trabajar desde redes distintas](REMOTE.es.md).
 
 Si eres la primera persona del equipo, tú creas el equipo. Si no, alguien del equipo te pasará una **invitación**: un texto largo que empieza por `SH2-`.
 
 ## Instalar la extensión
 
+**Desde la tienda (recomendado)**, así se actualiza sola:
+
 1. Abre **Cursor** (o VS Code).
+2. Abre la vista de Extensiones con `Ctrl+Shift+X` (en Mac, `Cmd+Shift+X`).
+3. Busca **Session Hub** (editor *carlosvisbal*) y pulsa **Instalar**. VS Code la instala desde el [Marketplace](https://marketplace.visualstudio.com/items?itemName=carlosvisbal.session-hub); Cursor, desde [Open VSX](https://open-vsx.org/extension/carlosvisbal/session-hub).
+
+**Desde el archivo**, si tu empresa bloquea las tiendas o quieres una versión concreta:
+
+1. Descarga `session-hub.vsix` desde la [página de versiones](https://github.com/carlosvisbal/session-hub/releases/latest).
 2. Abre la paleta de comandos con `Ctrl+Shift+P` (en Mac, `Cmd+Shift+P`).
-3. Escribe **Install from VSIX** y elige *Extensions: Install from VSIX…*.
-4. Elige el archivo `session-hub.vsix`.
-5. Ejecuta **Developer: Reload Window** (o cierra y vuelve a abrir el editor).
-6. En la barra lateral aparece un icono de **ondas azules**: es Session Hub.
+3. Escribe **Install from VSIX**, elige *Extensions: Install from VSIX…* y luego el archivo `session-hub.vsix`.
+
+En los dos casos, si estás actualizando, cierra **todas** las ventanas del editor y vuelve a abrirlo. En la barra lateral aparece un icono de **ondas azules**: es Session Hub.
 
 Si abajo, en la barra de estado, dice *Session Hub · 0 · 0 compartidos*, ya está funcionando.
 

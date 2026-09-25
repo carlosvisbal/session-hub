@@ -10,6 +10,8 @@ Share Claude Code and Cursor sessions across your team, message each other, and 
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
 [![Release](https://img.shields.io/github/v/release/carlosvisbal/session-hub?color=1f5fd6)](https://github.com/carlosvisbal/session-hub/releases)
 [![CI](https://github.com/carlosvisbal/session-hub/actions/workflows/ci.yml/badge.svg)](https://github.com/carlosvisbal/session-hub/actions/workflows/ci.yml)
+[![VS Code Marketplace](https://img.shields.io/visual-studio-marketplace/v/carlosvisbal.session-hub?label=VS%20Code%20Marketplace&color=007ACC)](https://marketplace.visualstudio.com/items?itemName=carlosvisbal.session-hub)
+[![Open VSX](https://img.shields.io/open-vsx/v/carlosvisbal/session-hub?label=Open%20VSX&color=a60ee5)](https://open-vsx.org/extension/carlosvisbal/session-hub)
 ![VS Code](https://img.shields.io/badge/VS%20Code-%E2%9C%93-007ACC?logo=visualstudiocode&logoColor=white)
 ![Cursor](https://img.shields.io/badge/Cursor-%E2%9C%93-000000)
 ![MCP](https://img.shields.io/badge/MCP-server-7aa7f0)
@@ -58,11 +60,14 @@ Always under your control: nothing is shared until you choose, it's read‑only,
 
 ## Quick start
 
+Search **Session Hub** in the Extensions view, or:
+
 ```bash
-cursor --install-extension session-hub.vsix     # or: code --install-extension session-hub.vsix
+code --install-extension carlosvisbal.session-hub      # VS Code — from the Marketplace
+cursor --install-extension carlosvisbal.session-hub    # Cursor — from Open VSX
 ```
 
-Download `session-hub.vsix` from the [latest release](https://github.com/carlosvisbal/session-hub/releases/latest). No Node.js install needed — the hub runs on the editor's own runtime.
+It's on the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=carlosvisbal.session-hub) and on [Open VSX](https://open-vsx.org/extension/carlosvisbal/session-hub) (Cursor, VSCodium), and updates itself from there. Prefer a file? Download `session-hub.vsix` from the [latest release](https://github.com/carlosvisbal/session-hub/releases/latest) and run `code --install-extension session-hub.vsix` (or `cursor …`). No Node.js install needed — the hub runs on the editor's own runtime.
 
 1. **Create a team** in the Session Hub sidebar (first person only).
 2. **Invite** — copies a one‑time `SH2-…` code (valid 48 h). Any member can invite.

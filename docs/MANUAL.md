@@ -38,19 +38,25 @@ Session Hub is like a **shared window** between your team's editors: everyone ca
 ## Before you start
 
 - [ ] **Cursor or VS Code** installed.
-- [ ] **The `session-hub.vsix` file** — download it from the [releases page](https://github.com/carlosvisbal/session-hub/releases/latest).
-- [ ] **Be on the same network** as your teammates (office or same Wi‑Fi). To work from home see the [FAQ](#faq).
+- [ ] **Be on the same network** as your teammates (office or same Wi‑Fi). To work from home or from different networks see [Working across networks](REMOTE.md).
 
 If you're the first person on the team, you create the team. Otherwise, a teammate will send you an **invitation**: a long text starting with `SH2-`.
 
 ## Install the extension
 
+**From the store (recommended)** — it updates itself:
+
 1. Open **Cursor** (or VS Code).
+2. Open the Extensions view: `Ctrl+Shift+X` (Mac: `Cmd+Shift+X`).
+3. Search **Session Hub** (publisher *carlosvisbal*) and click **Install**. VS Code installs it from the [Marketplace](https://marketplace.visualstudio.com/items?itemName=carlosvisbal.session-hub); Cursor, from [Open VSX](https://open-vsx.org/extension/carlosvisbal/session-hub).
+
+**From the file** — if your company blocks the stores, or to try a specific version:
+
+1. Download `session-hub.vsix` from the [releases page](https://github.com/carlosvisbal/session-hub/releases/latest).
 2. Open the command palette: `Ctrl+Shift+P` (Mac: `Cmd+Shift+P`).
-3. Type **Install from VSIX** and choose *Extensions: Install from VSIX…*.
-4. Pick `session-hub.vsix`.
-5. Run **Developer: Reload Window** (or restart the editor).
-6. A **blue waves** icon appears in the left sidebar: that's Session Hub.
+3. Type **Install from VSIX**, choose *Extensions: Install from VSIX…* and pick `session-hub.vsix`.
+
+Either way: if you're updating, close **all** editor windows and reopen. A **blue waves** icon appears in the left sidebar: that's Session Hub.
 
 The status bar (bottom) shows *Session Hub · 0 · 0 compartidos* (*0 shared*) — it's working.
 
