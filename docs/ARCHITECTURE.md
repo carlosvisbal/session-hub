@@ -87,7 +87,7 @@ The receiver verifies the chain **and** that the chain's member key equals the c
 | `revoke` | any → all | signed revocation, verified before applying |
 | `profile` | any → all | updated signed name/role |
 
-**Relay.** When hole‑punching fails (`HOLEPUNCH_*`, `CANNOT_HOLEPUNCH`, `REMOTE_NOT_HOLEPUNCHABLE`) and `relay` is configured, the connection is retried through a blind relay (`relayThrough`). The relay pairs two UDX streams and forwards encrypted bytes; the Noise session stays end‑to‑end between the two hubs.
+**Relay.** When hole‑punching fails (`HOLEPUNCH_*`, `CANNOT_HOLEPUNCH`, `REMOTE_NOT_HOLEPUNCHABLE`) and `relay` is configured, the connection is retried through a blind relay (`relayThrough`). The relay pairs two UDX streams and forwards encrypted bytes; the Noise session stays end‑to‑end between the two hubs. User‑facing guide: [Working across networks](REMOTE.md).
 
 ## Messages
 

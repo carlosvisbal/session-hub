@@ -107,7 +107,7 @@ npm run infra -- --host 203.0.113.10     # imprime los ajustes que pega cada com
 npm run infra -- --public                # solo relay, sobre la red pública
 ```
 
-Las VPN (WireGuard, Tailscale, la de la empresa) se detectan y anuncian solas. Si una conexión falla por una política de red (UDP bloqueado, NAT estricto, relay inalcanzable…), Session Hub te dice **por qué** y **Copiar informe de conexión** genera un mensaje listo para enviar a TI.
+Guía completa: **[Trabajar desde redes distintas](docs/REMOTE.es.md)**. Las VPN (WireGuard, Tailscale, la de la empresa) se detectan y anuncian solas. Si una conexión falla por una política de red (UDP bloqueado, NAT estricto, relay inalcanzable…), Session Hub te dice **por qué** y **Copiar informe de conexión** genera un mensaje listo para enviar a TI.
 
 **Idioma:** la interfaz sigue el idioma del editor (español o inglés); se puede fijar con `sessionHub.language`.
 

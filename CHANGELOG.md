@@ -2,6 +2,12 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versiones con [SemVer](https://semver.org/lang/es/).
 
+## [Sin publicar]
+
+### Documentación
+- Guía **[Trabajar desde redes distintas](docs/REMOTE.es.md)** (y en inglés): modos `lan`/`public`/`private`, servidor propio con `npm run infra`, relay, qué pasa al conectar, avisos de *Estado* y qué pedirle a TI. Enlazada desde el manual, el README y la arquitectura.
+- Ayuda de la extensión: nuevas secciones **Recorrido del panel**, **Hooks** (qué instala «Instalar hooks», qué hace en cada turno y cómo quitarlo), **Ajustes** (todos los `sessionHub.*`) y una sección de red ampliada.
+
 ## [0.9.0] — 2026-09-25
 
 ### Añadido

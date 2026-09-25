@@ -265,7 +265,7 @@ Opening the port — **Windows:** allow on *Private networks* when prompted. **m
 
 **Can they change my code?** No. Session Hub only reads.
 
-**Does it work from home?** Yes. With a company VPN it works as in the office. Without VPN, set `sessionHub.network` to **public** (over the internet, encrypted) or **private** (your own server, started with `npm run infra`). If something fails because of a network policy, click **Copy connection report** in the panel's *Status* section and send it to IT: it says what's failing, why and what to allow.
+**Does it work from home?** Yes. With a company VPN it works as in the office. The full guide — modes, your own server, the relay and what to ask IT — is in [Working across networks](REMOTE.md). Without VPN, set `sessionHub.network` to **public** (over the internet, encrypted) or **private** (your own server, started with `npm run infra`). If something fails because of a network policy, click **Copy connection report** in the panel's *Status* section and send it to IT: it says what's failing, why and what to allow.
 
 **Cursor and VS Code at the same time?** For now, better just one: each editor has its own identity and both would use the same port. If you need both, give one a different `sessionHub.port` and `sessionHub.dhtPort` and invite it from the other (you'll appear twice in the team). The plan for them to share one identity and let their chats talk is in [Cursor and VS Code on the same computer](SAME-MACHINE.md).
 

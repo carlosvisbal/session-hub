@@ -107,7 +107,7 @@ npm run infra -- --host 203.0.113.10     # prints the settings every teammate pa
 npm run infra -- --public                # relay only, on the public network
 ```
 
-VPNs (WireGuard, Tailscale, corporate) are detected and advertised automatically. If a connection fails because of a network policy (UDP blocked, strict NAT, unreachable relay…), Session Hub tells you **why** and **Copy connection report** produces a ready‑to‑send message for IT.
+Full guide: **[Working across networks](docs/REMOTE.md)**. VPNs (WireGuard, Tailscale, corporate) are detected and advertised automatically. If a connection fails because of a network policy (UDP blocked, strict NAT, unreachable relay…), Session Hub tells you **why** and **Copy connection report** produces a ready‑to‑send message for IT.
 
 **Language:** the interface follows the editor language (Spanish or English); force it with `sessionHub.language`.
 
