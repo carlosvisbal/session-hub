@@ -6,6 +6,10 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); v
 
 ### Documentación
 - Instalación desde el **Marketplace de VS Code** y **Open VSX** (Cursor) en el README y el manual, con badges; el `.vsix` de GitHub queda como alternativa.
+- GIF de demostración arriba del README (panel real con datos de ejemplo).
+
+### Corregido
+- En inglés, «Hooks installed in Claude Code **y** Cursor»: la «y» que une las herramientas ahora se traduce (panel, *Estado* y avisos).
 
 ## [0.9.1] — 2026-09-25
 

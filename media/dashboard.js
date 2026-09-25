@@ -241,7 +241,7 @@
     const list = state.conversations || [];
     const hk = state.hooks || {};
     const hookLine = hk.any
-      ? `<span class="ok-txt">✓ ${T('Hooks instalados en {v1}', { v1: [hk.claude && 'Claude Code', hk.cursor && 'Cursor'].filter(Boolean).join(' y ') })}</span> ${cmd('sessionHub.removeHooks', T('Quitar'), 'link small')}`
+      ? `<span class="ok-txt">✓ ${T('Hooks instalados en {v1}', { v1: [hk.claude && 'Claude Code', hk.cursor && 'Cursor'].filter(Boolean).join(T(' y ')) })}</span> ${cmd('sessionHub.removeHooks', T('Quitar'), 'link small')}`
       : `<span class="warn-txt">! ${T('Sin hooks: tu IA no continuará sola')}</span> ${cmd('sessionHub.installHooks', T('Instalar hooks'), 'link')}`;
     const row = (c) => {
       const left = c.status === 'active' && c.expiresAt ? Math.max(0, Math.round((Date.parse(c.expiresAt) - Date.now()) / 60000)) : null;

@@ -18,7 +18,7 @@ Comparte las sesiones de Claude Code y Cursor con tu equipo, escríbanse entre u
 
 [English](README.md) · **Español**
 
-<img src="media/screenshot.png" alt="Panel de Session Hub: personas del equipo, quién leyó mis sesiones y la sesión completa de un compañero" width="900">
+<img src="media/demo.gif" alt="Session Hub en 20 segundos: sesiones del equipo por proyecto, la conversación completa de un compañero con su IA, tu IA leyéndola por MCP y dos IA conversando solas" width="900">
 
 <sub>Datos de demostración.</sub>
 

@@ -855,7 +855,7 @@ function healthChecks(d, mcp, claude) {
   if (d.software?.version && d.software.version !== VERSION) add('error', t('El hub corre la versión {v1} y la extensión es la {v2}', { v1: d.software.version, v2: VERSION }), 'Pulsa "Reiniciar" en el aviso, o cierra todas las ventanas del editor y vuelve a abrirlo.');
   const net = d.network;
   const hk = hooksStatus();
-  if (hk.any) add('ok', t('Conversaciones automáticas: hooks instalados en {v1}', { v1: [hk.claude && 'Claude Code', hk.cursor && 'Cursor'].filter(Boolean).join(' y ') }));
+  if (hk.any) add('ok', t('Conversaciones automáticas: hooks instalados en {v1}', { v1: [hk.claude && 'Claude Code', hk.cursor && 'Cursor'].filter(Boolean).join(t(' y ')) }));
   if (claude === 'ok') add('ok', 'Claude Code conectado a Session Hub');
   if (claude === 'stale') add('error', 'Claude Code apunta a otro token o puerto: no puede consultar Session Hub', 'Pulsa "Conectar Claude Code" para actualizarlo.');
   if (claude === 'missing') add('warn', 'Claude Code no está conectado a Session Hub', 'Si usas Claude Code, pulsa "Conectar Claude Code".');
@@ -1149,7 +1149,7 @@ async function installHooks(ask) {
     return false;
   }
   if (ask) {
-    const ok = await warn(t('Para que las conversaciones automáticas funcionen, Session Hub agrega un hook en {v1} que se ejecuta al terminar cada turno de tu IA. Solo actúa en las conversaciones que tú aceptes; se puede quitar cuando quieras. ¿Instalar?', { v1: targets.join(' y ') }), { modal: true }, 'Instalar');
+    const ok = await warn(t('Para que las conversaciones automáticas funcionen, Session Hub agrega un hook en {v1} que se ejecuta al terminar cada turno de tu IA. Solo actúa en las conversaciones que tú aceptes; se puede quitar cuando quieras. ¿Instalar?', { v1: targets.join(t(' y ')) }), { modal: true }, 'Instalar');
     if (!ok) return false;
   }
   try {
@@ -1172,7 +1172,7 @@ async function installHooks(ask) {
       c.hooks.stop.push({ command, timeout: 150, loop_limit: 50 });
       writeJsonSafe(CURSOR_HOOKS, c);
     }
-    if (ask) info(t('Hooks instalados en {v1}. Abre una sesión nueva de tu IA para que los cargue.', { v1: targets.join(' y ') }));
+    if (ask) info(t('Hooks instalados en {v1}. Abre una sesión nueva de tu IA para que los cargue.', { v1: targets.join(t(' y ')) }));
     return true;
   } catch (err) {
     error(t('No pude instalar los hooks: {v1}', { v1: err.message }));

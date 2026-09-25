@@ -18,7 +18,7 @@ Share Claude Code and Cursor sessions across your team, message each other, and 
 
 **English** · [Español](README.es.md)
 
-<img src="media/screenshot.png" alt="Session Hub panel: team members, who read my sessions, and a teammate's complete AI session" width="900">
+<img src="media/demo.gif" alt="Session Hub in 20 seconds: team sessions by project, a teammate's full AI conversation, your AI reading it through MCP, and two AIs holding an automatic conversation" width="900">
 
 <sub>Demo data. Interface in English and Spanish.</sub>
 
