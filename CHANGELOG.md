@@ -2,7 +2,7 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versiones con [SemVer](https://semver.org/lang/es/).
 
-## [Sin publicar]
+## [0.9.2] — 2026-09-25
 
 ### Documentación
 - Instalación desde el **Marketplace de VS Code** y **Open VSX** (Cursor) en el README y el manual, con badges; el `.vsix` de GitHub queda como alternativa.
