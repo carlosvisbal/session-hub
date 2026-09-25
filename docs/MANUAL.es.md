@@ -35,7 +35,7 @@ Session Hub es como una **ventana compartida** entre los editores de tu equipo. 
 
 ## Antes de empezar
 
-- [ ] **Cursor o VS Code** instalado.
+- [ ] **Cursor o VS Code** instalado. Funciona en Windows, macOS y Linux (x64 y arm64). En Linux hace falta glibc 2.33 o superior (Ubuntu 22.04+, Debian 12+, Fedora 34+); no funciona en Alpine (musl) ni en Linux de 32 bits. En Ubuntu, mejor VS Code desde el paquete .deb que desde el Snap (ver [Si algo no funciona](#si-algo-no-funciona)). Todavía no se probó en Remote-SSH, WSL ni Dev Containers.
 - [ ] **Estar en la misma red** que tus compañeros: la oficina o el mismo Wi-Fi. Para trabajar desde casa o desde redes distintas, mira [Trabajar desde redes distintas](REMOTE.es.md).
 
 Si eres la primera persona del equipo, tú creas el equipo. Si no, alguien del equipo te pasará una **invitación**: un texto largo que empieza por `SH2-`.
@@ -258,6 +258,7 @@ Primer paso: `Ctrl+Shift+P` → **Session Hub: Diagnóstico**. Revisa todo y te 
 | La invitación venció o ya se usó | Pide una nueva |
 | Mi IA no encuentra Session Hub | Mira en *Estado* la línea *Tu IA puede consultar Session Hub (MCP)*. Si sale en rojo, pulsa **Reiniciar** o actualiza la extensión. En Claude Code, usa *Conectar Claude Code* |
 | La IA busca en otro lado (otros documentos, la web) | Nombra la herramienta: *"Busca en Session Hub la sesión de Carlos sobre firmas"* |
+| **Ubuntu:** *"no puede arrancar… módulos de cifrado"* o `GLIBC_2.33 not found` en la salida | Pasa con **VS Code instalado como Snap** (desde *Ubuntu Software*): trae librerías de Ubuntu 20.04. Session Hub intenta usar el Node del sistema; instala **Node.js 22.5 o superior** (por ejemplo desde [nodejs.org](https://nodejs.org) o con `nvm`), o instala VS Code desde el [paquete .deb de Microsoft](https://code.visualstudio.com/download), y vuelve a abrir el editor. En Linux hace falta glibc 2.33 o superior (Ubuntu 22.04+, Debian 12+, Fedora 34+) |
 
 Cómo abrir el puerto: en **Windows**, cuando pregunte, permite el acceso en *Redes privadas*. En **macOS**, *Ajustes → Red → Firewall* y permite el editor. En **Fedora**, `sudo firewall-cmd --add-port=49737/udp --permanent && sudo firewall-cmd --reload`.
 

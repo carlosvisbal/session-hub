@@ -48,9 +48,10 @@ export async function makeTeam(call, founder, joiner) {
 }
 
 // Estado compartido por todas las ventanas del "editor".
-export function createEditor({ appName = 'Visual Studio Code', settings = {}, storage }) {
+export function createEditor({ appName = 'Visual Studio Code', settings = {}, storage, token = 't' }) {
   const shared = {
     appName,
+    token, // token local de este editor (cada editor guarda el suyo)
     settings: { autoStart: false, notifyUpdates: false, notifyReads: false, notifyMessages: true, listSince: 'all', inboundMessages: 'hold', language: 'es', peers: [], redactExtra: [], excludedSessions: [], sharedProjects: [], paused: false, aiChat: 'auto', ...settings },
     gstate: new Map(),
     notices: [], // { kind, m, buttons }
@@ -121,7 +122,7 @@ export function createEditor({ appName = 'Visual Studio Code', settings = {}, st
             return shared.tabs;
           },
         },
-        createOutputChannel: () => ({ append() {}, appendLine() {}, show() {}, dispose() {} }),
+        createOutputChannel: () => (process.env.SHUB_TEST_OUTPUT ? { append: (x) => process.stderr.write(x), appendLine: (x) => process.stderr.write(x + '\n'), show() {}, dispose() {} } : { append() {}, appendLine() {}, show() {}, dispose() {} }), // SHUB_TEST_OUTPUT=1 muestra la salida
         createStatusBarItem: () => ({ show() {}, dispose() {} }),
         registerTreeDataProvider: () => ({ dispose() {} }),
         showInformationMessage: notify('info'),
@@ -174,7 +175,7 @@ export function createEditor({ appName = 'Visual Studio Code', settings = {}, st
       extensionPath: ROOT,
       extensionUri: { fsPath: ROOT },
       globalStorageUri: { fsPath: storage },
-      secrets: { get: async () => 't', store: async () => {} },
+      secrets: { get: async () => shared.token, store: async () => {} },
       globalState: { get: (k, d) => (shared.gstate.has(k) ? shared.gstate.get(k) : d), update: async (k, v) => shared.gstate.set(k, v) },
     });
     await cmds['sessionHub.start']();

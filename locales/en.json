@@ -839,5 +839,11 @@
  "💾 {v1} guardó una copia de tu sesión \"{v2}\" de {v3}": "💾 {v1} saved a copy of your session \"{v2}\" from {v3}",
  "🤝 Conversación automática con {v1} en marcha.": "🤝 Automatic conversation with {v1} is running.",
  "🤝 {v1} quiere que sus IA conversen solas ({v2} vueltas, {v3} min): \"{v4}\"": "🤝 {v1} wants your AIs to converse on their own ({v2} turns, {v3} min): \"{v4}\"",
- " y ": " and "
+ " y ": " and ",
+ "Node {v1} es anterior a 22.5": "Node {v1} is older than 22.5",
+ "[hub] el runtime del editor no sirve ({v1}); pruebo con el Node del sistema.": "[hub] the editor runtime can't be used ({v1}); trying the system Node.",
+ "Cómo arreglarlo": "How to fix it",
+ "Session Hub no puede arrancar: el runtime de este editor no sirve ({v1}). Suele pasar con VS Code instalado como Snap en Ubuntu o con un editor antiguo. Instala Node.js 22.5 o superior (o VS Code desde el paquete .deb de Microsoft) y vuelve a abrir el editor.": "Session Hub can't start: this editor's runtime can't be used ({v1}). This usually happens with VS Code installed as a Snap on Ubuntu, or with an old editor. Install Node.js 22.5 or later (or VS Code from Microsoft's .deb package) and reopen the editor.",
+ "no está instalado": "not installed",
+ "[hub] el Node del sistema tampoco sirve ({v1}).": "[hub] the system Node can't be used either ({v1})."
 }

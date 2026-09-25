@@ -2,6 +2,14 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versiones con [SemVer](https://semver.org/lang/es/).
 
+## [0.9.3] — 2026-09-25
+
+### Corregido
+- **Ubuntu con VS Code instalado como Snap:** el hub no arrancaba (`GLIBC_2.33 not found`), porque el Snap trae las librerías de Ubuntu 20.04. Ahora, antes de arrancar, Session Hub comprueba sin bloquear el editor que su runtime cargue los módulos de cifrado. Si no puede, usa el Node del sistema, con las variables originales y no las del Snap. Si tampoco hay uno que sirva, muestra un aviso con la solución en lugar del error técnico. Lo mismo vale para un editor antiguo con Node anterior a 22.5.
+
+### Documentación
+- Requisitos por plataforma en el manual: Linux con glibc 2.33 o superior; sin Alpine (musl) ni 32 bits; Remote-SSH, WSL y Dev Containers aún sin probar. Y cómo resolver el caso del Snap.
+
 ## [0.9.2] — 2026-09-25
 
 ### Documentación

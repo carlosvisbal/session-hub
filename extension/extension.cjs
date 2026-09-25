@@ -271,18 +271,74 @@ function writeHubConfig() {
 
 // Por defecto el hub corre con el runtime del propio editor (Cursor y VS Code traen Node 24,
 // con node:sqlite y los módulos de red). sessionHub.nodePath permite usar otro Node.
-function pickNode() {
-  const custom = cfg().get('nodePath');
-  const [maj, min] = process.versions.node.split('.').map(Number);
-  if (!custom && (maj > 22 || (maj === 22 && min >= 5))) return { cmd: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' }, label: t('runtime del editor (Node {v1})', { v1: process.versions.node }) };
-  const candidate = custom || 'node';
-  try {
-    const v = cp.execFileSync(candidate, ['--version'], { encoding: 'utf8', timeout: 5000 }).trim();
-    return { cmd: candidate, env: {}, label: `${candidate} ${v}` };
-  } catch {
-    output.appendLine(t(`No encontré "${candidate}"; uso el runtime del editor.`));
-    return { cmd: process.execPath, env: { ELECTRON_RUN_AS_NODE: '1' }, label: t('runtime del editor (Node {v1})', { v1: process.versions.node }) };
+// Antes se comprueba, sin bloquear el editor, que ese runtime cargue los módulos nativos:
+// VS Code instalado como Snap en Ubuntu trae la glibc de Ubuntu 20.04 (2.31) y sodium-native
+// pide 2.33; un VS Code antiguo trae Node < 22.5. Si no sirve, se prueba con el Node del
+// sistema; si tampoco, se avisa con la solución (runtimeProblem).
+let runtimeProblem = null;
+
+const run = (cmd, args, opts) =>
+  new Promise((resolve, reject) => cp.execFile(cmd, args, { encoding: 'utf8', ...opts }, (err, stdout, stderr) => (err ? reject(Object.assign(err, { stderr })) : resolve(stdout))));
+
+// Entorno para un Node del sistema: sin ELECTRON_RUN_AS_NODE (el proceso de extensiones del
+// editor ya la tiene) y, si el editor es el Snap de VS Code, con las variables originales que
+// el Snap cambió (GTK, GIO, locales…) y guardó como X_VSCODE_SNAP_ORIG.
+function hostEnv() {
+  const env = { ...process.env };
+  delete env.ELECTRON_RUN_AS_NODE;
+  for (const k of Object.keys(env)) {
+    if (!k.endsWith('_VSCODE_SNAP_ORIG')) continue;
+    const base = k.slice(0, -'_VSCODE_SNAP_ORIG'.length);
+    if (env[k]) env[base] = env[k];
+    else delete env[base];
+    delete env[k];
   }
+  return env;
+}
+
+// null si `node` carga los módulos nativos del hub; si no, el motivo en una línea.
+async function nativeProblem(node) {
+  try {
+    await run(node.cmd, ['-e', "require('sodium-native');require('udx-native')"], { cwd: ctx.extensionPath, env: node.env, timeout: 15000 });
+    return null;
+  } catch (err) {
+    // Tardar demasiado (p. ej. un antivirus escaneando los módulos) no prueba que falle: se arranca
+    // normal y, si de verdad falla, lo dirá el propio hub.
+    if (err.killed || err.signal) return null;
+    const msg = String(err.stderr || err.message || err);
+    return (msg.match(/GLIBC_[\d.]+'? not found/) || msg.match(/ERR_DLOPEN_FAILED/) || [msg.split('\n').find((l) => l.trim()) || 'error'])[0].trim();
+  }
+}
+
+async function pickNode() {
+  runtimeProblem = null;
+  const editor = { cmd: process.execPath, env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' }, label: t('runtime del editor (Node {v1})', { v1: process.versions.node }) };
+  const system = async (candidate) => {
+    const env = hostEnv();
+    try {
+      const v = (await run(candidate, ['--version'], { env, timeout: 5000 })).trim();
+      return { cmd: candidate, env, label: `${candidate} ${v}` };
+    } catch {
+      return null;
+    }
+  };
+  const custom = cfg().get('nodePath');
+  if (custom) {
+    const c = await system(custom);
+    if (c) return c;
+    output.appendLine(t('No encontré "{v1}"; uso el runtime del editor.', { v1: custom }));
+  }
+  const [maj, min] = process.versions.node.split('.').map(Number);
+  const modern = maj > 22 || (maj === 22 && min >= 5);
+  const editorProblem = modern ? await nativeProblem(editor) : t('Node {v1} es anterior a 22.5', { v1: process.versions.node });
+  if (!editorProblem) return editor;
+  output.appendLine(t('[hub] el runtime del editor no sirve ({v1}); pruebo con el Node del sistema.', { v1: editorProblem }));
+  const sys = !custom && (await system('node'));
+  const sysProblem = sys ? await nativeProblem(sys) : t('no está instalado');
+  if (!sysProblem) return sys;
+  output.appendLine(t('[hub] el Node del sistema tampoco sirve ({v1}).', { v1: sysProblem }));
+  runtimeProblem = editorProblem;
+  return editor;
 }
 
 // Un solo hub por usuario, compartido por todas las ventanas del editor: si ya hay uno mío
@@ -317,7 +373,7 @@ function startHub() {
       // porque el panel y el hub deben hablar la misma versión.
       if (who === 'mine') {
         const running = await hubVersion();
-        if (running && running.version !== VERSION && (await replaceHub(running))) return spawnHub();
+        if (running && running.version !== VERSION && (await replaceHub(running))) return await spawnHub();
         return attach();
       }
       if (who === 'other') {
@@ -325,7 +381,7 @@ function startHub() {
         error(`El puerto ${port()} lo está usando otro programa u otro Session Hub (con otra identidad). Cambia "sessionHub.port" o cierra ese programa.`, 'Cambiar puerto').then((p) => p && changePort());
         return;
       }
-      spawnHub();
+      await spawnHub();
     } finally {
       starting = null;
     }
@@ -429,12 +485,12 @@ function attach() {
   afterStart();
 }
 
-function spawnHub() {
+async function spawnHub() {
   const configFile = writeHubConfig();
-  const { cmd, env, label } = pickNode();
+  const { cmd, env, label } = await pickNode();
   const server = path.join(ctx.extensionPath, 'src', 'server.js');
   const proc = cp.spawn(cmd, ['--disable-warning=ExperimentalWarning', server], {
-    env: { ...process.env, ...env, SESSION_HUB_CONFIG: configFile, SESSION_HUB_EDITOR: editorName() },
+    env: { ...env, SESSION_HUB_CONFIG: configFile, SESSION_HUB_EDITOR: editorName() },
   });
   hubProc = proc;
   proc.stdout.on('data', (d) => output.append(d.toString().replace(/token=[^\s]+/g, 'token=***')));
@@ -448,7 +504,9 @@ function spawnHub() {
     updateStatus();
     mcpChanged.fire();
     if (dashboard?.visible) buildState().then((s) => dashboard.update(s));
-    if (code) error('Session Hub se detuvo. Revisa la salida "Session Hub".', 'Ver salida', 'Reiniciar').then((p) => (p === 'Ver salida' ? output.show() : p && startHub()));
+    if (code && runtimeProblem) {
+      error(t('Session Hub no puede arrancar: el runtime de este editor no sirve ({v1}). Suele pasar con VS Code instalado como Snap en Ubuntu o con un editor antiguo. Instala Node.js 22.5 o superior (o VS Code desde el paquete .deb de Microsoft) y vuelve a abrir el editor.', { v1: runtimeProblem }), 'Cómo arreglarlo', 'Ver salida').then((p) => (p === 'Ver salida' ? output.show() : p && vscode.env.openExternal(vscode.Uri.parse(lang() === 'en' ? 'https://github.com/carlosvisbal/session-hub/blob/main/docs/MANUAL.md#troubleshooting' : 'https://github.com/carlosvisbal/session-hub/blob/main/docs/MANUAL.es.md#si-algo-no-funciona'))));
+    } else if (code) error('Session Hub se detuvo. Revisa la salida "Session Hub".', 'Ver salida', 'Reiniciar').then((p) => (p === 'Ver salida' ? output.show() : p && startHub()));
   });
   output.appendLine(t(`[hub] iniciando con ${label}`));
   afterStart();

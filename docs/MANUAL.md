@@ -37,7 +37,7 @@ Session Hub is like a **shared window** between your team's editors: everyone ca
 
 ## Before you start
 
-- [ ] **Cursor or VS Code** installed.
+- [ ] **Cursor or VS Code** installed. Works on Windows, macOS and Linux (x64 and arm64). Linux needs glibc 2.33 or later (Ubuntu 22.04+, Debian 12+, Fedora 34+); it doesn't run on Alpine (musl) or 32‑bit Linux. On Ubuntu, prefer VS Code from the .deb package over the Snap (see [Troubleshooting](#troubleshooting)). Not yet tested with Remote‑SSH, WSL or Dev Containers.
 - [ ] **Be on the same network** as your teammates (office or same Wi‑Fi). To work from home or from different networks see [Working across networks](REMOTE.md).
 
 If you're the first person on the team, you create the team. Otherwise, a teammate will send you an **invitation**: a long text starting with `SH2-`.
@@ -260,6 +260,7 @@ First step: `Ctrl+Shift+P` → **Session Hub: Diagnóstico** (*Diagnostics*). It
 | Invitation expired or already used | Ask for a new one |
 | My AI can't find Session Hub | Check the *Status* line *Your AI can query Session Hub (MCP)*. If it's red, click **Restart** or update the extension. In Claude Code, use *Connect Claude Code* |
 | The AI looks elsewhere (other documents, the web) | Name the tool: *"Search Session Hub for Carlos's session about signatures"* |
+| **Ubuntu:** *"can't start… encryption modules"* or `GLIBC_2.33 not found` in the output | Happens with **VS Code installed as a Snap** (from *Ubuntu Software*): it ships Ubuntu 20.04 libraries. Session Hub tries the system Node instead; install **Node.js 22.5 or later** (e.g. from [nodejs.org](https://nodejs.org) or with `nvm`), or install VS Code from [Microsoft's .deb package](https://code.visualstudio.com/download), and reopen the editor. Linux needs glibc 2.33 or later (Ubuntu 22.04+, Debian 12+, Fedora 34+) |
 
 Opening the port — **Windows:** allow on *Private networks* when prompted. **macOS:** *Settings → Network → Firewall* → allow the editor. **Fedora:** `sudo firewall-cmd --add-port=49737/udp --permanent && sudo firewall-cmd --reload`.
 

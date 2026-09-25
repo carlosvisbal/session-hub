@@ -1,7 +1,7 @@
 {
   "name": "session-hub",
   "displayName": "Session Hub",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "description": "%ext.description%",
   "publisher": "carlosvisbal",
   "author": {
@@ -58,7 +58,7 @@
     "licenses": "node scripts/third-party-notices.mjs",
     "test": "node --test test/*.test.js",
     "test:e2e": "node test/e2e/two-hubs.mjs && node test/e2e/relay.mjs && node test/e2e/backup.mjs && node test/e2e/conversation.mjs",
-    "test:ext": "node test/panel.mjs && node test/extension/flows.mjs && node test/extension/cursor.mjs && node test/extension/upgrade.mjs && node test/extension/conversation.mjs",
+    "test:ext": "node test/panel.mjs && node test/extension/flows.mjs && node test/extension/cursor.mjs && node test/extension/upgrade.mjs && node test/extension/conversation.mjs && node test/extension/runtime.mjs",
     "infra": "node --disable-warning=ExperimentalWarning src/infra.js"
   },
   "contributes": {
