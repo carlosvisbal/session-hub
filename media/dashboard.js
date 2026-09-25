@@ -5,9 +5,9 @@
   const vscode = acquireVsCodeApi();
   const saved = vscode.getState() || {};
   let state = null;
-  const VIEWS = ['sessions', 'messages', 'team', 'privacy', 'backup', 'status'];
-  let ui = { view: VIEWS.includes(saved.view) ? saved.view : 'sessions', tab: saved.tab || 'team', filter: '', q: {}, peopleFilter: 'all', backupFilter: 'all', copyOwner: '', person: saved.person || '', group: ['project', 'person', 'none'].includes(saved.group) ? saved.group : 'project', collapsed: new Set(saved.collapsed || []), expanded: new Set(), selected: null, detail: null, loading: false, error: null, page: { reads: 0, team: 0, following: 0, mine: 0, inbox: 0 } };
-  const PAGE_SIZE = { ownbackup: 10, copieslist: 10, reads: 15, team: 15, following: 15, mine: 15, inbox: 10, sent: 10, people: 12, shares: 8, checks: 20, copyowners: 8, groups: 10 };
+  const VIEWS = ['sessions', 'messages', 'team', 'privacy', 'backup', 'status', 'help'];
+  let ui = { view: VIEWS.includes(saved.view) ? saved.view : 'sessions', tab: saved.tab || 'team', filter: '', q: {}, helpQ: '', peopleFilter: 'all', backupFilter: 'all', copyOwner: '', person: saved.person || '', group: ['project', 'person', 'none'].includes(saved.group) ? saved.group : 'project', collapsed: new Set(saved.collapsed || []), expanded: new Set(), selected: null, detail: null, loading: false, error: null, page: { reads: 0, team: 0, following: 0, mine: 0, inbox: 0 } };
+  const PAGE_SIZE = { convs: 6, ownbackup: 10, copieslist: 10, reads: 15, team: 15, following: 15, mine: 15, inbox: 10, sent: 10, people: 12, shares: 8, checks: 20, copyowners: 8, groups: 10 };
   const BOXES = {}; // listas con buscador: clave -> { items, render, text, empty, wrap }
 
   // Traducción (media/i18n.js + diccionario que inyecta la extensión). El idioma llega con el estado.
@@ -162,7 +162,8 @@
   function viewTabs() {
     const others = state.members.filter((m) => !m.self);
     const online = others.filter((m) => m.online).length;
-    const unread = state.inbox?.unread || 0;
+    const pendingConv = (state.conversations || []).filter((c) => c.status === 'invited' || c.status === 'confirm').length;
+    const unread = (state.inbox?.unread || 0) + pendingConv;
     const fresh = state.access.reads.filter((r) => Date.now() - Date.parse(r.at) < 600000).length;
     const bad = state.checks.filter((c) => c.status !== 'ok');
     const tabs = [
@@ -172,6 +173,7 @@
       { id: 'privacy', label: T('Privacidad'), badge: fresh || '', cls: '', title: fresh ? T('{v1} lectura(s) en los últimos 10 min', { v1: fresh }) : '' },
       { id: 'backup', label: T('Respaldo'), badge: state.archive ? (state.archive.own.list || []).length + (state.archive.copies.list || []).length || '' : '', cls: 'muted-badge', title: state.archive?.own?.onlyInBackup ? T('{v1} solo en el respaldo', { v1: state.archive.own.onlyInBackup }) : '' },
       { id: 'status', label: T('Estado'), badge: bad.length || '', cls: bad.some((c) => c.status === 'error') ? 'err-badge' : 'warn-badge', title: bad.length ? T('{v1} por revisar', { v1: bad.length }) : T('todo en orden') },
+      { id: 'help', label: `? ${T('Ayuda')}`, badge: '', cls: '', title: T('Instrucciones y explicaciones') },
     ];
     return tabs
       .map((x) => {
@@ -224,10 +226,59 @@
     const actions = cmd('sessionHub.sendMessage', `✉ ${T('Escribir a un compañero')}`, 'primary') + settingsLink('sessionHub.inboundMessages', T('Cómo recibo mensajes'));
     return `<div class="page">
       ${pageHead(T('Mensajes'), T(POLICY_TEXT[box.policy] || POLICY_TEXT.hold), actions)}
+      ${conversationsHtml()}
       <h3>${T('Recibidos')}${box.unread ? ` <span class="badge">${box.unread}</span>` : ''}</h3>
       <div id="messages">${receivedHtml()}</div>
       <h3>${T('Enviados ({v1})', { v1: box.sent.length })}</h3>
       ${sentHtml()}
+    </div>`;
+  }
+
+  // ---------- conversaciones automáticas ----------
+  const CONV_STATUS = { confirm: 'pendiente de tu confirmación', inviting: 'esperando que acepte', invited: 'te invita', active: 'en marcha', ended: 'terminada' };
+  const CONV_END = { limit: 'llegó al límite de vueltas', time: 'se acabó el tiempo', loop: 'se detectó un bucle', empty: 'se detectó un bucle', declined: 'rechazada', peer: 'la terminó tu compañero', me: 'la terminaste tú', unanswered: 'nadie respondió la invitación' };
+  function conversationsHtml() {
+    const list = state.conversations || [];
+    const hk = state.hooks || {};
+    const hookLine = hk.any
+      ? `<span class="ok-txt">✓ ${T('Hooks instalados en {v1}', { v1: [hk.claude && 'Claude Code', hk.cursor && 'Cursor'].filter(Boolean).join(' y ') })}</span> ${cmd('sessionHub.removeHooks', T('Quitar'), 'link small')}`
+      : `<span class="warn-txt">! ${T('Sin hooks: tu IA no continuará sola')}</span> ${cmd('sessionHub.installHooks', T('Instalar hooks'), 'link')}`;
+    const row = (c) => {
+      const left = c.status === 'active' && c.expiresAt ? Math.max(0, Math.round((Date.parse(c.expiresAt) - Date.now()) / 60000)) : null;
+      const acts = {
+        confirm: cmd('sessionHub.confirmConversation', T('Confirmar'), 'primary small-btn', [c.id]) + cmd('sessionHub.endConversation', T('Cancelar'), 'link small', [c.id]),
+        invited: cmd('sessionHub.acceptConversation', T('Aceptar'), 'primary small-btn', [c.id]) + cmd('sessionHub.declineConversation', T('Rechazar'), 'link small', [c.id]),
+        inviting: cmd('sessionHub.endConversation', T('Cancelar'), 'link small', [c.id]),
+        active: cmd('sessionHub.endConversation', `■ ${T('Detener')}`, 'small-btn', [c.id]),
+      }[c.status] || '';
+      return `<div class="brow conv ${c.status}">
+        <div class="bmain">
+          <div class="btitle">🤝 ${esc(c.peerName || '')} <span class="tag ${c.status === 'active' ? 'ok' : c.status === 'ended' ? '' : 'copy'}">${T(CONV_STATUS[c.status] || c.status)}</span></div>
+          <div class="muted small">${T('vueltas: {v1} enviadas · {v2} recibidas · máximo {v3}', { v1: c.sent || 0, v2: c.received || 0, v3: c.turns })}${left != null ? ` · ${T('quedan {v1} min', { v1: left })}` : ''}${c.status === 'ended' && c.endReason ? ` · ${T(CONV_END[c.endReason] || c.endReason)}` : ''}</div>
+          ${c.text ? `<div class="small ellipsis" title="${esc(c.text)}">“${esc(clip(c.text, 140))}”</div>` : ''}
+        </div>
+        <div class="bacts">${acts}</div>
+      </div>`;
+    };
+    return `<h3>${T('Conversaciones automáticas')}</h3>
+      <p class="hint">${T('Tu IA y la de un compañero conversan solas, hasta un límite de vueltas y minutos, solo si los dos lo aceptan.')} <button class="link" data-view="help" data-helpsec="conv">${T('¿Cómo funciona?')}</button></p>
+      <div class="actions">${cmd('sessionHub.startConversation', `🤝 ${T('Iniciar una conversación')}`, 'primary')} <span class="small">${hookLine}</span></div>
+      ${listBox('convs', list, { render: row, text: (c) => `${c.peerName} ${c.text || ''}`, empty: `<p class="empty small">${T('Todavía no hay conversaciones automáticas.')}</p>`, placeholder: T('Buscar conversación…') })}`;
+  }
+
+  // ---------- Ayuda: instrucciones y explicaciones ----------
+  function helpView() {
+    const lang = state?.lang === 'en' ? 'en' : 'es';
+    const sections = (window.SESSION_HUB_HELP || {})[lang] || [];
+    const q = ui.helpQ.trim().toLowerCase();
+    const strip = (h) => h.replace(/<[^>]+>/g, ' ');
+    const shown = q ? sections.filter((x) => `${x.title} ${strip(x.html)}`.toLowerCase().includes(q)) : sections;
+    const toc = sections.map((x) => `<button class="fchip" data-helpsec="${esc(x.id)}">${esc(x.icon || '')} ${esc(x.title)}</button>`).join('');
+    return `<div class="page help">
+      ${pageHead(T('Ayuda'), T('Instrucciones y explicaciones de cada parte de Session Hub.'), `<a class="link" href="https://github.com/carlosvisbal/session-hub/blob/main/docs/${lang === 'en' ? 'MANUAL.md' : 'MANUAL.es.md'}">${T('Manual completo')}</a>`)}
+      <input class="lsearch" type="search" id="helpq" placeholder="${T('Buscar en la ayuda…')}" aria-label="${T('Buscar en la ayuda…')}" value="${esc(ui.helpQ)}">
+      <div class="fchips">${toc}</div>
+      <div id="helpbody">${shown.map((x) => `<details class="hsec" id="help-${esc(x.id)}" ${q || ui.helpOpen === x.id ? 'open' : ''}><summary>${esc(x.icon || '')} ${esc(x.title)}</summary><div class="hbody">${x.html}</div></details>`).join('') || `<p class="empty small">${T('Nada coincide con “{v1}”.', { v1: esc(ui.helpQ) })}</p>`}</div>
     </div>`;
   }
 
@@ -402,7 +453,7 @@
     return `<div class="page">${checksHtml()}</div>`;
   }
 
-  const VIEW_HTML = { sessions: sessionsView, messages: messagesView, team: teamView, privacy: privacyView, backup: backupView, status: statusView };
+  const VIEW_HTML = { sessions: sessionsView, messages: messagesView, team: teamView, privacy: privacyView, backup: backupView, status: statusView, help: helpView };
 
   function setView(view, focus) {
     if (!VIEWS.includes(view)) return;
@@ -532,6 +583,7 @@
       ? ''
       : `<footer class="pfoot">
           ${m.blocked ? '' : cmd('sessionHub.sendMessage', `✉ ${T('Mensaje')}`, 'primary small-btn', [m.id])}
+          ${m.blocked || !m.online ? '' : cmd('sessionHub.startConversation', `🤝 ${T('Conversar')}`, 'small-btn', [m.id])}
           <button class="small-btn" data-person="${esc(m.id)}">${T('Ver sesiones')} →</button>
           <span class="spacer"></span>
           ${cmd('sessionHub.blockMember', T(m.blocked ? 'Desbloquear' : 'Bloquear (solo para mí)'), 'link small', [m.id])}
@@ -696,7 +748,7 @@
   }
 
   document.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-page],[data-follow],[data-cmd],[data-act],[data-view],[data-bfilter],[data-cowner],[data-openin],[data-pfilter],[data-group],[data-more],[data-groups],[data-tab],[data-open],[data-person]');
+    const t = e.target.closest('[data-page],[data-follow],[data-cmd],[data-act],[data-helpsec],[data-view],[data-bfilter],[data-cowner],[data-openin],[data-pfilter],[data-group],[data-more],[data-groups],[data-tab],[data-open],[data-person]');
     if (!t) return;
     if (t.dataset.group || t.dataset.more || t.dataset.groups) {
       if (t.dataset.group) ui.collapsed.has(t.dataset.group) ? ui.collapsed.delete(t.dataset.group) : ui.collapsed.add(t.dataset.group);
@@ -706,6 +758,13 @@
       const list = document.getElementById('list');
       if (list) list.innerHTML = listHtml();
       if (t.dataset.group) [...document.querySelectorAll('[data-group]')].find((x) => x.dataset.group === t.dataset.group)?.focus();
+      return;
+    }
+    if (t.dataset.helpsec) {
+      ui.helpOpen = t.dataset.helpsec;
+      if (ui.view !== 'help') setView('help');
+      else render();
+      document.getElementById(`help-${t.dataset.helpsec}`)?.scrollIntoView?.({ block: 'start' });
       return;
     }
     if (t.dataset.view) return setView(t.dataset.view);
@@ -781,6 +840,15 @@
   });
 
   document.addEventListener('input', (e) => {
+    if (e.target.id === 'helpq') {
+      ui.helpQ = e.target.value;
+      const pos = e.target.selectionStart;
+      render();
+      const box = document.getElementById('helpq');
+      box?.focus();
+      box?.setSelectionRange(pos, pos);
+      return;
+    }
     const k = e.target.dataset?.search;
     if (k && BOXES[k]) {
       ui.q[k] = e.target.value;

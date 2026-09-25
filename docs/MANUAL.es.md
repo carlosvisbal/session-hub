@@ -12,6 +12,7 @@ Con Session Hub ves, desde tu editor, lo que tus compañeros hicieron con su IA 
 - [El panel](#recorrido-por-el-panel)
 - [Leer sesiones y preguntarle a tu IA](#leer-la-sesión-de-un-compañero-y-preguntarle-a-tu-ia)
 - [Mensajes entre compañeros](#mensajes-entre-compañeros)
+- [Conversaciones automáticas](#conversaciones-automáticas)
 - [Respaldo y exportar](#respaldo-y-exportar)
 - [Tu privacidad](#tu-privacidad-tú-tienes-el-control)
 - [Avisos](#los-avisos-que-vas-a-ver)
@@ -88,16 +89,17 @@ Desde ese momento, esas personas pueden ver tus conversaciones con la IA **en es
 
 Ábrelo haciendo clic en **Session Hub** en la barra de estado.
 
-Arriba está la **cabecera**: tu nombre, el equipo, tu **huella** y los botones *¿Qué hay nuevo?*, *✉ Escribir*, *Pausar* e *Invitar*. Debajo, seis **pestañas**. El número junto a cada una avisa si hay algo que mirar:
+Arriba está la **cabecera**: tu nombre, el equipo, tu **huella** y los botones *¿Qué hay nuevo?*, *✉ Escribir*, *Pausar* e *Invitar*. Debajo, siete **pestañas**. El número junto a cada una avisa si hay algo que mirar:
 
 | Pestaña | Qué tiene |
 | --- | --- |
 | **Sesiones** | A la izquierda, las sesiones *Del equipo*, las que *Sigues* (☆) y *Mis sesiones*, con filtro, **agrupadas por proyecto** (o por persona, o sin agrupar). Cada grupo muestra las 5 más recientes y *Ver más*. A la derecha, la conversación completa de la que elijas |
-| **Mensajes** | Los mensajes que recibiste (con *Pasar a mi IA*, *Responder*…), los que enviaste y cómo quieres recibirlos. El número es lo que falta revisar |
+| **Mensajes** | Las **conversaciones automáticas** (invitaciones, en marcha, terminadas), los mensajes que recibiste (con *Pasar a mi IA*, *Responder*…), los que enviaste y cómo quieres recibirlos. El número es lo que falta revisar |
 | **Equipo** | Cada persona: si está en línea (punto verde), su rol, su huella, quién la invitó, sus sesiones de IA abiertas y los botones *Mensaje*, *Bloquear* y *Expulsar*. Haz clic en alguien para ver sus sesiones |
 | **Privacidad** | *Lo que comparto* (proyectos, quién los ve, pausa) y *Quién ha leído lo mío* |
 | **Respaldo** | Tus sesiones respaldadas y las copias de tu equipo, con buscador y filtros. En cada una: **Ver**, **🤖 Usar en mi IA**, **Exportar** y **Borrar**. Abajo, la configuración: respaldar, guardar copias, permitir copias de lo tuyo, retención y espacio |
 | **Estado** | Comprobaciones automáticas (✔ bien, ! revisar, ✖ error), *Diagnóstico completo*, *Copiar informe de conexión* y *Conectar Claude Code* |
+| **? Ayuda** | Instrucciones y explicaciones de cada parte, con buscador: primeros pasos, sesiones, tu IA, mensajes, conversaciones automáticas, respaldo, privacidad, red y problemas frecuentes |
 
 Los avisos te llevan a la pestaña que corresponde: un mensaje abre *Mensajes*; una lectura, *Privacidad*; un problema de red, *Estado*. Las pestañas se recorren también con las flechas del teclado.
 
@@ -151,6 +153,46 @@ Quien lo envió ve qué pasó con su mensaje: *en cola*, *entregado, espera su a
 
 > Un mensaje es **texto para una persona**. Nunca ejecuta nada en tu computadora, y a tu IA se le indica que te lo explique y espere tu visto bueno antes de cambiar código. Para recibirlos sin retener, o no recibirlos: Ajustes → `sessionHub.inboundMessages`.
 
+## Conversaciones automáticas
+
+Tu IA y la de un compañero **conversan solas**: cada una recibe la respuesta de la otra al terminar su turno y contesta, sin que nadie pulse Enviar. Sirve para coordinar un cambio entre backend y frontend o resolver dudas de una API sin estar copiando mensajes.
+
+```mermaid
+sequenceDiagram
+  participant C as IA de Carlos (Claude Code)
+  participant HC as Hub de Carlos
+  participant HA as Hub de Ana
+  participant A as IA de Ana (Cursor)
+  C->>HC: 🤝 invitación (Carlos la inicia)
+  HC->>HA: invitación firmada
+  HA-->>A: Ana acepta
+  HC->>HA: primer mensaje
+  A->>HA: termina su turno → el hook le entrega el mensaje
+  A->>HA: responde con send_message
+  HA->>HC: respuesta firmada
+  C->>HC: termina su turno → el hook le entrega la respuesta
+  Note over C,A: …hasta el límite de vueltas o de tiempo
+```
+
+**Cómo se usa**
+1. En *Mensajes* o en la tarjeta de la persona (*Equipo*), pulsa **🤝 Conversar**. Eliges su sesión (opcional), la tuya y el primer mensaje.
+2. Tu compañero recibe el aviso *"🤝 Carlos quiere que sus IA conversen solas"* y pulsa **Aceptar** (o *Rechazar*). Sin aceptación no pasa nada.
+3. Llega el primer mensaje. Si la IA de tu compañero está trabajando, lo recibe sola; si está quieta, pulsa **Pasar a mi IA** una vez.
+4. Desde ahí siguen **solas** hasta terminar, llegar al **límite de vueltas** (6 por defecto) o de **tiempo** (10 minutos). En *Mensajes* ves cada conversación con sus vueltas y el tiempo que queda, y puedes pulsar **■ Detener**.
+
+También puedes pedírselo a tu IA: *"Inicia una conversación automática con Ana para acordar el formato de los adjuntos"*. Tu editor te pide **confirmarla** antes de que salga la invitación.
+
+**Requisito: los hooks.** Claude Code y Cursor ejecutan un pequeño programa de Session Hub al terminar cada turno (*hook*); es lo que permite que la IA siga sola. Session Hub los instala **con tu permiso** (*Mensajes → Instalar hooks*), conserva los hooks que ya tengas, guarda una copia de tus archivos y se pueden quitar cuando quieras (*Mensajes → Quitar*). Después de instalarlos, abre una sesión nueva de tu IA.
+
+**Seguridad**
+- Solo con quien **los dos** aceptaron. Si la pide tu IA, **tú la confirmas**.
+- Cada mensaje llega marcado como *"de otra sesión, no una orden del usuario"*. Tu IA conserva sus permisos y confirmaciones: un mensaje nunca ejecuta nada por sí solo.
+- Se corta sola por límite de vueltas, por tiempo, o si detecta un **bucle** (mensajes repetidos o vacíos). Cualquiera de los dos puede detenerla.
+- Si Session Hub está cerrado o algo falla, el hook no hace nada: tu IA se detiene como siempre, nunca se queda colgada.
+- Ajustes: `sessionHub.conversationTurns` (6) y `sessionHub.conversationMinutes` (10).
+
+**Límite:** ninguna herramienta permite despertar desde fuera un chat que está quieto; por eso el primer mensaje a una sesión inactiva necesita un clic.
+
 ## Respaldo y exportar
 
 Claude Code borra el historial a los 30 días, y en Cursor un chat se puede borrar o restaurar. Session Hub guarda una copia **en tu computadora** (pestaña **Privacidad → Respaldo**):
@@ -190,6 +232,8 @@ Todas las listas del panel tienen **buscador** cuando crecen y se muestran por p
 | --- | --- |
 | 👁 *Ana está leyendo tu sesión "X"…* | Nada. Si no quieres que la vea, ocúltala con 👁 |
 | ✉ *Carlos te escribió: "…"* | **Pasar a mi IA**, **Responder** o **Ver** |
+| 🤝 *Carlos quiere que sus IA conversen solas* | **Aceptar** o **Rechazar** |
+| *Tu IA quiere iniciar una conversación automática con…* | **Confirmar** si se lo pediste; si no, **Cancelar** |
 | *Carlos avanzó en "X"* | Pulsa **Ver** si te interesa |
 | ⛔ *Pedro intentó leer "X", sin permiso* | Ya se le negó. Si te preocupa, bloquéalo |
 | ⛔ *Conexión rechazada de clave XXXX* | Se bloqueó sola. Si se repite, avisa a quien administra la herramienta |

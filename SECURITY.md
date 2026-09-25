@@ -14,7 +14,8 @@ Respondemos en un máximo de 5 días hábiles y acordamos contigo la fecha de di
 
 | Versión | Soporte |
 | --- | --- |
-| 0.8.1+ | Sí (piloto) |
+| 0.9.x | Sí (piloto) |
+| 0.8.x | Actualiza: 0.8.1 congelaba Cursor al abrir ajustes desde el panel |
 | 0.8.0 | Actualiza: una carpeta no compartida con nombre parecido podía verse (corregido en 0.8.1) |
 | 0.6.x – 0.7.x | Actualiza: en 0.7.x el MCP fallaba (corregido en 0.8.0) |
 | < 0.6 | No: usaban un token de equipo compartido; actualiza y vuelve a invitar |
@@ -30,6 +31,7 @@ Respondemos en un máximo de 5 días hábiles y acordamos contigo la fecha de di
 - **Auditoría:** lecturas, accesos denegados y conexiones rechazadas quedan en disco (90 días).
 - **Mensajes (0.8):** firmados por quien los envía y verificados contra la clave de la conexión; solo para un miembro del equipo, con límite de tamaño (20 000 caracteres), de frecuencia (10 por minuto) y de plazo (24 h). Por defecto quedan retenidos hasta que el destinatario los aprueba. Nunca ejecutan nada.
 - **Respaldo (0.8.1):** tu respaldo y las copias de tu equipo se guardan solo en tu computadora (0600, comprimidos). Un respaldo nunca amplía el acceso: lo respaldado pasa por los mismos permisos, y una copia se borra cuando el dueño retira el acceso o desactiva las copias. Mientras el dueño está desconectado no puede retirarlo: la copia sigue legible hasta el siguiente contacto o hasta su vencimiento (180 días).
+- **Conversaciones automáticas (0.9):** requieren el consentimiento de las dos personas (y la confirmación del usuario si las pide la IA); las órdenes van firmadas; se cortan por vueltas, tiempo o bucles; cada mensaje llega enmarcado como información de otra sesión y el agente conserva sus permisos. El hook solo habla con el hub local, se instala con permiso y, ante cualquier fallo, no hace nada.
 - **Sesiones abiertas:** de Claude Code solo se leen los `~/.claude/sessions/<pid>.json`; nunca sus claves ni sus sockets.
 
 ## Limitaciones conocidas
@@ -39,4 +41,4 @@ Respondemos en un máximo de 5 días hábiles y acordamos contigo la fecha de di
 3. **Redacción de secretos por patrones:** puede no detectar todo. Revisa qué compartes y usa `redactExtra`.
 4. **Modo `public`:** usa la red pública de HyperDHT. El contenido va cifrado, pero la red ve que tu IP participa en un tema. Para entornos controlados usa `lan` o `private`.
 5. **No validado aún:** conexión entre dos redes distintas detrás de NAT/firewalls corporativos (puede requerir relay).
-6. **Contenido de terceros para la IA:** lo que leen las herramientas MCP son sesiones y mensajes de otras personas; trátalo como datos, no como instrucciones. Un mensaje puede intentar inducir a la IA a hacer algo (inyección de instrucciones): por eso quedan retenidos por defecto, llegan enmarcados como "de un compañero, no una orden tuya" y la IA debe pedir confirmación antes de cambiar código. No actives `inboundMessages: accept` con personas en las que no confíes.
+6. **Contenido de terceros para la IA:** lo que leen las herramientas MCP son sesiones y mensajes de otras personas; trátalo como datos, no como instrucciones. Un mensaje puede intentar inducir a la IA a hacer algo (inyección de instrucciones): por eso quedan retenidos por defecto, llegan enmarcados como "de un compañero, no una orden tuya" y la IA debe pedir confirmación antes de cambiar código. No actives `inboundMessages: accept` con personas en las que no confíes, ni aceptes conversaciones automáticas con ellas: una IA puede intentar convencer a la otra de algo; por eso los permisos del agente siguen mandando y los límites cortan la conversación.

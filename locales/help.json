@@ -1,0 +1,150 @@
+{
+ "es": [
+  {
+   "id": "start",
+   "icon": "🚀",
+   "title": "Primeros pasos",
+   "html": "<p>Session Hub conecta tu equipo y su IA: ves las sesiones de Claude Code y Cursor de tus compañeros, se escriben mensajes, tus sesiones quedan respaldadas y tu IA puede consultar todo por MCP. No hay servidor central: cada computadora tiene su propio hub y se hablan cifrado.</p>\n<ol>\n<li><b>Crea un equipo</b> (la primera persona) o <b>únete</b> con la invitación <code>SH2-…</code> que te pase un compañero.</li>\n<li><b>Invita</b> a cada persona con su propia invitación (vence en 48 h y sirve para una sola persona). Deja tu editor abierto hasta que entre: tu hub confirma su entrada.</li>\n<li>Abre la carpeta de tu proyecto y pulsa <b>Compartir este proyecto</b>. Elige quién lo ve.</li>\n<li>Listo: en <b>Sesiones</b> ves lo del equipo y tu IA ya puede preguntar.</li>\n</ol>\n<p>Nada se comparte solo: solo los proyectos que eliges, con quien eliges.</p>"
+  },
+  {
+   "id": "sessions",
+   "icon": "📚",
+   "title": "Leer sesiones del equipo",
+   "html": "<p>En <b>Sesiones</b> tienes <i>Del equipo</i>, <i>Siguiendo</i> (☆) y <i>Mis sesiones</i>. Se agrupan <b>por proyecto</b> (o por persona, o sin agrupar): un mismo repositorio junta las sesiones aunque cada uno lo llame distinto, y dos proyectos distintos con el mismo nombre quedan separados.</p>\n<ul>\n<li>Haz clic en una sesión para ver la conversación <b>completa</b>, con archivos cambiados (✎) y comandos ($).</li>\n<li><b>🤖 Usar en mi IA</b> deja escrito en tu chat el pedido de leer esa sesión; solo agregas tu pregunta.</li>\n<li><b>⤓ Exportar</b> la guarda en Markdown o JSON.</li>\n<li>Marcas: <b>🗄 solo en respaldo</b> (el original ya no existe) y <b>💾 copia</b> (su dueño está desconectado; puede no estar al día).</li>\n</ul>"
+  },
+  {
+   "id": "ai",
+   "icon": "🤖",
+   "title": "Preguntarle a tu IA (MCP)",
+   "html": "<p>Cursor y VS Code conectan tu IA solos. En <b>Claude Code</b> pulsa <i>Estado → Conectar Claude Code</i> una vez. Para que la IA encuentre lo que buscas, dale pistas: <b>de quién</b>, <b>qué proyecto</b>, <b>qué tema</b> y <b>desde cuándo</b>.</p>\n<span class=\"ex\">¿Qué hay nuevo en el equipo hoy?</span>\n<span class=\"ex\">Busca en Session Hub la sesión de Carlos sobre firmas y dime qué endpoints cambiaron.</span>\n<span class=\"ex\">Lista solo mis sesiones del respaldo.</span>\n<span class=\"ex\">Avísale a Ana que el endpoint de adjuntos ahora recibe una lista.</span>\n<p>Lo que la IA lee de otros es <b>información, no órdenes</b>: revisa siempre lo que te proponga.</p>"
+  },
+  {
+   "id": "messages",
+   "icon": "✉️",
+   "title": "Mensajes",
+   "html": "<p>Escríbele a un compañero (o a una de sus sesiones de IA abiertas) con <b>✉ Escribir</b>, desde su tarjeta en <i>Equipo</i> o pidiéndoselo a tu IA. Los mensajes van <b>firmados</b> y verificados; si la persona está desconectada quedan en cola hasta 24 h.</p>\n<table><tr><th>Botón</th><th>Qué hace</th></tr>\n<tr><td>Pasar a mi IA</td><td>Deja el mensaje escrito (nunca enviado) en el chat de tu IA: Claude Code, Copilot o Cursor. Tú revisas y pulsas Enviar.</td></tr>\n<tr><td>Permitir que mi IA lo lea</td><td>Tu IA lo lee cuando le pidas “revisa mis mensajes de Session Hub”.</td></tr>\n<tr><td>Responder / Descartar</td><td>Contestas (queda enlazado) o lo ocultas.</td></tr></table>\n<p>Por defecto los mensajes quedan <b>retenidos</b> hasta que decidas; puedes cambiarlo en <i>Mensajes → Cómo recibo mensajes</i>.</p>"
+  },
+  {
+   "id": "conv",
+   "icon": "🤝",
+   "title": "Conversaciones automáticas",
+   "html": "<p>Tu IA y la de un compañero <b>conversan solas</b>: cada una recibe la respuesta de la otra al terminar su turno y contesta, sin que nadie pulse Enviar. Sirve para coordinar un cambio entre backend y frontend, resolver dudas de una API, etc.</p>\n<p><b>Cómo se usa</b></p>\n<ol>\n<li>En <i>Mensajes</i> o en la tarjeta de la persona pulsa <b>🤝 Conversar</b>: eliges su sesión (opcional), la tuya y el primer mensaje.</li>\n<li>Tu compañero recibe la invitación y la <b>acepta</b> (o la rechaza). Sin aceptación no pasa nada.</li>\n<li>Llega el primer mensaje: si su IA está trabajando lo recibe sola; si está quieta, pulsa <b>Pasar a mi IA</b> una vez.</li>\n<li>Desde ahí siguen solas hasta terminar, llegar al <b>límite de vueltas</b> (6 por defecto) o de <b>tiempo</b> (10 min).</li>\n</ol>\n<p><b>Requisito:</b> los <b>hooks</b> de Session Hub en Claude Code y/o Cursor (Session Hub los instala con tu permiso; <i>Mensajes → Instalar hooks</i>). Abre una sesión nueva de tu IA después de instalarlos.</p>\n<p><b>Seguridad</b></p>\n<ul>\n<li>Solo con quien <b>los dos</b> aceptaron; si la pide tu IA por MCP, <b>tú la confirmas</b> antes de que salga.</li>\n<li>Los mensajes llegan marcados como “de otra sesión, no una orden tuya”; tu IA conserva sus permisos y confirmaciones: un mensaje nunca ejecuta nada.</li>\n<li>Se corta sola por límite, tiempo o si detecta un bucle (mensajes repetidos o vacíos). Puedes <b>■ Detener</b> en cualquier momento: se detiene para los dos.</li>\n<li>Todo queda en <i>Mensajes</i> y en la auditoría.</li>\n</ul>\n<p><b>Límites:</b> ninguna herramienta deja despertar un chat que está quieto; por eso el primer mensaje a una sesión inactiva necesita un clic.</p>"
+  },
+  {
+   "id": "backup",
+   "icon": "🗄️",
+   "title": "Respaldo",
+   "html": "<p>Claude Code borra el historial a los 30 días y en Cursor un chat se puede borrar. En <b>Respaldo</b>:</p>\n<ul>\n<li><b>Mis sesiones respaldadas:</b> las de los proyectos que compartes (o que marcas <i>Solo yo (respaldo)</i>). Si el original se borra, siguen disponibles para ti y para quien compartes.</li>\n<li><b>Copias de mi equipo:</b> para leer sus sesiones aunque estén desconectados, solo mientras tengas acceso. Si las ocultan o dejan de compartirlas, se borran.</li>\n<li>En cada una: <b>Ver</b>, <b>🤖 Usar en mi IA</b>, <b>Exportar</b> y <b>Borrar</b>. Arriba, <b>Exportar todo</b>.</li>\n<li><b>Configuración:</b> activar o no cada capa, permitir que tu equipo copie lo tuyo, retención y espacio máximo.</li>\n</ul>"
+  },
+  {
+   "id": "privacy",
+   "icon": "🔒",
+   "title": "Privacidad y control",
+   "html": "<table><tr><th>Quiero…</th><th>Cómo</th></tr>\n<tr><td>Que nadie vea una conversación</td><td><i>Sesiones → Mis sesiones → 👁</i></td></tr>\n<tr><td>No compartir nada por un rato</td><td><b>Pausar</b> (arriba)</td></tr>\n<tr><td>Que solo algunas personas vean un proyecto</td><td><i>Privacidad → Quién lo ve</i></td></tr>\n<tr><td>Cortar con alguien solo para mí</td><td><i>Equipo → Bloquear (solo para mí)</i></td></tr>\n<tr><td>Sacar a alguien del equipo</td><td><i>Equipo → Expulsar</i> (si lo invitaste tú o alguien de tu cadena)</td></tr>\n<tr><td>Saber quién me leyó</td><td><i>Privacidad → Quién ha leído lo mío</i> (90 días)</td></tr></table>\n<p>La <b>huella</b> (como <code>7D60-041B-7A87</code>) identifica a cada persona y no se puede falsificar. Las claves y contraseñas salen como <code>[REDACTED]</code>.</p>"
+  },
+  {
+   "id": "team",
+   "icon": "👥",
+   "title": "Equipo",
+   "html": "<p>En <b>Equipo</b> ves a cada persona: si está en línea, su rol, sus sesiones de IA abiertas y qué comparte contigo. Hay buscador y filtros (<i>En línea, Desconectados, Siguiendo</i>).</p>\n<ul><li><b>Invitar:</b> una invitación por persona.</li><li><b>Salir del equipo:</b> conservas tu huella; para volver necesitas otra invitación.</li><li>Por ahora puedes estar en un equipo a la vez.</li></ul>"
+  },
+  {
+   "id": "network",
+   "icon": "🌐",
+   "title": "Red y trabajo remoto",
+   "html": "<p>En la oficina funciona en <b>red local</b> (UDP 49737 permitido). Con la VPN de la empresa, igual. Sin VPN, cambia <code>sessionHub.network</code> a <b>public</b> (por internet, cifrado) o <b>private</b> (tu propio servidor, <code>npm run infra</code>).</p>\n<p>Si algo falla por una política de red, <i>Estado → Copiar informe de conexión</i> te da un texto listo para TI con qué falla y qué permitir.</p>"
+  },
+  {
+   "id": "trouble",
+   "icon": "🛠️",
+   "title": "Si algo no funciona",
+   "html": "<ul>\n<li><b>Primero:</b> <i>Estado → Diagnóstico completo</i>.</li>\n<li><b>No veo a mis compañeros:</b> que tengan el editor abierto y el firewall permita UDP 49737.</li>\n<li><b>Mi IA no encuentra Session Hub:</b> mira en <i>Estado</i> “Tu IA puede consultar Session Hub (MCP)”. En Claude Code, <i>Conectar Claude Code</i>.</li>\n<li><b>Después de actualizar algo se ve raro o en cero:</b> cierra <b>todas</b> las ventanas del editor y vuelve a abrirlo; Session Hub reemplaza solo el hub anterior.</li>\n<li><b>La conversación automática no sigue sola:</b> revisa que los hooks estén instalados (<i>Mensajes</i>) y abre una sesión nueva de tu IA.</li>\n<li><b>El puerto 7420 está ocupado:</b> cambia <code>sessionHub.port</code>.</li>\n</ul>"
+  },
+  {
+   "id": "tools",
+   "icon": "🧰",
+   "title": "Herramientas MCP",
+   "html": "<table><tr><th>Herramienta</th><th>Para qué</th></tr>\n<tr><td><code>list_peers</code></td><td>Quién es quién, quién está en línea y qué comparte</td></tr>\n<tr><td><code>what_changed</code></td><td>Qué hizo cada uno desde una fecha</td></tr>\n<tr><td><code>list_sessions</code></td><td>Sesiones por persona, proyecto y fecha (<code>origen: \"respaldo\"</code> = solo respaldo y copias)</td></tr>\n<tr><td><code>get_session</code></td><td>Una sesión completa</td></tr>\n<tr><td><code>search_sessions</code></td><td>Buscar un tema en las conversaciones</td></tr>\n<tr><td><code>list_agents</code></td><td>Sesiones de IA abiertas ahora</td></tr>\n<tr><td><code>send_message</code> / <code>check_inbox</code></td><td>Escribir y leer mensajes</td></tr>\n<tr><td><code>start_conversation</code> / <code>end_conversation</code></td><td>Proponer (tú confirmas) y terminar conversaciones automáticas</td></tr></table>"
+  },
+  {
+   "id": "faq",
+   "icon": "❓",
+   "title": "Preguntas frecuentes",
+   "html": "<p><b>¿Pueden cambiar mi código?</b> No. Session Hub solo lee y lleva mensajes de texto; nada se ejecuta por un mensaje.</p>\n<p><b>¿Hay un servidor central?</b> No. Todo va directo y cifrado entre las computadoras del equipo.</p>\n<p><b>¿Cursor y VS Code a la vez?</b> Por ahora, mejor uno. Hay un plan para compartir una sola identidad (ver <i>docs/SAME-MACHINE</i>).</p>\n<p><b>¿Es gratis?</b> Sí, software libre (AGPL-3.0). No está afiliado a Cursor ni a Anthropic.</p>"
+  }
+ ],
+ "en": [
+  {
+   "id": "start",
+   "icon": "🚀",
+   "title": "Getting started",
+   "html": "<p>Session Hub connects your team and its AI: you see teammates' Claude Code and Cursor sessions, you message each other, your sessions are backed up, and your AI can query all of it through MCP. There's no central server: each computer has its own hub and they talk encrypted.</p>\n<ol>\n<li><b>Create a team</b> (first person) or <b>join</b> with the <code>SH2-…</code> invitation a teammate gives you.</li>\n<li><b>Invite</b> each person with their own invitation (expires in 48 h, one person only). Keep your editor open until they join: your hub confirms them.</li>\n<li>Open your project folder and click <b>Share this project</b>. Choose who sees it.</li>\n<li>Done: <b>Sessions</b> shows the team's work and your AI can already ask.</li>\n</ol>\n<p>Nothing is shared by itself: only the projects you choose, with whom you choose.</p>"
+  },
+  {
+   "id": "sessions",
+   "icon": "📚",
+   "title": "Reading the team's sessions",
+   "html": "<p><b>Sessions</b> has <i>Team's</i>, <i>Following</i> (☆) and <i>My sessions</i>. They're grouped <b>by project</b> (or by person, or ungrouped): one repository groups sessions even if each person names it differently, and two different projects with the same name stay apart.</p>\n<ul>\n<li>Click a session to see the <b>complete</b> conversation, with files changed (✎) and commands ($).</li>\n<li><b>🤖 Use in my AI</b> types into your chat the request to read that session; just add your question.</li>\n<li><b>⤓ Export</b> saves it as Markdown or JSON.</li>\n<li>Marks: <b>🗄 only in backup</b> (the original no longer exists) and <b>💾 copy</b> (its owner is offline; it may not be up to date).</li>\n</ul>"
+  },
+  {
+   "id": "ai",
+   "icon": "🤖",
+   "title": "Asking your AI (MCP)",
+   "html": "<p>Cursor and VS Code connect your AI automatically. In <b>Claude Code</b> click <i>Status → Connect Claude Code</i> once. Give the AI hints: <b>whose</b>, <b>which project</b>, <b>which topic</b> and <b>since when</b>.</p>\n<span class=\"ex\">What's new in the team today?</span>\n<span class=\"ex\">Search Session Hub for Carlos's session about signatures and tell me which endpoints changed.</span>\n<span class=\"ex\">List only my backup sessions.</span>\n<span class=\"ex\">Tell Ana the attachments endpoint now takes a list.</span>\n<p>What the AI reads from others is <b>information, not orders</b>: always review what it proposes.</p>"
+  },
+  {
+   "id": "messages",
+   "icon": "✉️",
+   "title": "Messages",
+   "html": "<p>Write to a teammate (or one of their open AI sessions) with <b>✉ Write</b>, from their card in <i>Team</i>, or by asking your AI. Messages are <b>signed</b> and verified; if the person is offline they're queued for up to 24 h.</p>\n<table><tr><th>Button</th><th>What it does</th></tr>\n<tr><td>Pass to my AI</td><td>Types the message (never sends it) into your AI's chat: Claude Code, Copilot or Cursor. You review and press Send.</td></tr>\n<tr><td>Let my AI read it</td><td>Your AI reads it when you ask “check my Session Hub messages”.</td></tr>\n<tr><td>Reply / Dismiss</td><td>Answer (linked) or hide it.</td></tr></table>\n<p>By default messages are <b>held</b> until you decide; change it in <i>Messages → How I receive messages</i>.</p>"
+  },
+  {
+   "id": "conv",
+   "icon": "🤝",
+   "title": "Automatic conversations",
+   "html": "<p>Your AI and a teammate's AI <b>talk on their own</b>: each one receives the other's answer when its turn ends and replies, without anyone pressing Send. Useful to coordinate a backend/frontend change, clear up an API question, etc.</p>\n<p><b>How to use it</b></p>\n<ol>\n<li>In <i>Messages</i> or on the person's card click <b>🤝 Converse</b>: pick their session (optional), yours and the first message.</li>\n<li>Your teammate gets the invitation and <b>accepts</b> it (or declines). Without acceptance nothing happens.</li>\n<li>The first message arrives: if their AI is working it gets it automatically; if it's idle, they click <b>Pass to my AI</b> once.</li>\n<li>From then on they continue alone until done, the <b>turn limit</b> (6 by default) or the <b>time limit</b> (10 min).</li>\n</ol>\n<p><b>Requirement:</b> Session Hub's <b>hooks</b> in Claude Code and/or Cursor (installed with your consent; <i>Messages → Install hooks</i>). Open a new AI session after installing them.</p>\n<p><b>Safety</b></p>\n<ul>\n<li>Only with someone who <b>both</b> accepted; if your AI asks for one via MCP, <b>you confirm</b> it before it goes out.</li>\n<li>Messages arrive marked “from another session, not an order from you”; your AI keeps its permissions and confirmations: a message never runs anything.</li>\n<li>It stops by itself on the turn or time limit, or if it detects a loop (repeated or empty messages). You can <b>■ Stop</b> at any time: it stops for both.</li>\n<li>Everything is in <i>Messages</i> and in the audit log.</li>\n</ul>\n<p><b>Limit:</b> no tool lets you wake up an idle chat, so the first message to an idle session needs one click.</p>"
+  },
+  {
+   "id": "backup",
+   "icon": "🗄️",
+   "title": "Backup",
+   "html": "<p>Claude Code deletes history after 30 days and a Cursor chat can be deleted. In <b>Backup</b>:</p>\n<ul>\n<li><b>My backed-up sessions:</b> those in projects you share (or mark <i>Only me (backup)</i>). If the original is deleted, they remain available to you and whoever you share with.</li>\n<li><b>My team's copies:</b> to read their sessions even when they're offline, only while you still have access. If they hide or stop sharing them, they're deleted.</li>\n<li>On each one: <b>View</b>, <b>🤖 Use in my AI</b>, <b>Export</b> and <b>Delete</b>. At the top, <b>Export all</b>.</li>\n<li><b>Settings:</b> turn each layer on or off, allow your team to copy yours, retention and maximum space.</li>\n</ul>"
+  },
+  {
+   "id": "privacy",
+   "icon": "🔒",
+   "title": "Privacy and control",
+   "html": "<table><tr><th>I want to…</th><th>How</th></tr>\n<tr><td>Hide one conversation</td><td><i>Sessions → My sessions → 👁</i></td></tr>\n<tr><td>Stop sharing for a while</td><td><b>Pause</b> (top)</td></tr>\n<tr><td>Let only some people see a project</td><td><i>Privacy → Who sees it</i></td></tr>\n<tr><td>Cut contact with someone, just for me</td><td><i>Team → Block (just for me)</i></td></tr>\n<tr><td>Remove someone from the team</td><td><i>Team → Expel</i> (if you or someone in your chain invited them)</td></tr>\n<tr><td>Know who read me</td><td><i>Privacy → Who read mine</i> (90 days)</td></tr></table>\n<p>The <b>fingerprint</b> (like <code>7D60-041B-7A87</code>) identifies each person and can't be forged. Keys and passwords leave as <code>[REDACTED]</code>.</p>"
+  },
+  {
+   "id": "team",
+   "icon": "👥",
+   "title": "Team",
+   "html": "<p><b>Team</b> shows each person: online or not, role, open AI sessions and what they share with you. There's search and filters (<i>Online, Offline, Following</i>).</p>\n<ul><li><b>Invite:</b> one invitation per person.</li><li><b>Leave team:</b> you keep your fingerprint; to come back you need a new invitation.</li><li>For now you can be in one team at a time.</li></ul>"
+  },
+  {
+   "id": "network",
+   "icon": "🌐",
+   "title": "Network and remote work",
+   "html": "<p>At the office it works on the <b>local network</b> (UDP 49737 allowed). With the company VPN, the same. Without VPN, set <code>sessionHub.network</code> to <b>public</b> (internet, encrypted) or <b>private</b> (your own server, <code>npm run infra</code>).</p>\n<p>If a network policy blocks something, <i>Status → Copy connection report</i> gives IT a ready-to-send text saying what fails and what to allow.</p>"
+  },
+  {
+   "id": "trouble",
+   "icon": "🛠️",
+   "title": "Troubleshooting",
+   "html": "<ul>\n<li><b>First:</b> <i>Status → Full diagnostics</i>.</li>\n<li><b>I can't see my teammates:</b> they need the editor open and UDP 49737 allowed.</li>\n<li><b>My AI can't find Session Hub:</b> check “Your AI can query Session Hub (MCP)” in <i>Status</i>. In Claude Code, <i>Connect Claude Code</i>.</li>\n<li><b>After an update something looks odd or at zero:</b> close <b>all</b> editor windows and reopen; Session Hub replaces the old hub by itself.</li>\n<li><b>The automatic conversation doesn't continue:</b> check the hooks are installed (<i>Messages</i>) and open a new AI session.</li>\n<li><b>Port 7420 is taken:</b> change <code>sessionHub.port</code>.</li>\n</ul>"
+  },
+  {
+   "id": "tools",
+   "icon": "🧰",
+   "title": "MCP tools",
+   "html": "<table><tr><th>Tool</th><th>For</th></tr>\n<tr><td><code>list_peers</code></td><td>Who is who, who's online and what they share</td></tr>\n<tr><td><code>what_changed</code></td><td>What each person did since a date</td></tr>\n<tr><td><code>list_sessions</code></td><td>Sessions by person, project and date (<code>origen: \"respaldo\"</code> = only backup and copies)</td></tr>\n<tr><td><code>get_session</code></td><td>A complete session</td></tr>\n<tr><td><code>search_sessions</code></td><td>Search a topic across conversations</td></tr>\n<tr><td><code>list_agents</code></td><td>AI sessions open right now</td></tr>\n<tr><td><code>send_message</code> / <code>check_inbox</code></td><td>Write and read messages</td></tr>\n<tr><td><code>start_conversation</code> / <code>end_conversation</code></td><td>Propose (you confirm) and end automatic conversations</td></tr></table>"
+  },
+  {
+   "id": "faq",
+   "icon": "❓",
+   "title": "FAQ",
+   "html": "<p><b>Can they change my code?</b> No. Session Hub only reads and carries text messages; nothing runs because of a message.</p>\n<p><b>Is there a central server?</b> No. Everything goes directly and encrypted between the team's computers.</p>\n<p><b>Cursor and VS Code at the same time?</b> For now, better one. There's a plan to share a single identity (see <i>docs/SAME-MACHINE</i>).</p>\n<p><b>Is it free?</b> Yes, free software (AGPL-3.0). Not affiliated with Cursor or Anthropic.</p>"
+  }
+ ]
+}

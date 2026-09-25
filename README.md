@@ -35,7 +35,7 @@ Your backend teammate spent the morning with Claude Code changing an API. You, o
 | | |
 |---|---|
 | 👀 **See** | Every teammate's Claude Code and Cursor sessions (complete, grouped by project), who's online and which AI sessions they have open. |
-| ✉️ **Talk** | Signed messages to a teammate or one of their sessions; they choose whether to pass them to their AI. |
+| ✉️ **Talk** | Signed messages to a teammate or one of their sessions; they choose whether to pass them to their AI. **Automatic conversations**: with both people's consent, the two AIs talk on their own through Claude Code and Cursor hooks, up to a turn and time limit. |
 | 🗄️ **Keep** | A local backup of your sessions (Claude Code deletes history after 30 days) and read copies of your team's, with delete and export. |
 | 🤖 **Use** | Any session — live, backed up or copied — in your AI chat (Claude Code, Copilot, Cursor) with one click or through MCP. |
 
@@ -123,6 +123,7 @@ VPNs (WireGuard, Tailscale, corporate) are detected and advertised automatically
 | `list_agents` | AI sessions each teammate has open right now (tool, project, busy/idle) |
 | `send_message` | A signed text message to one teammate (queued up to 24 h if they're offline) |
 | `check_inbox` | Messages you approved for your AI, marked as coming from a teammate, not from you |
+| `start_conversation` / `end_conversation` | Propose (you confirm, they accept) and end an automatic conversation |
 
 `list_sessions` accepts `origen: "respaldo"` to list only what comes from backups (originals already deleted) or local copies. Results carry `projectKey` (same repo = same key), `archived` and `copy`, so the AI never mixes projects and knows when it reads a copy.
 

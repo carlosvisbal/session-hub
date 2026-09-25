@@ -2,6 +2,19 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versiones con [SemVer](https://semver.org/lang/es/).
 
+## [0.9.0] — 2026-09-25
+
+### Añadido
+- **Conversaciones automáticas:** tu IA y la de un compañero conversan solas, sin que nadie pulse Enviar.
+  - Funciona con los **hooks** de Claude Code (`Stop`) y de Cursor (`stop`): al terminar cada turno, `session-hub-hook` le entrega al agente la respuesta del otro para que siga.
+  - **Consentimiento de los dos:** invitación firmada que el otro acepta o rechaza. Si la pide la IA por MCP (`start_conversation`), el usuario la confirma en el editor antes de que salga.
+  - **Límites:** vueltas (6) y minutos (10) configurables, detector de bucles (mensajes repetidos o vacíos), y **■ Detener** para los dos. Cada mensaje llega enmarcado como información de otra sesión; el agente conserva sus permisos.
+  - El hook nunca cuelga al agente: ante un error o con el hub cerrado, no hace nada. Una sola espera por conversación, aunque Cursor también importe el hook de Claude Code.
+  - Instalación de los hooks **con permiso**: conserva tus hooks, guarda una copia de tus archivos, no toca un archivo que no puede leer, y se quitan con un clic. Se renuevan solos al abrir el editor.
+  - Panel: sección *Conversaciones automáticas* en *Mensajes* (invitaciones, en marcha con vueltas y minutos, terminadas), **🤝 Conversar** en *Equipo*, avisos y estado de los hooks en *Estado*.
+- **Pestaña Ayuda:** instrucciones y explicaciones de cada parte de la herramienta, con buscador, en español e inglés.
+- Pruebas: conversación de extremo a extremo con el hook real y los datos de Claude Code y Cursor; la extensión instalando y quitando hooks sin pisar ajustes; el módulo de conversaciones; y el verificador de traducciones ahora también revisa los textos dentro de plantillas anidadas.
+
 ## [0.8.2] — 2026-09-24
 
 ### Añadido

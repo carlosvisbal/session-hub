@@ -91,9 +91,11 @@ export function createEditor({ appName = 'Visual Studio Code', settings = {}, st
     const notify = (kind) => async (m, ...rest) => {
       const buttons = rest.filter((x) => typeof x === 'string');
       shared.notices.push({ kind, m, buttons });
+      // "Pulsa" el botón indicado solo en el aviso que lo tiene (como haría una persona).
       const a = shared.answer;
+      if (!a || !buttons.includes(a)) return undefined;
       shared.answer = null;
-      return a && buttons.includes(a) ? a : undefined;
+      return a;
     };
     const vscode = {
       EventEmitter,

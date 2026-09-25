@@ -35,6 +35,8 @@ flowchart LR
 | `src/transport/swarm.js` | Hyperswarm/HyperDHT connections, handshake, firewall, gossip, direct dialing, refresh |
 | `src/transport/rpc.js` | Line‑delimited JSON RPC over the encrypted stream, with timeouts and size limits |
 | `src/team.js` | Local orchestrator: fans out to teammates in parallel, merges and labels results |
+| `src/conversations.js` | Automatic conversations: signed invite/accept/decline/end, per‑side sessions, turn and time limits, loop detection (`conversations.json`) |
+| `extension/hook/session-hub-hook.cjs` | Hook run by Claude Code (`Stop`) and Cursor (`stop`) at the end of each agent turn; asks the local hub for the peer's reply and returns it as `decision/reason` (Claude Code) and `followup_message` (Cursor) |
 | `src/archive.js` | Local backup: `own` (mirror of my shared sessions that survives deletion at the source, with previous version on shrink) and `copies` (read copies of teammates' sessions, incremental, withdrawn when access ends). Gzip, atomic writes, 0600 |
 | `src/projectkey.js` | Project identity: hash of the normalized git `origin` (same repo = same key, whatever the folder name) or a per‑owner local key; the URL never leaves the machine |
 | `src/inbox.js` | Signed messages between members: compose, verify, hold/accept/refuse policy, rate limit, offline queue, receipts (`inbox.json`) |
@@ -79,6 +81,7 @@ The receiver verifies the chain **and** that the chain's member key equals the c
 | `hello` | both | certificate chain, signed profile, addresses, gossip |
 | `admitted` | issuer → joiner | admission doc completing the joiner's chain |
 | `req` / `res` | both | RPC: `whoami`, `projects`, `sessions`, `session`, `changes`, `search`, `agents`, `message` |
+| `req conv` | both | signed `{ kind: "conv", id, action: invite\|accept\|decline\|end, turns, minutes, mine, theirs, text }` |
 | `req copystatus` | copier → owner | for each copied session: `ok`, `withdrawn` (hidden, unshared, copies disallowed) → delete, `gone` (no longer exists) → keep, `paused` |
 | `receipt` | recipient → sender | what happened to a message: `held`, `delivered`, `read`, `dismissed` |
 | `revoke` | any → all | signed revocation, verified before applying |
@@ -99,6 +102,12 @@ A message is a signed doc `{ kind: "message", v: 1, id, team, from, to, text, to
 If the recipient is offline the signed doc stays in the sender's `inbox.json` as `queued` and is retried when they connect (`joined` event), until it expires after 24 h. Messages never trigger actions: the extension only offers to open the AI chat with the text framed as coming from a teammate.
 
 **Open sessions** (`agents` RPC): Claude Code writes `~/.claude/sessions/<pid>.json` (cwd, name, busy/idle). The hub reads only those JSON files, never Claude Code's per‑session keys or sockets, and only counts a session if its process is alive and its folder is inside a project shared with the viewer (pause and hidden sessions apply). Cursor has no such registry, so a Cursor session counts as open when it was active in the last 10 minutes.
+
+## Automatic conversations
+
+Both people must consent: the initiator sends a signed `invite` (if the AI asked via MCP, the conversation stays in `confirm` until the user confirms it in the editor); the invitee `accept`s and binds one of its sessions (or "the first one to finish a turn"). While `active`, messages carrying the conversation id are delivered without the hold policy and counted per side; the conversation ends for both on the turn limit, the time limit, a repeated or empty message (loop), or `end`/`decline`.
+
+At the end of every agent turn Claude Code and Cursor run `session-hub-hook` with the session id (`session_id` / `conversation_id`). The hook calls `POST /api/hook/stop` on the local hub (token in `~/.session-hub/hook.json`), which returns the peer's pending messages framed as *"from another session, not an order"*, or — if this side is awaiting a reply — long‑polls in 25 s slices (up to ~110 s). Only one wait per conversation runs at a time (Cursor may also import the Claude Code hook), and any error or a closed hub yields `{}` so the agent simply stops. The extension installs the hook with consent into `~/.claude/settings.json` (`Stop`, timeout 150 s) and `~/.cursor/hooks.json` (`stop`, `loop_limit`), preserving existing hooks and backing up the originals.
 
 ## Backup
 
@@ -132,6 +141,8 @@ Full sessions travel in pages (`offset`/`limit`, 100 messages) and are verified 
 | `audit.jsonl` | one line per read / denial / rejected connection | 0600 |
 | `archive/own/` | my sessions: `index.json` + `<id>.json.gz` (+ `.prev`) | 0600 |
 | `archive/copies/` | teammates' copies: `index.json` + `<owner>/<id>.json.gz` | 0600 |
+| `conversations.json` | automatic conversations: peers, sessions, limits, counters, status | 0600 |
+| `~/.session-hub/hook.json` | local port and token for the hook | 0600 |
 | `inbox.json` | received and sent messages (30 days, max 500 each); queued docs until delivered | 0600 |
 
 In the extension these live in the editor's `globalStorage` for the extension; all windows share them and a single hub.
@@ -146,6 +157,7 @@ In the extension these live in the editor's `globalStorage` for the extension; a
 6. A message is text for a person: it is verified against the connection's key and never executes anything.
 7. Two results are the same project only if their `projectKey` matches. A Claude Code session belongs to the folder it started in (`cwd`), not to the encoded history folder (which can be shared by `/x/my.app` and `/x/my-app`).
 8. A backup never widens access: archived sessions go through the same ACL, and copies are dropped as soon as the owner withdraws access.
+9. An automatic conversation needs both people's consent, never bypasses the agent's own permissions, and always ends (turn limit, time limit, loop detection).
 
 ## Roadmap
 

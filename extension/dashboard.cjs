@@ -4,6 +4,7 @@
 const vscode = require('vscode');
 const crypto = require('node:crypto');
 const EN = require('../locales/en.json');
+const HELP = require('../locales/help.json');
 
 class Dashboard {
   constructor(ctx, handlers) {
@@ -79,6 +80,7 @@ class Dashboard {
 <link rel="stylesheet" href="${uri('dashboard.css')}"><title>Session Hub</title></head>
 <body><div id="app"></div>
 <script nonce="${nonce}">window.SESSION_HUB_DICT = ${JSON.stringify(EN).replace(/</g, '\\u003c')};</script>
+<script nonce="${nonce}">window.SESSION_HUB_HELP = ${JSON.stringify(HELP).replace(/<\//g, '<\\/')};</script>
 <script nonce="${nonce}" src="${uri('i18n.js')}"></script>
 <script nonce="${nonce}" src="${uri('dashboard.js')}"></script></body></html>`;
   }

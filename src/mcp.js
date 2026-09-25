@@ -131,13 +131,43 @@ export function createMcpServer(team, software, origin = { via: 'mcp' }, t = (x)
         to_session: z.string().optional().describe(t('Sesión del destinatario a la que va dirigido (ver list_agents), si aplica')),
         about_session: z.string().optional().describe(t('Sesión tuya o del equipo que da contexto (el destinatario puede leerla con get_session)')),
         reply_to: z.string().optional().describe(t('Id de un mensaje recibido al que respondes (ver check_inbox)')),
+        conversation: z.string().optional().describe(t('Id de la conversación automática (si hay una sola activa con esa persona, se usa sola)')),
       },
     },
-    async ({ to, text, to_session, about_session, reply_to }) => {
-      const r = await team.sendMessage({ to, text, toSession: to_session, aboutSession: about_session, replyTo: reply_to }, origin);
+    async ({ to, text, to_session, about_session, reply_to, conversation }) => {
+      const r = await team.sendMessage({ to, text, toSession: to_session, aboutSession: about_session, replyTo: reply_to, conversation }, origin);
       const estado = { held: t('entregado; espera que el destinatario lo apruebe'), delivered: t('entregado; su IA ya puede leerlo'), queued: t('en cola: se entrega cuando se conecte (hasta 24 h)') }[r.status] || r.status;
       return json({ ...r, estado });
     },
+  );
+
+  server.registerTool(
+    'start_conversation',
+    {
+      title: t('Conversación automática'),
+      description: t('Propone a UN compañero una conversación automática entre tu sesión y la suya: mientras esté activa, sus mensajes les llegan solos a cada IA al terminar cada turno (hasta un número de vueltas y minutos). Úsalo solo si el usuario te lo pide. El usuario debe confirmarla en su editor y el compañero, aceptarla; nada se ejecuta por los mensajes.'),
+      inputSchema: {
+        to: z.string().describe(t('Con quién: nombre, huella o id (ver list_peers)')),
+        text: z.string().min(1).describe(t('Primer mensaje: qué quieres preguntar o coordinar')),
+        to_session: z.string().optional().describe(t('Sesión suya con la que hablar (ver list_agents), si aplica')),
+        turns: z.number().int().min(1).max(20).default(6).describe(t('Vueltas máximas (mensajes de cada lado)')),
+        minutes: z.number().int().min(1).max(60).default(10).describe(t('Minutos máximos')),
+      },
+    },
+    async ({ to, text, to_session, turns, minutes }) => {
+      const c = await team.startConversation({ to, text, theirs: to_session, turns, minutes, confirm: true });
+      return json({ id: c.id, estado: t('pendiente: el usuario debe confirmarla en el panel de Session Hub (Mensajes) y luego el compañero aceptarla'), vueltas: c.turns, minutos: c.minutes });
+    },
+  );
+
+  server.registerTool(
+    'end_conversation',
+    {
+      title: t('Terminar conversación automática'),
+      description: t('Termina una conversación automática (para los dos). Úsalo cuando ya se cumplió el objetivo o si el usuario lo pide.'),
+      inputSchema: { id: z.string().describe(t('Id de la conversación')) },
+    },
+    async ({ id }) => json({ terminada: !!(await team.endConversation(id, 'me')) }),
   );
 
   server.registerTool(

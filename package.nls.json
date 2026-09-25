@@ -86,5 +86,14 @@
   "cfg.backupMaxMB": "Maximum space for backup and copies (MB). Oldest items that only exist in the backup are deleted first.",
   "cmd.setBackupOption": "Change a backup option",
   "cmd.editBackupNumber": "Edit a backup limit",
-  "cmd.useSessionInAi": "Use session in my AI"
+  "cmd.useSessionInAi": "Use session in my AI",
+  "cmd.startConversation": "Start an automatic conversation…",
+  "cmd.acceptConversation": "Accept automatic conversation",
+  "cmd.declineConversation": "Decline automatic conversation",
+  "cmd.confirmConversation": "Confirm automatic conversation",
+  "cmd.endConversation": "End automatic conversation",
+  "cmd.installHooks": "Install hooks for automatic conversations",
+  "cmd.removeHooks": "Remove automatic-conversation hooks",
+  "cfg.conversationTurns": "Automatic conversations: maximum messages from each side.",
+  "cfg.conversationMinutes": "Automatic conversations: maximum minutes."
 }

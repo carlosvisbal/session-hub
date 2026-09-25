@@ -46,6 +46,13 @@ function demoState(lang) {
       copies: { enabled: true, allowOthers: true, bytes: 999999, owners: [{ id: id(0), name: 'Persona 0', sessions: 8, bytes: 5000, lastSync: ago(2) }, { id: id(3), name: 'Persona 3', sessions: 5, bytes: 3000, lastSync: ago(9), paused: true }], list: Array.from({ length: 13 }, (_, i) => ({ id: `cursor:k${i}`, ownerId: i < 8 ? id(0) : id(3), owner: i < 8 ? 'Persona 0' : 'Persona 3', title: `Copia ${i}`, project: 'web-app', source: 'cursor', messages: 4, bytes: 3000, syncedAt: ago(i), status: i === 2 ? 'gone' : 'ok' })) },
       settings: { archive: true, teamCopies: true, allowCopies: true, archiveRetentionDays: 365, copiesRetentionDays: 180, archiveMaxMB: 2048 },
     },
+    hooks: { claude: true, cursor: false, any: true },
+    conversations: [
+      { id: 'k1', peerName: 'Persona 0', status: 'invited', turns: 6, minutes: 10, sent: 0, received: 0, text: 'Revisemos el endpoint' },
+      { id: 'k2', peerName: 'Persona 3', status: 'active', turns: 6, minutes: 10, sent: 2, received: 1, text: 'Coordinemos adjuntos', expiresAt: new Date(Date.now() + 7 * 60000).toISOString() },
+      { id: 'k3', peerName: 'Persona 6', status: 'confirm', turns: 6, minutes: 10, sent: 0, received: 0, text: 'Pedida por la IA' },
+      { id: 'k4', peerName: 'Persona 9', status: 'ended', endReason: 'limit', turns: 6, minutes: 10, sent: 6, received: 6, text: 'Terminada' },
+    ],
   };
 }
 
@@ -57,6 +64,7 @@ function mount(lang) {
   w.addEventListener('error', (e) => errors.push(e.message));
   w.eval(fs.readFileSync(path.join(ROOT, 'media/i18n.js'), 'utf8'));
   w.SESSION_HUB_DICT = JSON.parse(fs.readFileSync(path.join(ROOT, 'locales/en.json'), 'utf8'));
+  w.SESSION_HUB_HELP = JSON.parse(fs.readFileSync(path.join(ROOT, 'locales/help.json'), 'utf8'));
   const state = demoState(lang);
   w.acquireVsCodeApi = () => ({ getState: () => null, setState() {}, postMessage: (m) => (posted.push(m), m.type === 'ready' && w.dispatchEvent(new w.MessageEvent('message', { data: { type: 'state', state } }))) });
   w.eval(fs.readFileSync(path.join(ROOT, 'media/dashboard.js'), 'utf8'));
@@ -79,19 +87,19 @@ function mount(lang) {
 const p = mount('es');
 const commands = new Set();
 const seen = () => p.d.querySelectorAll('[data-cmd]').forEach((e) => commands.add(e.dataset.cmd));
-for (const v of ['sessions', 'messages', 'team', 'privacy', 'backup', 'status']) {
+for (const v of ['sessions', 'messages', 'team', 'privacy', 'backup', 'status', 'help']) {
   p.view(v);
   seen();
   if (v === 'sessions') for (const tab of ['following', 'mine']) p.d.querySelector(`[data-tab="${tab}"]`).click(), seen();
 }
-const expected = ['whatChanged', 'sendMessage', 'togglePause', 'copyInvite', 'setLanguage', 'openSource', 'handoffMessage', 'approveMessage', 'replyMessage', 'dismissMessage', 'leaveTeam', 'blockMember', 'revokeMember', 'shareWorkspace', 'editProjectAccess', 'unshareProject', 'toggleSessionVisibility', 'doctor', 'copyNetReport', 'copyClaudeCommand', 'syncBackup', 'exportAll', 'purgeCopies', 'purgeOwnBackup', 'exportSession', 'removeFromBackup', 'setBackupOption', 'editBackupNumber', 'useSessionInAi'].map((c) => `sessionHub.${c}`);
+const expected = ['whatChanged', 'sendMessage', 'togglePause', 'copyInvite', 'setLanguage', 'openSource', 'handoffMessage', 'approveMessage', 'replyMessage', 'dismissMessage', 'leaveTeam', 'blockMember', 'revokeMember', 'shareWorkspace', 'editProjectAccess', 'unshareProject', 'toggleSessionVisibility', 'doctor', 'copyNetReport', 'copyClaudeCommand', 'syncBackup', 'exportAll', 'purgeCopies', 'purgeOwnBackup', 'exportSession', 'removeFromBackup', 'setBackupOption', 'editBackupNumber', 'useSessionInAi', 'startConversation', 'acceptConversation', 'declineConversation', 'confirmConversation', 'endConversation', 'removeHooks'].map((c) => `sessionHub.${c}`);
 assert.deepEqual(expected.filter((c) => !commands.has(c)), [], 'faltan acciones en el panel');
 assert.ok(![...commands].some((c) => !c.startsWith('sessionHub.')), 'el panel solo pide comandos de Session Hub');
 p.view('messages');
 const link = p.d.querySelector('a[href^="command:workbench.action.openSettings"]');
 assert.ok(link, 'los ajustes se abren con un enlace command: del webview');
 assert.deepEqual(JSON.parse(decodeURIComponent(link.getAttribute('href').split('?')[1])), ['sessionHub.inboundMessages']);
-ok(`las 6 pestañas reúnen las ${expected.length} acciones del panel; los ajustes se abren sin pasar por la extensión`);
+ok(`las 7 pestañas reúnen las ${expected.length} acciones del panel; los ajustes se abren sin pasar por la extensión`);
 
 // ---------- buscadores y paginación ----------
 p.view('team');
@@ -129,6 +137,38 @@ p.w.dispatchEvent(new p.w.MessageEvent('message', { data: { type: 'state', state
 assert.equal(p.d.activeElement?.dataset?.search, 'checks', 'el buscador conserva el foco al refrescar');
 assert.equal(p.count('#lb-checks .check'), 1);
 ok('buscador y paginación en equipo, mensajes, enviados, proyectos, lecturas y estado (conserva el foco)');
+
+// ---------- conversaciones automáticas ----------
+p.view('messages');
+const convRows = [...p.d.querySelectorAll('.brow.conv')].map((r) => r.textContent.replace(/\s+/g, ' '));
+assert.equal(convRows.length, 4);
+assert.ok(p.d.querySelector('.brow.conv.invited [data-cmd="sessionHub.acceptConversation"]'), 'invitación: Aceptar');
+assert.ok(p.d.querySelector('.brow.conv.confirm [data-cmd="sessionHub.confirmConversation"]'), 'pedida por la IA: Confirmar');
+assert.ok(p.d.querySelector('.brow.conv.active [data-cmd="sessionHub.endConversation"]'), 'en marcha: Detener');
+assert.match(convRows.find((r) => r.includes('Persona 3')), /2 enviadas · 1 recibidas · máximo 6.*quedan \d+ min/);
+assert.match(convRows.find((r) => r.includes('Persona 9')), /llegó al límite de vueltas/);
+assert.match(p.d.getElementById('tab-messages').textContent, /4/, 'el contador suma invitaciones y confirmaciones pendientes');
+assert.match(p.text(), /Hooks instalados en Claude Code/);
+p.view('team');
+assert.ok(p.d.querySelector('.pcard [data-cmd="sessionHub.startConversation"]'), '🤝 Conversar en la tarjeta de quien está en línea');
+ok('conversaciones: invitación, confirmación, en marcha (vueltas y minutos) y terminada; Conversar en Equipo; estado de los hooks');
+
+// ---------- Ayuda ----------
+p.view('messages');
+p.d.querySelector('[data-helpsec="conv"]').click();
+assert.equal(p.d.querySelector('[role=tab][aria-selected=true]').id, 'tab-help', '"¿Cómo funciona?" abre la Ayuda');
+assert.ok(p.d.getElementById('help-conv').open, 'en la sección de conversaciones');
+const help = JSON.parse(fs.readFileSync(path.join(ROOT, 'locales/help.json'), 'utf8'));
+assert.deepEqual(help.es.map((x) => x.id), help.en.map((x) => x.id), 'mismas secciones en los dos idiomas');
+assert.equal(p.count('.hsec'), help.es.length);
+const hq = p.d.getElementById('helpq');
+hq.value = 'hooks';
+hq.dispatchEvent(new p.w.Event('input', { bubbles: true }));
+assert.ok(p.count('.hsec') >= 1 && p.count('.hsec') < help.es.length, 'el buscador filtra las secciones');
+assert.ok([...p.d.querySelectorAll('.hsec')].every((d) => d.open), 'y las abre');
+hq.value = '';
+hq.dispatchEvent(new p.w.Event('input', { bubbles: true }));
+ok(`Ayuda: ${help.es.length} secciones en español e inglés, buscador, y "¿Cómo funciona?" lleva a la sección`);
 
 // ---------- pestaña Respaldo ----------
 p.view('backup');
@@ -186,7 +226,9 @@ tab.dispatchEvent(new p.w.KeyboardEvent('keydown', { key: 'ArrowRight', bubbles:
 assert.equal(p.d.activeElement.id, 'tab-messages');
 assert.deepEqual(p.errors, []);
 const en = mount('en');
-for (const v of ['sessions', 'messages', 'team', 'privacy', 'backup', 'status']) en.view(v);
+for (const v of ['sessions', 'messages', 'team', 'privacy', 'backup', 'status', 'help']) en.view(v);
+assert.match(en.text(), /Automatic conversations/);
+assert.ok(en.d.querySelector('.hsec summary').textContent.includes('Getting started'), 'Ayuda en inglés');
 en.view('backup');
 assert.match(en.text(), /My backed-up sessions/);
 assert.match(en.text(), /My team's copies/);

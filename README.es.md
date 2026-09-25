@@ -35,7 +35,7 @@ Tu compañero del backend pasó la mañana con Claude Code cambiando una API. T�
 | | |
 |---|---|
 | 👀 **Ver** | Las sesiones de Claude Code y Cursor de cada compañero (completas y agrupadas por proyecto), quién está en línea y qué sesiones de IA tiene abiertas. |
-| ✉️ **Hablar** | Mensajes firmados para un compañero o una de sus sesiones; esa persona decide si pasarlos a su IA. |
+| ✉️ **Hablar** | Mensajes firmados para un compañero o una de sus sesiones; esa persona decide si pasarlos a su IA. **Conversaciones automáticas**: si los dos aceptan, las dos IA conversan solas mediante los hooks de Claude Code y Cursor, hasta un límite de vueltas y tiempo. |
 | 🗄️ **Guardar** | Respaldo local de tus sesiones (Claude Code borra el historial a los 30 días) y copias de lectura de las de tu equipo, con borrar y exportar. |
 | 🤖 **Usar** | Cualquier sesión, en vivo, respaldada o copiada, en el chat de tu IA (Claude Code, Copilot o Cursor), con un clic o por MCP. |
 
@@ -123,6 +123,7 @@ Las VPN (WireGuard, Tailscale, la de la empresa) se detectan y anuncian solas. S
 | `list_agents` | Sesiones de IA que cada compañero tiene abiertas ahora (herramienta, proyecto, ocupada o libre) |
 | `send_message` | Un mensaje de texto firmado para un compañero (en cola hasta 24 h si está desconectado) |
 | `check_inbox` | Los mensajes que aprobaste para tu IA, marcados como de un compañero y no tuyos |
+| `start_conversation` / `end_conversation` | Proponer (tú confirmas, el otro acepta) y terminar una conversación automática |
 
 `list_sessions` acepta `origen: "respaldo"` para listar solo lo que viene del respaldo (el original ya se borró) o de copias locales. Cada resultado lleva `projectKey` (mismo repo = misma clave), `archived` y `copy`: la IA no mezcla proyectos y sabe cuándo lee una copia.
 

@@ -55,7 +55,7 @@ export function createInbox({ file, teamState, policy = () => 'hold', now = Date
 
   return {
     // Arma y firma un mensaje mío. No lo envía.
-    compose({ to, text, toSession, aboutSession, replyTo }) {
+    compose({ to, text, toSession, aboutSession, replyTo, conv }) {
       const team = teamState.team();
       if (!team || team.pending) throw err('Necesitas ser miembro confirmado del equipo para enviar mensajes.', 'invalid');
       return signDoc(teamState.keyPair(), {
@@ -69,13 +69,14 @@ export function createInbox({ file, teamState, policy = () => 'hold', now = Date
         toSession: optId(toSession),
         aboutSession: optId(aboutSession),
         replyTo: optId(replyTo),
+        ...(conv ? { conv: String(conv) } : {}), // conversación automática a la que pertenece
         at: new Date(now()).toISOString(),
       });
     },
 
     recordSent(doc, toName) {
       const b = doc.body;
-      state.sent.push({ id: b.id, doc, to: b.to, toName, text: b.text, toSession: b.toSession, aboutSession: b.aboutSession, replyTo: b.replyTo, at: b.at, status: 'queued' });
+      state.sent.push({ id: b.id, doc, to: b.to, toName, text: b.text, toSession: b.toSession, aboutSession: b.aboutSession, replyTo: b.replyTo, conv: b.conv || null, at: b.at, status: 'queued' });
       save();
       return state.sent.at(-1);
     },
@@ -101,7 +102,8 @@ export function createInbox({ file, teamState, policy = () => 'hold', now = Date
     },
 
     // Llega un mensaje por el canal cifrado; `peer` es la identidad ya verificada de la conexión.
-    receive(doc, peer) {
+    // autoDeliver(body) → true si pertenece a una conversación automática aceptada: se entrega solo.
+    receive(doc, peer, { autoDeliver = () => false } = {}) {
       const b = doc?.body;
       const team = teamState.team();
       if (!b || b.kind !== 'message' || b.v !== 1) throw err('Mensaje con formato desconocido.', 'invalid');
@@ -112,7 +114,8 @@ export function createInbox({ file, teamState, policy = () => 'hold', now = Date
       const text = cleanText(b.text);
       const dup = find(b.id);
       if (dup) return { status: dup.status }; // reintento del mismo mensaje
-      const p = policy();
+      const auto = !!b.conv && autoDeliver(b);
+      const p = auto ? 'accept' : policy();
       if (p === 'refuse') throw err('Esta persona no está recibiendo mensajes.', 'refused');
       const times = (recent.get(peer.id) || []).filter((t) => t > now() - RATE.ms);
       if (times.length >= RATE.max) throw err('Demasiados mensajes seguidos; espera un minuto.', 'rate');
@@ -127,6 +130,7 @@ export function createInbox({ file, teamState, policy = () => 'hold', now = Date
         toSession: optId(b.toSession),
         aboutSession: optId(b.aboutSession),
         replyTo: optId(b.replyTo),
+        conv: auto ? String(b.conv) : null,
         at: b.at,
         receivedAt: new Date(now()).toISOString(),
         status: p === 'accept' ? 'delivered' : 'held',
@@ -157,6 +161,14 @@ export function createInbox({ file, teamState, policy = () => 'hold', now = Date
     markReplied(id) {
       const m = find(id);
       if (m) (m.repliedAt = new Date(now()).toISOString()), save();
+    },
+
+    // Mensajes de una conversación automática listos para pasarle al agente (se marcan como leídos).
+    takeConv(convId) {
+      const out = state.received.filter((m) => m.conv === convId && m.status === 'delivered');
+      for (const m of out) m.status = 'read';
+      if (out.length) save();
+      return out;
     },
 
     // Para la IA: los mensajes aprobados que aún no leyó. Se marcan como leídos.

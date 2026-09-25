@@ -13,7 +13,7 @@ const PAGE = 100;
 // (a los compañeros les llega tal cual y su hub hace lo mismo).
 const allIfZero = (q) => ({ ...q, limit: !q.limit || Number(q.limit) <= 0 ? Infinity : Number(q.limit) });
 
-export function createTeam(cfg, hub, transport, teamState, t = (s) => s, inbox = null, copies = null, log = () => {}) {
+export function createTeam(cfg, hub, transport, teamState, t = (s) => s, inbox = null, copies = null, log = () => {}, convs = null) {
   const self = () => ({ ...hub.whoami(), fingerprint: fingerprint(teamState.me()), self: true, online: true });
 
   const members = () => [self(), ...transport.list()];
@@ -316,7 +316,8 @@ export function createTeam(cfg, hub, transport, teamState, t = (s) => s, inbox =
     },
 
     // Mensaje de texto a una persona. replyTo sin "to" responde a quien escribió ese mensaje.
-    async sendMessage({ to, text, toSession, aboutSession, replyTo }, origin = {}) {
+    // Si hay una conversación automática activa con esa persona, el mensaje se enlaza a ella y cuenta una vuelta.
+    async sendMessage({ to, text, toSession, aboutSession, replyTo, conversation }, origin = {}) {
       if (!inbox) throw new Error('Mensajes no disponibles.');
       const original = replyTo ? inbox.get(replyTo) : null;
       if (replyTo && !original) throw new Error(t('No encuentro el mensaje {v1} en tu bandeja.', { v1: replyTo }));
@@ -324,11 +325,65 @@ export function createTeam(cfg, hub, transport, teamState, t = (s) => s, inbox =
       const targets = original ? members().filter((m) => m.id === original.from) : resolve(to).filter((m) => !m.self);
       if (targets.length !== 1) throw new Error(t('El mensaje va a una sola persona. Equipo: {v1}', { v1: members().filter((m) => !m.self).map(label).join(', ') || '—' }));
       const m = targets[0];
-      const doc = inbox.compose({ to: m.id, text, toSession, aboutSession, replyTo });
+      let conv = convs?.activeWith(m.id, conversation) || null;
+      let turn = null;
+      if (conv) {
+        const r = convs.countSent(conv.id, text);
+        if (r.ok) turn = { id: conv.id, turn: r.turn, of: r.of };
+        else {
+          await api.endConversation(conv.id, r.reason); // límite, bucle o mensaje vacío: termina para los dos
+          conv = null;
+        }
+      }
+      const doc = inbox.compose({ to: m.id, text, toSession: toSession || (turn && conv.theirs) || null, aboutSession, replyTo, conv: turn?.id });
       inbox.recordSent(doc, m.name);
       if (original) inbox.markReplied(original.id);
       const status = m.online ? await deliver(m.id, doc) : 'queued';
-      return { id: doc.body.id, to: label(m), status, via: origin.via };
+      return { id: doc.body.id, to: label(m), status, via: origin.via, ...(turn ? { conversation: turn } : {}) };
+    },
+
+    // ---------- conversaciones automáticas ----------
+    // confirm=true (la pidió la IA por MCP): la invitación no sale hasta que yo la confirme en el editor.
+    async startConversation({ to, text, mine, theirs, turns, minutes, confirm = false }) {
+      if (!convs) throw new Error('Conversaciones no disponibles.');
+      const targets = resolve(to).filter((m) => !m.self);
+      if (targets.length !== 1) throw new Error(t('La conversación es con una sola persona. Equipo: {v1}', { v1: members().filter((m) => !m.self).map(label).join(', ') || '—' }));
+      const m = targets[0];
+      if (teamState.isBlocked(m.id)) throw new Error('Esa persona está bloqueada.');
+      if (!confirm && !m.online) throw Object.assign(new Error('No está conectado ahora'), { code: 'offline' });
+      const c = convs.create({ peer: m.id, peerName: m.name, mine, theirs, text, turns, minutes, confirm });
+      if (!confirm) await api.sendConv(c, 'invite');
+      return c;
+    },
+
+    async confirmConversation(id) {
+      const c = convs.confirmLocal(id);
+      await api.sendConv(c, 'invite');
+      return c;
+    },
+
+    async acceptConversation(id, mine) {
+      const c = convs.accept(id, mine);
+      await api.sendConv(c, 'accept');
+      return c;
+    },
+
+    async declineConversation(id) {
+      const c = convs.end(id, 'declined');
+      if (c) await api.sendConv(c, 'decline').catch(() => {});
+      return c;
+    },
+
+    async endConversation(id, reason = 'me') {
+      const c = convs.end(id, reason);
+      if (c) await api.sendConv(c, 'end', { reason }).catch(() => {});
+      return c;
+    },
+
+    // Orden firmada al otro hub (invitar, aceptar, rechazar, terminar).
+    async sendConv(c, action, extra = {}) {
+      const doc = action === 'invite' ? convs.inviteDoc(c) : convs.controlDoc(c, action, extra);
+      return transport.request(c.peer, 'conv', { doc });
     },
 
     // Para mi IA: los mensajes aprobados que no leyó; se marcan como leídos y se avisa a cada remitente.

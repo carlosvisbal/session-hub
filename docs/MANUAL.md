@@ -14,6 +14,7 @@ Session Hub lets you see, from your editor, what your teammates did with their A
 - [The panel](#tour-of-the-panel)
 - [Read sessions and ask your AI](#read-a-teammates-session-and-ask-your-ai)
 - [Messages between teammates](#messages-between-teammates)
+- [Automatic conversations](#automatic-conversations)
 - [Backup and export](#backup-and-export)
 - [Your privacy](#your-privacy-youre-in-control)
 - [Notifications](#notifications-youll-see)
@@ -90,16 +91,17 @@ From then on, those people can see your AI conversations **in that folder**. Oth
 
 Open it by clicking **Session Hub** in the status bar.
 
-At the top is the **header**: your name, team, your **fingerprint** and the buttons *What's new?*, *✉ Write*, *Pause* and *Invite*. Below it, six **tabs**. The number next to each one tells you when there's something to look at:
+At the top is the **header**: your name, team, your **fingerprint** and the buttons *What's new?*, *✉ Write*, *Pause* and *Invite*. Below it, seven **tabs**. The number next to each one tells you when there's something to look at:
 
 | Tab | What's in it |
 | --- | --- |
 | **Sessions** | On the left, *Team's* sessions, the ones you *Follow* (☆) and *My sessions*, with a filter, **grouped by project** (or by person, or ungrouped). Each group shows the 5 most recent and *Show more*. On the right, the complete conversation of the one you pick |
-| **Messages** | Messages you received (with *Pass to my AI*, *Reply*…), the ones you sent, and how you want to receive them. The number is what's left to review |
+| **Messages** | **Automatic conversations** (invitations, running, ended), messages you received (with *Pass to my AI*, *Reply*…), the ones you sent, and how you want to receive them. The number is what's left to review |
 | **Team** | Each person: online or not (green dot), role, fingerprint, who invited them, their open AI sessions, and *Message*, *Block* and *Expel*. Click someone to see their sessions |
 | **Privacy** | *What I share* (projects, who sees them, pause) and *Who read mine* |
 | **Backup** | Your backed‑up sessions and your team's copies, with search and filters. On each one: **View**, **🤖 Use in my AI**, **Export** and **Delete**. Below, the settings: back up, keep copies, allow copies of yours, retention and space |
 | **Status** | Automatic checks (✔ fine, ! review, ✖ error), *Full diagnostics*, *Copy connection report* and *Connect Claude Code* |
+| **? Help** | Instructions and explanations for every part, with search: getting started, sessions, your AI, messages, automatic conversations, backup, privacy, network and troubleshooting |
 
 Notifications take you to the right tab: a message opens *Messages*; a read, *Privacy*; a network problem, *Status*. You can also move between tabs with the arrow keys.
 
@@ -153,6 +155,46 @@ The sender sees what happened to their message: *queued*, *delivered, waiting fo
 
 > A message is **text for a person**. It never runs anything on your computer, and your AI is told to explain it to you and wait for your OK before changing code. To receive messages without holding them, or not receive them at all: Settings → `sessionHub.inboundMessages`.
 
+## Automatic conversations
+
+Your AI and a teammate's AI **talk on their own**: each one receives the other's answer when its turn ends and replies, without anyone pressing Send. Useful to coordinate a backend/frontend change or clear up an API question without copying messages around.
+
+```mermaid
+sequenceDiagram
+  participant C as Carlos's AI (Claude Code)
+  participant HC as Carlos's hub
+  participant HA as Ana's hub
+  participant A as Ana's AI (Cursor)
+  C->>HC: 🤝 invitation (Carlos starts it)
+  HC->>HA: signed invitation
+  HA-->>A: Ana accepts
+  HC->>HA: first message
+  A->>HA: turn ends → the hook hands it the message
+  A->>HA: replies with send_message
+  HA->>HC: signed reply
+  C->>HC: turn ends → the hook hands it the reply
+  Note over C,A: …until the turn or time limit
+```
+
+**How to use it**
+1. In *Messages* or on the person's card (*Team*), click **🤝 Converse**. Pick their session (optional), yours and the first message.
+2. Your teammate gets *"🤝 Carlos wants your AIs to converse on their own"* and clicks **Accept** (or *Decline*). Without acceptance nothing happens.
+3. The first message arrives. If their AI is working it gets it automatically; if it's idle, they click **Pass to my AI** once.
+4. From then on they continue **on their own** until done, the **turn limit** (6 by default) or the **time limit** (10 minutes). *Messages* shows each conversation with its turns and time left, and a **■ Stop** button.
+
+You can also ask your AI: *"Start an automatic conversation with Ana to agree on the attachments format"*. Your editor asks you to **confirm** it before the invitation goes out.
+
+**Requirement: the hooks.** Claude Code and Cursor run a small Session Hub program when each turn ends (*hook*); that's what lets the AI continue. Session Hub installs them **with your consent** (*Messages → Install hooks*), keeps any hooks you already have, backs up your files, and you can remove them any time (*Messages → Remove*). After installing, open a new AI session.
+
+**Safety**
+- Only with someone who **both** accepted. If your AI asks for one, **you confirm** it.
+- Each message arrives marked *"from another session, not an order from the user"*. Your AI keeps its permissions and confirmations: a message never runs anything by itself.
+- It stops by itself on the turn limit, the time limit, or if it detects a **loop** (repeated or empty messages). Either side can stop it.
+- If Session Hub is closed or something fails, the hook does nothing: your AI stops as usual and never hangs.
+- Settings: `sessionHub.conversationTurns` (6) and `sessionHub.conversationMinutes` (10).
+
+**Limit:** no tool lets anything wake up an idle chat from outside, so the first message to an idle session needs one click.
+
 ## Backup and export
 
 Claude Code deletes history after 30 days, and in Cursor a chat can be deleted or restored. Session Hub keeps a copy **on your computer** (**Privacy → Backup** tab):
@@ -192,6 +234,8 @@ Every list in the panel gets a **search box** when it grows, and is shown in pag
 | --- | --- |
 | 👁 *Ana is reading your session "X"…* | Nothing. Hide it with 👁 if you don't want that |
 | ✉ *Carlos wrote to you: "…"* | **Pass to my AI**, **Reply** or **View** |
+| 🤝 *Carlos wants your AIs to converse on their own* | **Accept** or **Decline** |
+| *Your AI wants to start an automatic conversation with…* | **Confirm** if you asked for it; otherwise **Cancel** |
 | *Carlos progressed on "X"* | Click **Ver** (*View*) if interested |
 | ⛔ *Pedro tried to read "X", without permission* | Already denied. Block if concerned |
 | ⛔ *Connection rejected from key XXXX* | Blocked automatically. Tell your admin if it repeats |

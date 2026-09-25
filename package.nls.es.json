@@ -86,5 +86,14 @@
   "cfg.backupMaxMB": "Espacio máximo para el respaldo y las copias (MB). Se borra primero lo más viejo que ya solo existe en el respaldo.",
   "cmd.setBackupOption": "Cambiar una opción del respaldo",
   "cmd.editBackupNumber": "Editar un límite del respaldo",
-  "cmd.useSessionInAi": "Usar sesión en mi IA"
+  "cmd.useSessionInAi": "Usar sesión en mi IA",
+  "cmd.startConversation": "Iniciar una conversación automática…",
+  "cmd.acceptConversation": "Aceptar conversación automática",
+  "cmd.declineConversation": "Rechazar conversación automática",
+  "cmd.confirmConversation": "Confirmar conversación automática",
+  "cmd.endConversation": "Terminar conversación automática",
+  "cmd.installHooks": "Instalar hooks para conversaciones automáticas",
+  "cmd.removeHooks": "Quitar los hooks de conversaciones automáticas",
+  "cfg.conversationTurns": "Conversaciones automáticas: mensajes máximos de cada lado.",
+  "cfg.conversationMinutes": "Conversaciones automáticas: minutos máximos."
 }

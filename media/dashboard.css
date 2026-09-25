@@ -218,3 +218,18 @@ button.link.small { font-size: 11px; padding: 2px 4px }
 .bsettings { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 8px }
 .bset { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--vscode-panel-border); border-radius: 6px }
 @media (max-width: 800px) { .bsum { grid-template-columns: 1fr 1fr } .brow { flex-direction: column; align-items: stretch } }
+
+/* Conversaciones automáticas y Ayuda */
+.brow.conv.active { border-color: var(--vscode-testing-iconPassed, #3fb950) }
+.brow.conv.invited, .brow.conv.confirm { border-color: var(--vscode-focusBorder) }
+.help .hsec { border: 1px solid var(--vscode-panel-border); border-radius: 6px; margin: 8px 0; background: var(--vscode-sideBar-background, var(--vscode-editor-background)) }
+.help .hsec summary { cursor: pointer; padding: 10px 12px; font-weight: 600 }
+.help .hbody { padding: 0 16px 12px; line-height: 1.55 }
+.help .hbody code { font-family: var(--vscode-editor-font-family); background: var(--vscode-textCodeBlock-background); padding: 0 4px; border-radius: 3px }
+.help .hbody table { border-collapse: collapse; margin: 6px 0 }
+.help .hbody td, .help .hbody th { border: 1px solid var(--vscode-panel-border); padding: 4px 8px; text-align: left; vertical-align: top }
+.help .hbody .ex { display: block; margin: 4px 0; padding: 6px 10px; border-left: 3px solid var(--vscode-textLink-foreground); background: var(--vscode-textBlockQuote-background) }
+
+a, a.link { color: var(--vscode-textLink-foreground); text-decoration: none }
+a:hover { color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground)); text-decoration: underline }
+.help .lsearch { width: 100%; margin: 6px 0 }

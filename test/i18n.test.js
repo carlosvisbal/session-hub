@@ -23,30 +23,19 @@ const SPANISH = /[áéíóúñ¿¡]|\b(de|la|el|los|las|que|con|para|una?|sin|tu
 // Las plantillas con ${…} se prueban con valores de ejemplo, igual que las traduce el traductor.
 function strings(code) {
   const out = [];
-  const tokens = [...tokenizer(code, { ecmaVersion: 'latest', sourceType: 'module', allowHashBang: true, allowReturnOutsideFunction: true, allowAwaitOutsideFunction: true, locations: true })];
-  for (let i = 0; i < tokens.length; i++) {
-    const tk = tokens[i];
+  const stack = []; // plantillas abiertas y expresiones ${…} dentro de ellas (pueden anidarse)
+  for (const tk of tokenizer(code, { ecmaVersion: 'latest', sourceType: 'module', allowHashBang: true, allowReturnOutsideFunction: true, allowAwaitOutsideFunction: true, locations: true })) {
+    const top = stack.at(-1);
     if (tk.type === tt.string) out.push({ line: tk.loc.start.line, s: tk.value });
-    if (tk.type !== tt.backQuote) continue;
-    const line = tk.loc.start.line;
-    let s = '';
-    let n = 0;
-    for (i++; i < tokens.length && tokens[i].type !== tt.backQuote; i++) {
-      if (tokens[i].type === tt.template || tokens[i].type === tt.invalidTemplate) s += tokens[i].value ?? '';
-      if (tokens[i].type === tt.dollarBraceL) {
-        s += `Valor${++n}`;
-        let depth = 1;
-        while (depth && ++i < tokens.length) {
-          const x = tokens[i].type;
-          if (x === tt.dollarBraceL || x === tt.braceL) depth++;
-          if (x === tt.braceR) depth--;
-          if (x === tt.backQuote) { // plantilla anidada: se salta entera
-            for (i++; i < tokens.length && tokens[i].type !== tt.backQuote; i++);
-          }
-        }
-      }
-    }
-    out.push({ line, s });
+    else if (tk.type === tt.backQuote) {
+      if (top?.tpl) out.push({ line: top.line, s: stack.pop().s });
+      else stack.push({ tpl: true, s: '', n: 0, line: tk.loc.start.line });
+    } else if ((tk.type === tt.template || tk.type === tt.invalidTemplate) && top?.tpl) top.s += tk.value ?? '';
+    else if (tk.type === tt.dollarBraceL && top?.tpl) {
+      top.s += `Valor${++top.n}`;
+      stack.push({ tpl: false, depth: 0 });
+    } else if (tk.type === tt.braceL && top && !top.tpl) top.depth++;
+    else if (tk.type === tt.braceR && top && !top.tpl) top.depth ? top.depth-- : stack.pop();
   }
   return out;
 }
@@ -60,7 +49,12 @@ function visibleSpanishStrings(file) {
 
 test('todo texto visible en español tiene su traducción al inglés', () => {
   const missing = [];
-  for (const f of FILES) for (const { line, s } of visibleSpanishStrings(f)) if (translate('en', s) === s) missing.push(`${f}:${line} → ${s.slice(0, 100)}`);
+  const full = new Set();
+  for (const f of FILES)
+    for (const { line, s } of visibleSpanishStrings(f))
+      if (translate('en', s) === s) missing.push(`${f}:${line} → ${s.slice(0, 100)}`), full.add(s);
+  // I18N_DUMP=archivo.json → lista completa de lo que falta, para traducirla.
+  if (process.env.I18N_DUMP) fs.writeFileSync(process.env.I18N_DUMP, JSON.stringify([...full], null, 1));
   assert.deepEqual(missing, [], `Textos sin traducir:\n${missing.join('\n')}`);
 });
 
