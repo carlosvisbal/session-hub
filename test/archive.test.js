@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createCopies, createOwnArchive } from '../src/archive.js';
 import { createHub } from '../src/hub.js';
+import { createSearchIndex } from '../src/searchindex.js';
 import { makeClaudeFixture } from './fixtures.js';
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'shub-arch-'));
@@ -93,6 +94,25 @@ test('el hub sirve lo que ya solo está en el respaldo, con los mismos permisos'
   assert.equal(hub.listSessions().length, 0, 'borrada del respaldo a pedido');
 });
 
+test('índice de búsqueda: sigue una sesión que pasa de viva a solo-respaldo, y se borra si se borra del respaldo', () => {
+  const f = makeClaudeFixture();
+  const cfg = { ...f, id: 'c'.repeat(64), owner: { name: 'Carlos' }, projects: [{ path: f.project, name: 'demo-api', allow: ['*'] }], excludedSessions: [], paused: false, redactExtra: [], archiveDir: path.join(f.root, 'archive'), searchIndexFile: path.join(f.root, 'search.sqlite') };
+  const hub = createHub(cfg);
+  hub.syncArchive(); // indexa la sesión en vivo
+  assert.equal(hub.search('attachments').length, 1);
+
+  const dirName = fs.readdirSync(f.claudeDir)[0];
+  const file = fs.readdirSync(path.join(f.claudeDir, dirName))[0];
+  fs.rmSync(path.join(f.claudeDir, dirName, file)); // Claude Code la borró
+  hub.syncArchive(); // ahora solo está en el respaldo; el índice la debe seguir encontrando
+  const hits = hub.search('attachments');
+  assert.equal(hits.length, 1, 'se sigue encontrando cuando ya solo vive en el respaldo');
+  assert.equal(hits[0].sessionId, 'claude:s1');
+
+  hub.removeArchived('claude:s1');
+  assert.deepEqual(hub.search('attachments'), [], 'al borrarla del respaldo, deja de aparecer en la búsqueda');
+});
+
 test('copias: guardar, leer por partes, borrar a mano (sin volver a copiar) y vencer', () => {
   const c = createCopies({ dir: tmp() });
   const O = 'b'.repeat(64);
@@ -111,4 +131,31 @@ test('copias: guardar, leer por partes, borrar a mano (sin volver a copiar) y ve
   c.put(O, { id: 'cursor:z', updatedAt: new Date().toISOString(), messages: 5 }, conv);
   assert.equal(c.purgeOwner(O), 1);
   assert.equal(c.has(O), false);
+});
+
+test('copias con índice: mismo resultado que el barrido, sin mezclar compañeros, y limpio al borrar', () => {
+  const searchIndex = createSearchIndex({ file: path.join(tmp(), 'search.sqlite') });
+  const c = createCopies({ dir: tmp(), searchIndex });
+  const ANA = 'a'.repeat(64);
+  const LUIS = 'b'.repeat(64);
+  const conv = (n) => Array.from({ length: n }, (_, i) => ({ role: 'user', at: new Date(1e12 + i).toISOString(), text: `t${i} firma-de-contratos`, actions: [] }));
+  c.setOwner(ANA, { name: 'Ana', allowCopies: true });
+  c.setOwner(LUIS, { name: 'Luis', allowCopies: true });
+  c.put(ANA, { id: 'cursor:x', title: 'Login', project: 'web', projectKey: 'git:1', owner: 'Ana', ownerId: ANA, updatedAt: new Date().toISOString(), messages: 5 }, conv(5));
+  // muchos mensajes de Luis con el mismo término: Ana no debe perderse entre ellos (ver searchindex.test.js)
+  for (let i = 0; i < 40; i++) c.put(LUIS, { id: `cursor:luis${i}`, title: 'Ruido', project: 'otro', projectKey: 'git:2', owner: 'Luis', ownerId: LUIS, updatedAt: new Date().toISOString(), messages: 5 }, conv(5));
+
+  const hits = c.search(ANA, 'FIRMA-DE-CONTRATOS');
+  assert.equal(hits.length, 5, 'las 5 de Ana, ninguna de Luis');
+  assert.ok(hits.every((h) => h.ownerId === ANA));
+  assert.equal(c.search(ANA, 'firma-de-contratos', { project: 'git:1' }).length, 5, 'filtra por projectKey');
+  assert.equal(c.search(ANA, 'firma-de-contratos', { project: 'no-existe' }).length, 0);
+  assert.equal(c.search(LUIS, 'firma-de-contratos').length, 40 * 5);
+
+  c.remove(ANA, 'cursor:x', { ignore: true });
+  assert.deepEqual(c.search(ANA, 'firma-de-contratos'), [], 'borrada a mano: ya no aparece');
+
+  assert.equal(c.purgeOwner(LUIS), 40);
+  assert.deepEqual(c.search(LUIS, 'firma-de-contratos'), [], 'purgeOwner también limpia el índice');
+  searchIndex.close();
 });

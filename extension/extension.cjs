@@ -11,6 +11,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { renderSession, renderChanges } = require('./render.cjs');
 const { Dashboard } = require('./dashboard.cjs');
+const machine = require('./machine.cjs');
 const { createTranslator, resolveLanguage } = require('../media/i18n.js');
 const EN = require('../locales/en.json');
 const VERSION = require('../package.json').version;
@@ -57,6 +58,7 @@ const POLL_MS = 10000;
 const READ_NOTIFY_COOLDOWN_MS = 10 * 60000; // no repetir el mismo aviso de lectura antes de esto
 
 let ctx;
+let DATA_DIR = ''; // datos del hub: comunes a todos los editores de la computadora (machine.cjs)
 let hubProc = null;
 let token = '';
 let output;
@@ -84,20 +86,20 @@ async function activate(context) {
     toggleFollow,
     lang,
   });
+  // Un solo hub por computadora: identidad, token, equipo, respaldo y bandeja viven en una carpeta
+  // común a todos los editores. La primera vez se trae la identidad que ya había (ver adoptIdentity).
+  DATA_DIR = machine.dataDir();
+  const legacy = fs.existsSync(path.join(DATA_DIR, 'config.json')) ? null : migrateLegacyStorage();
+  if (!machine.samePath(DATA_DIR, ctx.globalStorageUri.fsPath)) await adoptIdentity();
   // Token solo para la API local de esta máquina (el equipo se identifica con claves, no con tokens).
-  // Si el llavero del sistema no responde al arrancar, se reutiliza el token de la configuración del hub
-  // antes de crear uno nuevo: cambiarlo rompería las conexiones ya registradas (p. ej. Claude Code).
-  token = (await ctx.secrets.get(TOKEN_KEY).then((v) => v, () => '')) || '';
-  if (!token) {
-    try {
-      token = JSON.parse(fs.readFileSync(path.join(ctx.globalStorageUri.fsPath, 'config.json'), 'utf8')).localToken || '';
-    } catch {}
-    token ||= crypto.randomBytes(24).toString('base64url');
-    await ctx.secrets.store(TOKEN_KEY, token).then(
-      () => {},
-      () => {},
-    );
-  }
+  // Es el de la carpeta común, así todos los editores hablan con el mismo hub; no se cambia nunca,
+  // porque rompería las conexiones ya registradas (p. ej. Claude Code).
+  token = machine.readJson(path.join(DATA_DIR, 'config.json'))?.localToken || (await ctx.secrets.get(TOKEN_KEY).then((v) => v, () => '')) || crypto.randomBytes(24).toString('base64url');
+  await ctx.secrets.store(TOKEN_KEY, token).then(
+    () => {},
+    () => {},
+  );
+  await syncSharedSettings();
 
   const reg = (id, fn) => ctx.subscriptions.push(vscode.commands.registerCommand(id, fn));
   reg('sessionHub.start', startHub);
@@ -151,9 +153,12 @@ async function activate(context) {
     vscode.window.registerTreeDataProvider('sessionHub.team', tree),
     vscode.workspace.onDidChangeConfiguration(onConfigChanged),
   );
+  const watchSettings = () => syncSharedSettings().catch(() => {});
+  fs.watchFile(machine.settingsFile(DATA_DIR), { interval: 1500 }, watchSettings);
+  ctx.subscriptions.push({ dispose: () => fs.unwatchFile(machine.settingsFile(DATA_DIR), watchSettings) });
   registerMcp();
   updateStatus();
-  const migration = migrateLegacyStorage();
+  const migration = legacy;
 
   if (migration?.restored) info(t('Recuperé tu equipo "{v1}" de la versión anterior de la extensión.', { v1: migration.restored }));
   if (migration?.ask) migration.ask();
@@ -222,10 +227,88 @@ function migrateLegacyStorage() {
   return null;
 }
 
+// Primera vez con la carpeta común: se trae la identidad que ya había en algún editor (con su
+// token, equipo, respaldo y bandeja). Si había personas distintas en distintos editores, se
+// pregunta con cuál seguir; las demás quedan guardadas en su carpeta. Se copia, no se mueve.
+async function adoptIdentity() {
+  const own = ctx.globalStorageUri.fsPath;
+  if (machine.readJson(path.join(DATA_DIR, 'config.json'))?.localToken) return;
+  // Se decide antes de tomar el candado: la persona puede tardar en elegir.
+  const p = machine.plan(machine.candidateDirs(own).map(machine.describe), own);
+  let use = p.use;
+  let others = p.others || [];
+  if (p.ask) {
+    const items = p.ask.map((c) => ({ label: `${c.owner || '?'} · ${t('equipo {v1}', { v1: c.team.name })}`, description: c.editor, detail: t('usada por última vez: {v1}', { v1: new Date(c.mtime).toLocaleString() }), c }));
+    const pick = await vscode.window.showQuickPick(items, { title: t('Session Hub ahora es uno solo por computadora'), placeHolder: t('Tenías una identidad distinta en cada editor. ¿Con cuál sigues? Las demás quedan guardadas.'), ignoreFocusOut: true });
+    use = (pick || items[0]).c;
+    others = p.ask.filter((c) => c.pub !== use.pub);
+  }
+  const secret = (await ctx.secrets.get(TOKEN_KEY).then((v) => v, () => '')) || '';
+  const result = await machine.createOnce(DATA_DIR, async (stage) => {
+    if (use) await machine.copyData(use.dir, stage);
+    const confFile = path.join(stage, 'config.json');
+    const conf = machine.readJson(confFile) || {};
+    conf.localToken ||= secret || crypto.randomBytes(24).toString('base64url');
+    machine.writeJsonAtomic(confFile, conf);
+    machine.writeJsonAtomic(path.join(stage, 'origin.json'), { from: use?.dir || null, editor: use?.editor || editorName(), at: new Date().toISOString(), kept: others.map((c) => c.dir) });
+  });
+  if (result === 'timeout') return output.appendLine(t('[hub] otro editor sigue preparando la carpeta común; reintenta abriendo de nuevo esta ventana.'));
+  if (result !== 'done') {
+    // Otro editor la preparó mientras aquí se elegía: vale su elección.
+    const chosen = machine.readJson(path.join(DATA_DIR, 'team.json'))?.keyPair?.publicKey;
+    if (p.ask && chosen && chosen !== use?.pub) info(t('Otro editor ya eligió con qué identidad sigue Session Hub en esta computadora; se usa esa. La que elegiste aquí queda guardada en {v1}.', { v1: use.dir }));
+    return;
+  }
+  if (use) output.appendLine(t('[hub] datos comunes en {v1}, traídos de {v2}.', { v1: DATA_DIR, v2: use.editor }));
+  for (const o of others) info(t('Session Hub es ahora uno solo en esta computadora y usa la identidad de {v1}. La de {v2} ({v3}) queda guardada en {v4}.', { v1: `${use.owner} (${use.editor})`, v2: o.owner || '?', v3: o.editor, v4: o.dir }));
+}
+
+// Un hub anterior a 0.10 que seguía abierto (una ventana sin recargar durante la actualización)
+// escribía en la carpeta vieja de su editor. Si era la misma identidad, antes de relanzar el hub
+// se traen de ahí los archivos más recientes, para no volver a datos de antes de la migración.
+async function catchUpFromOldHub(running) {
+  if (machine.compareVersions(running.version, '0.10.0') >= 0) return;
+  const origin = machine.readJson(path.join(DATA_DIR, 'origin.json'));
+  const mine = machine.readJson(path.join(DATA_DIR, 'team.json'))?.keyPair?.publicKey;
+  if (!origin?.from || !mine || running.id !== mine) return; // otra identidad: no se mezcla
+  const n = await machine.catchUp(origin.from, DATA_DIR).catch(() => 0);
+  if (n) output.appendLine(t('[hub] traídos {v1} archivos más recientes del hub anterior ({v2}).', { v1: n, v2: origin.from }));
+}
+
+// Ajustes comunes (machine.SHARED_SETTINGS): lo que otro editor cambió se aplica aquí, y lo que
+// este editor tiene y la carpeta común no, se agrega. Se compara antes de escribir: sin bucles.
+async function syncSharedSettings() {
+  const shared = machine.readSettings(DATA_DIR)?.values || {};
+  const c = cfg();
+  const missing = [];
+  for (const k of machine.SHARED_SETTINGS) {
+    const mine = c.inspect(k)?.globalValue;
+    if (k in shared) {
+      if (!machine.same(mine, shared[k])) await c.update(k, shared[k], vscode.ConfigurationTarget.Global).then(() => {}, () => {});
+    } else if (mine !== undefined) missing.push(k);
+  }
+  if (missing.length || !machine.readSettings(DATA_DIR)) pushSharedSettings(missing);
+}
+
+function pushSharedSettings(keys) {
+  const cur = machine.readSettings(DATA_DIR)?.values || {};
+  const values = { ...cur };
+  const c = cfg();
+  for (const k of keys) {
+    const v = c.inspect(k)?.globalValue;
+    if (v === undefined) delete values[k];
+    else values[k] = v;
+  }
+  if (machine.same(values, cur) && machine.readSettings(DATA_DIR)) return;
+  machine.writeSettings(DATA_DIR, values, editorName());
+}
+
 // Solo el puerto de la API o el runtime requieren reiniciar el hub; lo demás se recarga en caliente
 // (nombre, rol, red, compartir, pausar, ocultar).
 const RESTART_KEYS = ['port', 'nodePath'];
 function onConfigChanged(e) {
+  const sharedKeys = machine.SHARED_SETTINGS.filter((k) => e.affectsConfiguration(`sessionHub.${k}`));
+  if (sharedKeys.length) pushSharedSettings(sharedKeys);
   if (e.affectsConfiguration('sessionHub.language')) {
     tree.refresh();
     updateStatus();
@@ -241,7 +324,7 @@ function onConfigChanged(e) {
 
 function writeHubConfig() {
   const c = cfg();
-  const file = path.join(ctx.globalStorageUri.fsPath, 'config.json');
+  const file = path.join(DATA_DIR, 'config.json');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const data = {
     owner: { name: c.get('name') || os.userInfo().username, role: c.get('role') },
@@ -373,7 +456,13 @@ function startHub() {
       // porque el panel y el hub deben hablar la misma versión.
       if (who === 'mine') {
         const running = await hubVersion();
-        if (running && running.version !== VERSION && (await replaceHub(running))) return await spawnHub();
+        // Solo se reemplaza un hub más viejo: si otro editor tiene una versión más nueva, se usa esa
+        // (si no, los dos editores se reemplazarían el uno al otro).
+        if (running && machine.compareVersions(running.version, VERSION) < 0 && (await replaceHub(running))) {
+          await catchUpFromOldHub(running);
+          return await spawnHub();
+        }
+        if (running && machine.compareVersions(running.version, VERSION) > 0) output.appendLine(t('[hub] el hub abierto es de la versión {v1}, más nueva que esta extensión ({v2}): actualiza Session Hub en este editor.', { v1: running.version, v2: VERSION }));
         return attach();
       }
       if (who === 'other') {
@@ -393,7 +482,7 @@ async function hubVersion() {
   try {
     const r = await fetch(`${base()}/api/whoami`, { headers: { authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(3000) });
     const w = await r.json();
-    return { version: w.software?.version || '?', pid: w.pid || null };
+    return { version: w.software?.version || '?', pid: w.pid || null, id: w.id || null };
   } catch {
     return null;
   }
@@ -481,7 +570,7 @@ async function replaceHub(running) {
 
 function attach() {
   attached = true;
-  output.appendLine(t(`[hub] esta ventana usa el hub que ya está abierto en otra ventana (puerto ${port()}).`));
+  output.appendLine(t('[hub] esta ventana usa el hub que ya está abierto en otra ventana u otro editor (puerto {v1}).', { v1: port() }));
   afterStart();
 }
 
@@ -913,6 +1002,7 @@ function healthChecks(d, mcp, claude) {
   if (d.software?.version && d.software.version !== VERSION) add('error', t('El hub corre la versión {v1} y la extensión es la {v2}', { v1: d.software.version, v2: VERSION }), 'Pulsa "Reiniciar" en el aviso, o cierra todas las ventanas del editor y vuelve a abrirlo.');
   const net = d.network;
   const hk = hooksStatus();
+  add('ok', t('Un solo Session Hub para todos tus editores de esta computadora · datos en {v1}', { v1: DATA_DIR }));
   if (hk.any) add('ok', t('Conversaciones automáticas: hooks instalados en {v1}', { v1: [hk.claude && 'Claude Code', hk.cursor && 'Cursor'].filter(Boolean).join(t(' y ')) }));
   if (claude === 'ok') add('ok', 'Claude Code conectado a Session Hub');
   if (claude === 'stale') add('error', 'Claude Code apunta a otro token o puerto: no puede consultar Session Hub', 'Pulsa "Conectar Claude Code" para actualizarlo.');
@@ -1082,7 +1172,7 @@ async function checkHealth() {
     // Estaba usando el hub de otra ventana y esa ventana se cerró: esta toma el relevo.
     if (attached && err.name !== 'TimeoutError') {
       attached = false;
-      output.appendLine(t('[hub] la ventana que tenía el hub se cerró; esta ventana lo inicia.'));
+      output.appendLine(t('[hub] la ventana o el editor que tenía el hub se cerró; esta ventana lo inicia.'));
       await startHub();
       throw new Error('relevo del hub');
     }
@@ -1659,7 +1749,8 @@ function openChatTabs() {
 }
 
 // Sesión de Claude Code a la que dirigir el texto: la del mensaje si es mía; si no, la más reciente
-// abierta en esta carpeta desde el editor (registro de Claude Code en ~/.claude/sessions).
+// abierta en esta carpeta (registro de Claude Code en ~/.claude/sessions), sin importar cómo se
+// abrió (extensión o terminal integrada): si no se encuentra ninguna, ahí sí se abre una nueva.
 function claudeSessionFor(m) {
   if (m?.toSession?.startsWith('claude:')) return m.toSession.slice(7);
   const dir = path.join(os.homedir(), '.claude', 'sessions');
@@ -1671,7 +1762,7 @@ function claudeSessionFor(m) {
       try {
         const d = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
         const same = (a, b) => (process.platform === 'win32' ? path.resolve(a).toLowerCase() === path.resolve(b).toLowerCase() : path.resolve(a) === path.resolve(b));
-        if (!d.sessionId || d.entrypoint !== 'claude-vscode' || !folders.some((f) => same(f, String(d.cwd || '')))) continue;
+        if (!d.sessionId || !folders.some((f) => same(f, String(d.cwd || '')))) continue;
         try {
           process.kill(d.pid, 0);
         } catch (err) {
@@ -1694,6 +1785,10 @@ async function chooseChat(m) {
     if (m?.toSession?.startsWith('claude:') && available.includes('claude')) return 'claude';
     const tabs = openChatTabs();
     if (tabs.active && available.includes(tabs.active)) return tabs.active;
+    // Nada visible en pantalla ahora mismo: si hay una sesión de Claude Code abierta para este
+    // proyecto (aunque sea en una terminal, no en una pestaña), se usa esa en vez de abrir una
+    // nueva. Solo si no hay ninguna, se sigue con las demás preferencias.
+    if (available.includes('claude') && claudeSessionFor(m)) return 'claude';
     const opened = available.filter((k) => tabs.open.has(k));
     if (opened.length === 1) return opened[0];
     const last = ctx.globalState.get('lastChat');

@@ -12,6 +12,7 @@ import { cursorUnavailable, listCursorSessions } from './sources/cursor.js';
 import { redact, setExtraPatterns } from './redact.js';
 import { projectKey } from './projectkey.js';
 import { createOwnArchive } from './archive.js';
+import { createSearchIndex } from './searchindex.js';
 import { isInside, iso, parseSince, relPath, truncate } from './util.js';
 
 const CURSOR_ACTIVE_MS = 10 * 60_000; // Cursor no deja registro de sesiones abiertas: cuenta la actividad reciente
@@ -26,8 +27,12 @@ export class AccessDenied extends Error {
 
 export function createHub(cfg, { log = () => {} } = {}) {
   setExtraPatterns(cfg.redactExtra);
+  // Índice de búsqueda (SQLite FTS5): acelera y mejora search(), nunca es la fuente de verdad.
+  // Sin Node 22.5+ (node:sqlite) o sin carpeta configurada (pruebas), queda desactivado y search()
+  // vuelve al barrido de siempre.
+  const searchIndex = cfg.searchIndexFile ? createSearchIndex({ file: cfg.searchIndexFile, log }) : null;
   // Respaldo de mis sesiones (capa 1). Sin carpeta configurada (pruebas) no hay respaldo.
-  const own = cfg.archiveDir ? createOwnArchive({ dir: cfg.archiveDir, log }) : null;
+  const own = cfg.archiveDir ? createOwnArchive({ dir: cfg.archiveDir, log, searchIndex }) : null;
   const archiveOn = () => !!own && cfg.archive !== false;
 
   // Dinámico: el nombre y el rol pueden cambiar en caliente.
@@ -150,11 +155,16 @@ export function createHub(cfg, { log = () => {} } = {}) {
   }
 
   return {
+    // Para que createCopies() (fuera de este módulo) indexe las copias en el mismo archivo.
+    searchIndex,
     // ---------- respaldo (capa 1) ----------
     syncArchive() {
-      if (!archiveOn()) return;
-      own.sync(cfg.projects, (p) => listing(p), { retentionDays: cfg.archiveRetentionDays });
-      own.trimTo(Math.max(50, cfg.archiveMaxMB || 2048) * 1024 * 1024);
+      if (archiveOn()) {
+        own.sync(cfg.projects, (p) => listing(p), { retentionDays: cfg.archiveRetentionDays });
+        own.trimTo(Math.max(50, cfg.archiveMaxMB || 2048) * 1024 * 1024);
+      }
+      // Independiente del respaldo: buscar debe funcionar aunque esté desactivado.
+      if (searchIndex) for (const s of rawSessions(cfg.projects)) searchIndex.indexSession({ id: s.id, scope: 'own', ownerId: cfg.id, source: s.source, project: s.project, title: s.title, updatedAt: s.updatedAt, messages: s.messages });
     },
     archiveStatus: () => (own ? { enabled: archiveOn(), ...own.status() } : { enabled: false, sessions: 0, onlyInBackup: 0, bytes: 0 }),
     // Detalle para administrar el respaldo desde el panel (sin mensajes: solo lo que se lista).
@@ -333,9 +343,27 @@ export function createHub(cfg, { log = () => {} } = {}) {
     },
 
     search(query, { project, limit = Infinity, viewer = null } = {}) {
+      // Mismos permisos que allSessions(): proyecto pedido (o todos los visibles) y, para un
+      // compañero, sin las sesiones ocultas. El índice no sabe nada de permisos por sí solo: se
+      // filtra aquí, después de preguntarle, igual que antes se filtraba después del barrido.
+      const projects = project ? [resolveProject(project, viewer)] : visibleProjects(viewer);
+      if (searchIndex?.available) {
+        const allowed = new Set(projects.map((p) => p.path));
+        // Margen: algunos hits del índice se van a descartar por proyecto u ocultas.
+        const raw = searchIndex.search(query, { limit: limit === Infinity ? Infinity : Math.min(limit * 5, 2000), scope: 'own', ownerId: cfg.id });
+        const hits = [];
+        for (const r of raw) {
+          if (!allowed.has(r.project) || (viewer && isExcluded({ id: r.sessionId }))) continue;
+          hits.push({ sessionId: r.sessionId, owner: owner.name, ownerId: owner.id, title: redact(r.title), project: nameOf(r.project), projectKey: keyOf(r.project), source: r.source, role: r.role, at: iso(r.at), snippet: redact(r.snippet) });
+          if (hits.length >= limit) break;
+        }
+        return hits;
+      }
+      // Sin índice (Node anterior a 22.5): el barrido de siempre, mensaje por mensaje.
       const q = query.toLowerCase();
       const hits = [];
-      for (const s of allSessions({ project, viewer })) {
+      for (const s of rawSessions(projects)) {
+        if (viewer && isExcluded(s)) continue;
         for (const m of s.messages) {
           const idx = m.text.toLowerCase().indexOf(q);
           if (idx < 0) continue;

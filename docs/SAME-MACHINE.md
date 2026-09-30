@@ -2,7 +2,7 @@
 
 **English** · [Español](SAME-MACHINE.es.md)
 
-> Status: **automatic conversations** (phase 3) are implemented since 0.9.0 between people, on different computers or on the same one with separate identities (see the [manual](MANUAL.md#automatic-conversations)). The **single hub per computer** (phases 1 and 2) is still a **proposal**. Session Hub already works between different computers; this document analyzes using **two editors on the same computer** (e.g. Cursor for frontend and VS Code with Claude Code for backend) and letting their chats talk — even **asking and answering each other automatically**.
+> Status: **one hub per computer** (phase 1) is implemented since **0.10.0**: Cursor and VS Code share one identity, one configuration and one hub; see section 2 and [ARCHITECTURE](ARCHITECTURE.md#storage). **Automatic conversations** (phase 3) are implemented since 0.9.0. Phase 2 (delivering to the right editor) is still a proposal. Sections 1 and 3–6 keep the original analysis. Session Hub already works between different computers; this document analyzes using **two editors on the same computer** (e.g. Cursor for frontend and VS Code with Claude Code for backend) and letting their chats talk — even **asking and answering each other automatically**.
 
 ## 1. Today
 

@@ -60,7 +60,7 @@ Either way: if you're updating, close **all** editor windows and reopen. A **blu
 
 The status bar (bottom) shows *Session Hub · 0 · 0 compartidos* (*0 shared*) — it's working.
 
-> Several editor windows open? They all share the same Session Hub.
+> Several editor windows, or **Cursor and VS Code at once**? They all share the same Session Hub: one identity, one configuration. Change something in one editor (share, pause, backup) and the other sees it.
 
 ## Create a team or join one
 
@@ -150,7 +150,7 @@ You get a notification (*✉ Carlos wrote to you: "…"*) and the message appear
 
 | Button | What happens |
 | --- | --- |
-| **Pasar a mi IA** (*Pass to my AI*) | Leaves the message **typed in** your AI's chat, with a note saying it comes from a teammate, not from you. It's never sent by itself: you review it and press Send. Works with **Claude Code** (in the session the message was for, or your session for that project), **Copilot** in VS Code and **Cursor's chat**. If you have several, it uses the one in the active tab or asks once. To fix one: setting `sessionHub.aiChat`. |
+| **Pasar a mi IA** (*Pass to my AI*) | Leaves the message **typed in** your AI's chat, with a note saying it comes from a teammate, not from you. It's never sent by itself: you review it and press Send. Works with **Claude Code** (in the session the message was for, or the one you already have open for that project, even from an integrated terminal), **Copilot** in VS Code and **Cursor's chat**. If you have several, it uses the one in the active tab or asks once. To fix one: setting `sessionHub.aiChat`. |
 | **Permitir que mi IA lo lea** (*Let my AI read it*) | Your AI can read it when you ask *"check my Session Hub messages"* (tool `check_inbox`). Useful in Claude Code. |
 | **Responder** (*Reply*) | Write back; the reply is linked to the original message. |
 | **Descartar** (*Dismiss*) | Hides it. |
@@ -274,7 +274,7 @@ Opening the port — **Windows:** allow on *Private networks* when prompted. **m
 
 **Does it work from home?** Yes. With a company VPN it works as in the office. The full guide — modes, your own server, the relay and what to ask IT — is in [Working across networks](REMOTE.md). Without VPN, set `sessionHub.network` to **public** (over the internet, encrypted) or **private** (your own server, started with `npm run infra`). If something fails because of a network policy, click **Copy connection report** in the panel's *Status* section and send it to IT: it says what's failing, why and what to allow.
 
-**Cursor and VS Code at the same time?** For now, better just one: each editor has its own identity and both would use the same port. If you need both, give one a different `sessionHub.port` and `sessionHub.dhtPort` and invite it from the other (you'll appear twice in the team). The plan for them to share one identity and let their chats talk is in [Cursor and VS Code on the same computer](SAME-MACHINE.md).
+**Cursor and VS Code at the same time?** Yes, since 0.10. There's one Session Hub per computer: the first editor you open runs it and the other connects to it, with the same identity and settings. If you close the one running it, the other takes over. Coming from 0.9 with a different identity in each editor, Session Hub asks once which one to keep; the other stays saved in its editor's folder. Install **the same version** in both. Details: [Cursor and VS Code on the same computer](SAME-MACHINE.md).
 
 **Is it free?** Yes. Free software (AGPL‑3.0). Not affiliated with Cursor or Anthropic.
 

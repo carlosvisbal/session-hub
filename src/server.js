@@ -44,7 +44,7 @@ export function startServer(cfg, { log = console.log } = {}) {
   const teamState = openTeamState(cfg.stateFile);
   cfg.id = teamState.me(); // mi identidad es mi clave pública
   const hub = createHub(cfg, { log: say });
-  const copies = createCopies({ dir: cfg.archiveDir, log: say });
+  const copies = createCopies({ dir: cfg.archiveDir, log: say, searchIndex: hub.searchIndex });
   const access = createAccessLog({ file: cfg.auditFile, retentionDays: cfg.auditRetentionDays });
   const inbox = createInbox({ file: cfg.inboxFile, teamState, policy: () => cfg.inbound });
   const convs = createConversations({ file: cfg.convFile, teamState });
@@ -473,6 +473,7 @@ ${m.text}
     fs.unwatchFile(CONFIG_PATH);
     for (const c of sseClients) c.end();
     server.close();
+    hub.searchIndex?.close();
     await transport.stop();
   }
   server.shutdown = shutdown;

@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { AccessDenied, createHub } from '../src/hub.js';
 import { LONG_TEXT, makeClaudeFixture } from './fixtures.js';
@@ -67,6 +68,41 @@ test('qué hay nuevo sin recortes', () => {
   assert.deepEqual(s.filesChanged, ['app/serializers.py']);
   assert.ok(s.lastAssistantMessage.length > 4000);
 });
+
+// Igual con y sin índice (SQLite FTS5): mismos permisos, mismos resultados. Sin `searchIndexFile`
+// (el resto de este archivo) se prueba el barrido de siempre; aquí, las dos rutas una junto a otra.
+for (const withIndex of [false, true]) {
+  test(`buscar (${withIndex ? 'con índice' : 'barrido de siempre'}): encuentra, redacta y respeta permisos`, () => {
+    const extra = withIndex ? { searchIndexFile: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'shub-si-')), 'search.sqlite') } : {};
+    const { cfg, hub } = setup(extra);
+    if (withIndex) hub.syncArchive(); // indexa las sesiones en vivo (independiente del respaldo, que aquí no está configurado)
+
+    let hits = hub.search('attachments');
+    assert.equal(hits.length, 1);
+    assert.equal(hits[0].sessionId, 'claude:s1');
+    assert.equal(hits[0].owner, 'Carlos');
+    assert.equal(hits[0].project, 'demo-api');
+    assert.match(hits[0].snippet, /attachments/);
+
+    assert.match(hub.search('API_KEY')[0].snippet, /API_KEY=\[REDACTED\]/, 'el resultado llega redactado, aunque el texto guardado no lo esté');
+    if (withIndex) assert.equal(hub.search('explicacion').length, 1, 'sin tilde encuentra "Explicación" (solo el índice ignora tildes; el barrido de siempre no)');
+
+    assert.equal(hub.search('nada-de-esto-existe-en-la-sesion').length, 0);
+
+    // permisos: como allSessions()/getSession() — el proyecto compartido con quién, y las ocultas
+    cfg.projects[0].allow = [ANA.id];
+    assert.equal(hub.search('attachments', { viewer: ANA }).length, 1);
+    assert.equal(hub.search('attachments', { viewer: PEDRO }).length, 0, 'proyecto no compartido con él');
+    cfg.projects[0].allow = ['*'];
+
+    cfg.excludedSessions = ['claude:s1'];
+    assert.equal(hub.search('attachments', { viewer: ANA }).length, 0, 'sesión oculta para el equipo');
+    assert.equal(hub.search('attachments').length, 1, 'el dueño la sigue viendo (sin viewer)');
+    cfg.excludedSessions = [];
+
+    assert.throws(() => hub.search('attachments', { project: 'no-existe', viewer: ANA }), /no compartido/);
+  });
+}
 
 test('sesiones abiertas: Claude Code vivo en un proyecto compartido, respetando pausa y ocultas', () => {
   const { cfg, hub } = setup();

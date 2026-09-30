@@ -6,7 +6,10 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeClaudeFixture } from '../fixtures.js';
-import { createEditor, makeTeam, ok, startHubs, until } from './harness.mjs';
+import { createEditor, makeTeam, ok, startHubs, tmpdir, until } from './harness.mjs';
+
+const home = tmpdir('shub-home-');
+process.env.HOME = home; // ~/.claude/sessions de prueba (nunca el real)
 
 const f = makeClaudeFixture();
 const base = 7600 + Math.floor(Math.random() * 90);
@@ -105,6 +108,23 @@ try {
   assert.equal(idx.sessions[0].origin, 'backup');
   assert.ok(fs.existsSync(path.join(out, folder, idx.sessions[0].file)));
   ok('sesión borrada por Claude Code → sigue en el respaldo; exportar a Markdown, JSON y carpeta completa');
+
+  // ---------- "Usar en mi IA": si ya hay una sesión de Claude Code abierta en esta carpeta, se usa
+  // esa (aunque se haya abierto desde una terminal integrada, no desde la extensión) en vez de
+  // abrir una nueva. Solo si no encuentra ninguna, cae al chat genérico. ----------
+  const claudeSessions = path.join(home, '.claude', 'sessions');
+  fs.mkdirSync(claudeSessions, { recursive: true });
+  fs.writeFileSync(path.join(claudeSessions, `${process.pid}.json`), JSON.stringify({ pid: process.pid, sessionId: 'terminal-abc', cwd: f.project, updatedAt: Date.now() })); // sin "entrypoint": abierta a mano en una terminal
+  S.workspaceFolders = [{ uri: { fsPath: f.project } }];
+  S.commands = ['workbench.action.chat.open', 'claude-vscode.editor.open'];
+  S.executed.length = 0;
+  await cmds['sessionHub.useSessionInAi']('claude:s1', 'yo', 'Adjuntos múltiples en contactos', 'archived');
+  assert.equal(S.executed.at(-1).id, 'claude-vscode.editor.open', 'usa la sesión de Claude Code ya abierta, no un chat nuevo');
+  assert.equal(S.executed.at(-1).a[0], 'terminal-abc', 'la que está abierta en esta carpeta, aunque no se haya abierto desde la extensión');
+  ok('"Usar en mi IA" reutiliza la sesión de Claude Code ya abierta (también si viene de una terminal)');
+
+  fs.rmSync(claudeSessions, { recursive: true, force: true }); // ninguna sesión ya abierta: ahora sí, un chat nuevo
+  S.workspaceFolders = [];
   S.commands = ['workbench.action.chat.open'];
   S.executed.length = 0;
   await cmds['sessionHub.useSessionInAi']('claude:s1', 'yo', 'Adjuntos múltiples en contactos', 'archived');

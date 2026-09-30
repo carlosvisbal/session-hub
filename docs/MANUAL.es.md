@@ -58,7 +58,7 @@ En los dos casos, si estás actualizando, cierra **todas** las ventanas del edit
 
 Si abajo, en la barra de estado, dice *Session Hub · 0 · 0 compartidos*, ya está funcionando.
 
-> Si tienes varias ventanas abiertas, todas usan el mismo Session Hub.
+> ¿Varias ventanas, o **Cursor y VS Code a la vez**? Todos usan el mismo Session Hub: una sola identidad y una sola configuración. Si cambias algo en un editor (compartir, pausar, respaldo), el otro lo ve.
 
 ## Crear tu equipo o unirte a uno
 
@@ -148,7 +148,7 @@ Te llega un aviso (*✉ Carlos te escribió: "…"*) y el mensaje aparece en **M
 
 | Botón | Qué pasa |
 | --- | --- |
-| **Pasar a mi IA** | Deja el mensaje **escrito** en el chat de tu IA, con una nota que dice que viene de un compañero y no de ti. Nunca se envía solo: tú lo revisas y pulsas Enviar. Funciona con **Claude Code** (en la sesión a la que iba el mensaje, o en tu sesión de ese proyecto), con **Copilot** en VS Code y con el **chat de Cursor**. Si tienes varios, usa el de la pestaña activa o te pregunta una vez. Para fijarlo: ajuste `sessionHub.aiChat`. |
+| **Pasar a mi IA** | Deja el mensaje **escrito** en el chat de tu IA, con una nota que dice que viene de un compañero y no de ti. Nunca se envía solo: tú lo revisas y pulsas Enviar. Funciona con **Claude Code** (en la sesión a la que iba el mensaje, o la que ya tengas abierta para ese proyecto, aunque sea en una terminal integrada), con **Copilot** en VS Code y con el **chat de Cursor**. Si tienes varios, usa el de la pestaña activa o te pregunta una vez. Para fijarlo: ajuste `sessionHub.aiChat`. |
 | **Permitir que mi IA lo lea** | Tu IA puede leerlo cuando le pidas *"revisa mis mensajes de Session Hub"* (herramienta `check_inbox`). Útil en Claude Code. |
 | **Responder** | Contestas; la respuesta queda enlazada al mensaje original. |
 | **Descartar** | Lo oculta. |
@@ -274,7 +274,7 @@ Cómo abrir el puerto: en **Windows**, cuando pregunte, permite el acceso en *Re
 
 **¿Puedo cambiar el idioma?** Sí: la interfaz sigue el idioma del editor. Para fijarlo, en Ajustes busca `sessionHub.language` y elige español o inglés.
 
-**¿Puedo usarlo en Cursor y VS Code a la vez?** Por ahora, mejor solo en uno: cada editor tiene su propia identidad y los dos usarían el mismo puerto. Si necesitas los dos, dale a uno otro `sessionHub.port` y otro `sessionHub.dhtPort` e invítalo desde el otro (aparecerás dos veces en el equipo). El plan para que compartan una sola identidad y sus chats se hablen está en [Cursor y VS Code en la misma computadora](SAME-MACHINE.es.md).
+**¿Puedo usarlo en Cursor y VS Code a la vez?** Sí, desde la 0.10. Hay un solo Session Hub por computadora: el primer editor que abres lo ejecuta y el otro se conecta a él, con la misma identidad y la misma configuración. Si cierras el que lo ejecuta, el otro toma el relevo. Si vienes de la 0.9 con una identidad distinta en cada editor, Session Hub te pregunta una vez con cuál seguir; la otra queda guardada en la carpeta de su editor. Instala **la misma versión** en los dos. Detalles: [Cursor y VS Code en la misma computadora](SAME-MACHINE.es.md).
 
 **¿Es gratis?** Sí. Es software libre (AGPL-3.0) y no está afiliado a Cursor ni a Anthropic.
 

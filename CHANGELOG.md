@@ -2,6 +2,23 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versiones con [SemVer](https://semver.org/lang/es/).
 
+## [0.10.0] — 2026-09-30
+
+### Añadido
+- **Un solo Session Hub por computadora:** Cursor y VS Code (y cualquier otro editor compatible) comparten una identidad, una configuración y un hub. El primer editor que se abre lo lanza y los demás se conectan a él. Si se cierra, otro toma el relevo. Se acaban el choque de puerto y la disputa por la conexión de Claude Code.
+  - Los datos pasan a `~/.session-hub/hub/`. La primera vez se **copia** (nunca se mueve) la identidad que ya había, con su token, equipo, respaldo y bandeja. Si había personas distintas en distintos editores, se pregunta una vez con cuál seguir y las demás quedan guardadas.
+  - Los ajustes comunes (nombre, lo que compartes, pausa, red, respaldo, mensajes) se sincronizan entre editores. Los de cada editor (idioma, avisos, chat preferido) siguen siendo propios.
+  - Busca las identidades anteriores en las carpetas de cada sistema: Linux (también Flatpak), macOS y Windows.
+  - Un hub solo lo reemplaza una extensión más nueva, así dos editores con versiones distintas no se reemplazan el uno al otro.
+  - La migración es de todo o nada: se copia a una carpeta temporal que se renombra al final. Si un editor se cierra a mitad de la copia, no quedan datos a medias, y un candado de un proceso que ya no existe se libera enseguida. Se pregunta con qué identidad seguir **antes** de tomar el candado, así el otro editor nunca arranca con la carpeta vacía mientras esperas.
+  - Si una ventana sin recargar dejó corriendo un hub anterior a 0.10 con la misma identidad, al reemplazarlo se traen de la carpeta vieja los archivos que siguió escribiendo.
+- *Estado* muestra dónde están los datos comunes.
+- Pruebas: los dos editores en la misma computadora (conexión, ajustes comunes, relevo, migraciones desde 0.9 y un hub 0.9.3 real que sigue escribiendo tras la migración) y el módulo `machine.cjs` en Linux, macOS y Windows. Todas las suites pasan en Ubuntu 22.04/24.04, Debian 12, Fedora 41, Rocky 9 y Arch. En Ubuntu 20.04 y Debian 11 (glibc 2.31) se muestra el aviso con la solución.
+- **Búsqueda más rápida y sin tildes:** `search_sessions` (por MCP) y el buscador del panel usan ahora un índice local (SQLite FTS5, `search.sqlite`) en vez de recorrer todas las sesiones cada vez. Ignora tildes y mayúsculas ("explicacion" encuentra "Explicación"), ordena por relevancia y ya no vuelve a leer las sesiones archivadas en cada búsqueda. Mismos permisos y misma protección de secretos de siempre; sin dependencias nuevas (usa `node:sqlite`, ya requerido). Sin Node 22.5+, vuelve sola al buscador anterior.
+
+### Corregido
+- **"Pasar a mi IA" / "Usar en mi IA" abría un chat nuevo aunque ya hubiera uno abierto**, en particular si Claude Code se había iniciado desde una terminal integrada (no desde la extensión). Ahora se prioriza la sesión de Claude Code ya abierta para ese proyecto, la haya abierto quien la haya abierto; solo si no encuentra ninguna, abre una nueva.
+
 ## [0.9.3] — 2026-09-25
 
 ### Corregido

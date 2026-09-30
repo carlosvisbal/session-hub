@@ -77,7 +77,7 @@ function lru() {
 
 // ======================= capa 1: mis sesiones =======================
 
-export function createOwnArchive({ dir, log = () => {} }) {
+export function createOwnArchive({ dir, log = () => {}, searchIndex = null }) {
   const base = path.join(dir, 'own');
   const indexFile = path.join(base, 'index.json');
   let index = readJson(indexFile, {}); // id -> meta
@@ -211,6 +211,7 @@ export function createOwnArchive({ dir, log = () => {} }) {
       delete index[id];
       cache.delete(id);
       lastRef.delete(id);
+      searchIndex?.removeSession(id); // ya no está: que tampoco lo encuentre una búsqueda
       if (save) saveIndex();
       return true;
     },
@@ -248,7 +249,7 @@ export function createOwnArchive({ dir, log = () => {} }) {
 // ======================= capa 2: copias de mis compañeros =======================
 // Se guardan tal como llegan del compañero (ya sin secretos) y se sirven con la misma forma que su hub.
 
-export function createCopies({ dir, log = () => {} }) {
+export function createCopies({ dir, log = () => {}, searchIndex = null }) {
   const base = path.join(dir, 'copies');
   const indexFile = path.join(base, 'index.json');
   let index = readJson(indexFile, { owners: {} });
@@ -293,6 +294,7 @@ export function createCopies({ dir, log = () => {} }) {
       const now = new Date().toISOString();
       o.sessions[summary.id] = { id: summary.id, summary, count: conversation.length, remoteUpdatedAt: summary.updatedAt, syncedAt: now, verifiedAt: now, status: 'ok', bytes, firstCopyAt: o.sessions[summary.id]?.firstCopyAt || now, ...extra };
       cache.delete(`${ownerId}/${summary.id}`);
+      searchIndex?.indexSession({ id: summary.id, scope: 'copy', ownerId, source: summary.source, project: summary.project, title: summary.title, updatedAt: summary.updatedAt, messages: conversation });
       saveIndex();
     },
 
@@ -312,6 +314,7 @@ export function createCopies({ dir, log = () => {} }) {
       const had = !!o.sessions[id];
       delete o.sessions[id];
       cache.delete(`${ownerId}/${id}`);
+      searchIndex?.removeSession(id);
       if (ignore && !o.ignored.includes(id)) o.ignored.push(id);
       if (save) saveIndex();
       return had;
@@ -320,22 +323,24 @@ export function createCopies({ dir, log = () => {} }) {
     purgeOwner(ownerId, reason = '') {
       const o = index.owners[ownerId];
       if (!o) return 0;
-      const n = Object.keys(o.sessions).length;
+      const ids = Object.keys(o.sessions);
       fs.rmSync(path.join(base, safeName(ownerId).slice(0, 16)), { recursive: true, force: true });
       delete index.owners[ownerId];
       cache.clear();
+      for (const id of ids) searchIndex?.removeSession(id);
       saveIndex();
-      if (n) log(`[copias] borradas ${n} copia(s) de ${o.name || ownerId.slice(0, 12)}${reason ? ` (${reason})` : ''}`);
-      return n;
+      if (ids.length) log(`[copias] borradas ${ids.length} copia(s) de ${o.name || ownerId.slice(0, 12)}${reason ? ` (${reason})` : ''}`);
+      return ids.length;
     },
 
     purgeAll() {
-      const n = Object.values(index.owners).reduce((a, o) => a + Object.keys(o.sessions).length, 0);
+      const ids = Object.values(index.owners).flatMap((o) => Object.keys(o.sessions));
       fs.rmSync(base, { recursive: true, force: true });
       index = { owners: {} };
       cache.clear();
+      for (const id of ids) searchIndex?.removeSession(id);
       saveIndex();
-      return n;
+      return ids.length;
     },
 
     // Copias que nadie pudo confirmar en el plazo: se borran (no quedan datos viejos para siempre).
@@ -415,6 +420,20 @@ export function createCopies({ dir, log = () => {} }) {
     },
 
     search(ownerId, query, { project, limit = Infinity } = {}) {
+      if (searchIndex?.available) {
+        // Margen: algunos hits del índice se van a descartar por proyecto, o si la copia se borró
+        // entre indexarla y ahora (se comprueba contra el índice real, no se confía en el guardado).
+        const raw = searchIndex.search(query, { limit: limit === Infinity ? Infinity : Math.min(limit * 3, 2000), scope: 'copy', ownerId });
+        const hits = [];
+        for (const r of raw) {
+          const m = index.owners[ownerId]?.sessions[r.sessionId];
+          if (!m || (project && m.summary.project !== project && m.summary.projectKey !== project)) continue;
+          hits.push({ sessionId: r.sessionId, owner: m.summary.owner, ownerId, title: m.summary.title, project: m.summary.project, projectKey: m.summary.projectKey, source: m.summary.source, role: r.role, at: r.at, snippet: r.snippet, copy: api.copyInfo(ownerId, m) });
+          if (hits.length >= limit) break;
+        }
+        return hits;
+      }
+      // Sin índice (Node anterior a 22.5): el barrido de siempre.
       const q = String(query).toLowerCase();
       const hits = [];
       for (const m of api.list(ownerId)) {

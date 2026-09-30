@@ -46,6 +46,7 @@ const defaults = {
   auditFile: '', // quién leyó qué (audit.jsonl)
   inboxFile: '', // mensajes recibidos y enviados (inbox.json)
   convFile: '', // conversaciones automáticas (conversations.json)
+  searchIndexFile: '', // índice de búsqueda (search.sqlite); '' desactiva la indexación
   archiveDir: '', // respaldo local (carpeta archive/)
   auditRetentionDays: 90,
   claudeDir: path.join(os.homedir(), '.claude', 'projects'),
@@ -87,6 +88,7 @@ export function normalizeConfig(raw) {
   cfg.auditFile ||= path.join(dir, 'audit.jsonl');
   cfg.inboxFile ||= path.join(dir, 'inbox.json');
   cfg.convFile ||= path.join(dir, 'conversations.json');
+  cfg.searchIndexFile ||= path.join(dir, 'search.sqlite');
   cfg.archiveDir ||= path.join(dir, 'archive');
   if (!['hold', 'accept', 'refuse'].includes(cfg.inbound)) cfg.inbound = 'hold';
   if (!cfg.localToken) throw new Error('La configuración no tiene localToken. Ejecuta npm run setup.');

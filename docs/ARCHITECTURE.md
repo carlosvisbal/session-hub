@@ -144,8 +144,11 @@ Full sessions travel in pages (`offset`/`limit`, 100 messages) and are verified 
 | `conversations.json` | automatic conversations: peers, sessions, limits, counters, status | 0600 |
 | `~/.session-hub/hook.json` | local port and token for the hook | 0600 |
 | `inbox.json` | received and sent messages (30 days, max 500 each); queued docs until delivered | 0600 |
+| `settings.json` | settings shared by all editors on the computer (identity, sharing, network, backup, messages) | 0600 |
+| `origin.json` | where the identity was brought from when moving to one hub per computer | 0600 |
+| `search.sqlite` | search index (SQLite FTS5) over own live/archived sessions and team copies; an accelerator, never the source of truth (`src/searchindex.js`) | 0600 |
 
-In the extension these live in the editor's `globalStorage` for the extension; all windows share them and a single hub.
+**One hub per computer** (since 0.10). In the extension these live in `~/.session-hub/hub/` (or `SESSION_HUB_DATA_DIR`), shared by every editor and window of the user: the first to open spawns the hub and the others attach with the same local token. Before 0.10 each editor kept them in its own `globalStorage`; on first run the extension copies (never moves) the existing identity there — the only one with a team, or the one the user picks if different editors had different identities — keeping its token so registered MCP clients stay valid (`extension/machine.cjs`). Shared settings sync both ways through `settings.json` (compared before writing, so no loops); editor-specific ones (language, notifications, preferred chat, autostart, runtime) stay per editor. A hub is only replaced by a newer extension, never an older one, so two editors on different versions don't keep replacing each other.
 
 ## Security invariants
 
@@ -158,6 +161,7 @@ In the extension these live in the editor's `globalStorage` for the extension; a
 7. Two results are the same project only if their `projectKey` matches. A Claude Code session belongs to the folder it started in (`cwd`), not to the encoded history folder (which can be shared by `/x/my.app` and `/x/my-app`).
 8. A backup never widens access: archived sessions go through the same ACL, and copies are dropped as soon as the owner withdraws access.
 9. An automatic conversation needs both people's consent, never bypasses the agent's own permissions, and always ends (turn limit, time limit, loop detection).
+10. The search index is an accelerator, never the source of truth: permissions (visible projects, hidden sessions, per-owner scope) and redaction are applied after querying it, exactly as before it existed; a stale or unavailable index only means slower search, never wider access.
 
 ## Roadmap
 
@@ -167,4 +171,4 @@ In the extension these live in the editor's `globalStorage` for the extension; a
 
 - `npm test` — unit tests: identity and membership, readers (fixtures), redaction, hub permissions and paging, network diagnosis.
 - `npm run test:e2e` — real hubs on this machine: LAN mode (admission, ACL, complete encrypted reads verified byte for byte, MCP, messages), private mode through your own bootstrap nodes and a forced blind relay, the network report for an unreachable bootstrap, and the backup cycle (copy, incremental update, source deleted, owner offline, access withdrawn).
-- `npm run test:ext` — the panel in jsdom (every action reachable from the tabs, search and paging, grouping by `projectKey`, both languages) and the real extension with a simulated `vscode` against real hubs: messages and "Pass to my AI", backup and export, and Cursor with several windows (one MCP registration, token in the URL) plus Claude Code repair.
+- `npm run test:ext` — the panel in jsdom (every action reachable from the tabs, search and paging, grouping by `projectKey`, both languages) and the real extension with a simulated `vscode` against real hubs: messages and "Pass to my AI" (reusing an already-open Claude Code session, even one started from a terminal, before opening a new one), backup and export, Cursor with several windows (one MCP registration, token in the URL) plus Claude Code repair, the runtime check that falls back to the system Node when the editor's can't load native modules, and Cursor/VS Code sharing one hub on the same computer.

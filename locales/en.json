@@ -605,9 +605,7 @@
  "[hub] el hub anterior no se cerró a tiempo; sigo usándolo.": "[hub] the previous hub didn't close in time; still using it.",
  "[hub] el puerto {v1} lo usa otro programa.": "[hub] port {v1} is used by another program.",
  "[hub] equipo \"{v1}\" recuperado de la versión anterior de la extensión.": "[hub] team \"{v1}\" restored from the previous version of the extension.",
- "[hub] esta ventana usa el hub que ya está abierto en otra ventana (puerto {v1}).": "[hub] this window is using the hub already open in another window (port {v1}).",
  "[hub] iniciando con {v1}": "[hub] starting with {v1}",
- "[hub] la ventana que tenía el hub se cerró; esta ventana lo inicia.": "[hub] the window running the hub was closed; this window is starting it.",
  "[hub] no pude cerrar el hub anterior; sigo usándolo hasta que se cierre.": "[hub] couldn't close the previous hub; using it until it closes.",
  "[hub] no respondió en 15 s; revisa la salida.": "[hub] didn't respond within 15 s; check the output.",
  "[hub] terminó (código {v1})": "[hub] exited (code {v1})",
@@ -845,5 +843,17 @@
  "Cómo arreglarlo": "How to fix it",
  "Session Hub no puede arrancar: el runtime de este editor no sirve ({v1}). Suele pasar con VS Code instalado como Snap en Ubuntu o con un editor antiguo. Instala Node.js 22.5 o superior (o VS Code desde el paquete .deb de Microsoft) y vuelve a abrir el editor.": "Session Hub can't start: this editor's runtime can't be used ({v1}). This usually happens with VS Code installed as a Snap on Ubuntu, or with an old editor. Install Node.js 22.5 or later (or VS Code from Microsoft's .deb package) and reopen the editor.",
  "no está instalado": "not installed",
- "[hub] el Node del sistema tampoco sirve ({v1}).": "[hub] the system Node can't be used either ({v1})."
+ "[hub] el Node del sistema tampoco sirve ({v1}).": "[hub] the system Node can't be used either ({v1}).",
+ "[hub] esta ventana usa el hub que ya está abierto en otra ventana u otro editor (puerto {v1}).": "[hub] this window is using the hub already open in another window or editor (port {v1}).",
+ "[hub] la ventana o el editor que tenía el hub se cerró; esta ventana lo inicia.": "[hub] the window or editor running the hub was closed; this window is starting it.",
+ "Un solo Session Hub para todos tus editores de esta computadora · datos en {v1}": "One Session Hub for all your editors on this computer · data in {v1}",
+ "usada por última vez: {v1}": "last used: {v1}",
+ "Session Hub ahora es uno solo por computadora": "Session Hub is now one per computer",
+ "Tenías una identidad distinta en cada editor. ¿Con cuál sigues? Las demás quedan guardadas.": "You had a different identity in each editor. Which one do you keep? The others stay saved.",
+ "[hub] datos comunes en {v1}, traídos de {v2}.": "[hub] shared data in {v1}, brought from {v2}.",
+ "Session Hub es ahora uno solo en esta computadora y usa la identidad de {v1}. La de {v2} ({v3}) queda guardada en {v4}.": "Session Hub is now one per computer and uses the identity of {v1}. The one of {v2} ({v3}) stays saved in {v4}.",
+ "[hub] el hub abierto es de la versión {v1}, más nueva que esta extensión ({v2}): actualiza Session Hub en este editor.": "[hub] the open hub is version {v1}, newer than this extension ({v2}): update Session Hub in this editor.",
+ "[hub] otro editor sigue preparando la carpeta común; reintenta abriendo de nuevo esta ventana.": "[hub] another editor is still preparing the shared folder; try again by reopening this window.",
+ "Otro editor ya eligió con qué identidad sigue Session Hub en esta computadora; se usa esa. La que elegiste aquí queda guardada en {v1}.": "Another editor already chose which identity Session Hub keeps on this computer; that one is used. The one you picked here stays saved in {v1}.",
+ "[hub] traídos {v1} archivos más recientes del hub anterior ({v2}).": "[hub] brought {v1} newer files from the previous hub ({v2})."
 }

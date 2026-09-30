@@ -48,7 +48,9 @@ export async function makeTeam(call, founder, joiner) {
 }
 
 // Estado compartido por todas las ventanas del "editor".
-export function createEditor({ appName = 'Visual Studio Code', settings = {}, storage, token = 't' }) {
+// dataDir: carpeta de datos del hub (por defecto la del propio editor, como si cada editor fuera
+// una computadora distinta); dos editores con el mismo dataDir son dos editores de la misma computadora.
+export function createEditor({ appName = 'Visual Studio Code', settings = {}, storage, token = 't', dataDir = storage }) {
   const shared = {
     appName,
     token, // token local de este editor (cada editor guarda el suyo)
@@ -66,6 +68,8 @@ export function createEditor({ appName = 'Visual Studio Code', settings = {}, st
     clipboard: '',
     cursorRegistry: new Map(), // registro MCP de Cursor: uno para todas las ventanas
     cursorCalls: [],
+    configListeners: [],
+    workspaceFolders: [], // [{ uri: { fsPath } }], como vscode.workspace.workspaceFolders
   };
   const cursorMcp = {
     registerServer: async (c) => {
@@ -136,8 +140,19 @@ export function createEditor({ appName = 'Visual Studio Code', settings = {}, st
         createWebviewPanel: () => ({ reveal() {}, onDidDispose() {}, webview: { onDidReceiveMessage() {}, postMessage() {}, asWebviewUri: (u) => u, cspSource: '' } }),
       },
       workspace: {
-        getConfiguration: () => ({ get: (k) => shared.settings[k], update: async (k, v) => (shared.settings[k] = v) }),
-        onDidChangeConfiguration: () => ({ dispose() {} }),
+        get workspaceFolders() {
+          return shared.workspaceFolders;
+        },
+        getConfiguration: () => ({
+          get: (k) => shared.settings[k],
+          inspect: (k) => ({ globalValue: shared.settings[k] }),
+          update: async (k, v) => {
+            shared.settings[k] = v;
+            const e = { affectsConfiguration: (sec) => sec === 'sessionHub' || sec === `sessionHub.${k}` };
+            shared.configListeners.forEach((fn) => fn(e));
+          },
+        }),
+        onDidChangeConfiguration: (fn) => (shared.configListeners.push(fn), { dispose: () => shared.configListeners.splice(shared.configListeners.indexOf(fn), 1) }),
       },
       commands: {
         registerCommand: (id, fn) => ((cmds[id] = fn), { dispose() {} }),
@@ -166,8 +181,10 @@ export function createEditor({ appName = 'Visual Studio Code', settings = {}, st
   // Una ventana del editor: carga la extensión desde cero y la conecta al hub del puerto configurado.
   async function openWindow() {
     const cmds = {};
-    require.cache.vscode = { id: 'vscode', filename: 'vscode', loaded: true, exports: makeVscode(cmds) };
+    const vscode = makeVscode(cmds);
+    require.cache.vscode = { id: 'vscode', filename: 'vscode', loaded: true, exports: vscode };
     for (const k of Object.keys(require.cache)) if (k.startsWith(path.join(ROOT, 'extension') + path.sep)) delete require.cache[k];
+    process.env.SESSION_HUB_DATA_DIR = dataDir; // la extensión la lee al activarse
     const ext = require(path.join(ROOT, 'extension', 'extension.cjs'));
     const subscriptions = [];
     await ext.activate({
@@ -182,6 +199,7 @@ export function createEditor({ appName = 'Visual Studio Code', settings = {}, st
     await wait(2500); // se conecta al hub y hace el primer sondeo
     return {
       cmds,
+      vscode, // el API simulado de esta ventana (p. ej. para cambiar ajustes como lo haría el panel)
       close() {
         subscriptions.forEach((s) => s.dispose?.());
         ext.deactivate();
