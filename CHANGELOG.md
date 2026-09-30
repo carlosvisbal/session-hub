@@ -2,6 +2,10 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versiones con [SemVer](https://semver.org/lang/es/).
 
+## [0.10.1] — 2026-09-30
+
+Sin cambios de funcionalidad. Solo el número de versión, para poder publicar en las tiendas.
+
 ## [0.10.0] — 2026-09-30
 
 ### Añadido
