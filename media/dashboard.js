@@ -258,7 +258,7 @@
 
   // ---------- conversaciones automáticas ----------
   const CONV_STATUS = { confirm: 'pendiente de tu confirmación', inviting: 'esperando que acepte', invited: 'te invita', active: 'en marcha', ended: 'terminada' };
-  const CONV_END = { limit: 'llegó al límite de vueltas', time: 'se acabó el tiempo', loop: 'se detectó un bucle', empty: 'se detectó un bucle', declined: 'rechazada', peer: 'la terminó tu compañero', me: 'la terminaste tú', unanswered: 'nadie respondió la invitación' };
+  const CONV_END = { limit: 'llegó al límite de vueltas', time: 'se acabó el tiempo', loop: 'se detectó un bucle', empty: 'se detectó un bucle', declined: 'rechazada', peer: 'la terminó tu compañero', me: 'la terminaste tú', unanswered: 'nadie respondió la invitación', gone: 'tu compañero ya no está en el equipo', blocked: 'lo bloqueaste' };
   function conversationsHtml() {
     const list = state.conversations || [];
     const hk = state.hooks || {};
@@ -394,14 +394,14 @@
     const ownRow = (x) => `<div class="brow">
         <div class="bmain">
           <div class="btitle" title="${esc(x.title)}">${esc(x.title || x.id)}</div>
-          <div class="muted small">${esc(x.project)} · ${x.source === 'cursor' ? 'Cursor' : 'Claude Code'} · ${T('{v1} mensajes', { v1: num(x.messages) })} · ${mb(x.bytes)} · ${T('actualizada {v1}', { v1: ago(x.updatedAt) })}</div>
+          <div class="muted small"><b>${esc(me().name || T('Tú'))}</b> · ${esc(x.project)}${x.branch ? ` (${esc(x.branch)})` : ''}${relationOf(x) === 'current' || relationOf(x) === 'same-name' ? ` ${relationBadge(relationOf(x))}` : ''} · ${x.source === 'cursor' ? 'Cursor' : 'Claude Code'} · ${T('{v1} mensajes', { v1: num(x.messages) })} · ${mb(x.bytes)} · ${T('actualizada {v1}', { v1: ago(x.updatedAt) })}</div>
           <div class="small">${x.goneSince ? `<span class="tag archived">🗄 ${T('solo en respaldo desde {v1}', { v1: ago(x.goneSince) })}</span>` : `<span class="tag ok">✓ ${T('el original sigue en {v1}', { v1: x.source === 'cursor' ? 'Cursor' : 'Claude Code' })}</span>`}${x.shared ? '' : ` <span class="tag">${T('proyecto ya no compartido')}</span>`}${x.hasPrev ? ` <span class="tag" title="${T('Se acortó (p. ej. al restaurar en Cursor) y se guardó la versión anterior')}">${T('con versión anterior')}</span>` : ''}</div>
         </div>
         <div class="bacts">
           <button class="small-btn" data-openin="${esc(x.id)}" data-peer="${esc(meId)}">${T('Ver')}</button>
           ${cmd('sessionHub.useSessionInAi', `🤖 ${T('Usar en mi IA')}`, 'small-btn', [x.id, 'yo', x.title, x.goneSince ? 'archived' : '', x.projectKey || '', x.project || '', x.branch || ''])}
           ${cmd('sessionHub.exportSession', `⤓ ${T('Exportar')}`, 'small-btn', [x.id, meId])}
-          ${x.goneSince ? cmd('sessionHub.removeFromBackup', T('Borrar'), 'link danger small', [x.id, null, x.title]) : ''}
+          ${cmd('sessionHub.removeFromBackup', T('Borrar'), 'link danger small', [x.id, null, x.title, x.goneSince ? '' : 'live'])}
         </div>
       </div>`;
     const ownSection = !st.archive
@@ -414,7 +414,7 @@
           placeholder: T('Buscar en mis sesiones respaldadas…'),
           alwaysSearch: ownAll.length > 0,
         })}
-        ${own.onlyInBackup ? `<div class="actions">${cmd('sessionHub.purgeOwnBackup', T('Borrar todo lo que ya no existe'), 'link danger')}</div>` : ''}`;
+        ${own.onlyInBackup || own.ignored ? `<div class="actions">${own.onlyInBackup ? cmd('sessionHub.purgeOwnBackup', T('Borrar todo lo que ya no existe'), 'link danger') : ''}${own.ignored ? cmd('sessionHub.restoreIgnoredBackup', T('Volver a respaldar las {v1} borradas a mano', { v1: num(own.ignored) }), 'link') : ''}</div>` : ''}`;
 
     // --- copias de mi equipo ---
     const owners = cp.owners || [];
@@ -424,7 +424,7 @@
     const copyRow = (x) => `<div class="brow">
         <div class="bmain">
           <div class="btitle" title="${esc(x.title)}">${esc(x.title || x.id)}</div>
-          <div class="muted small"><b>${esc(x.owner || '')}</b> · ${esc(x.project || '')} · ${x.source === 'cursor' ? 'Cursor' : 'Claude Code'} · ${T('{v1} mensajes', { v1: num(x.messages) })} · ${mb(x.bytes)}</div>
+          <div class="muted small"><b>${esc(x.owner || '')}</b> · ${esc(x.project || '')}${x.branch ? ` (${esc(x.branch)})` : ''}${relationOf(x) === 'current' || relationOf(x) === 'same-name' ? ` ${relationBadge(relationOf(x))}` : ''} · ${x.source === 'cursor' ? 'Cursor' : 'Claude Code'} · ${T('{v1} mensajes', { v1: num(x.messages) })} · ${mb(x.bytes)}</div>
           <div class="small"><span class="tag copy">💾 ${T('copiada {v1}', { v1: ago(x.syncedAt) })}</span> <span class="tag ${x.status === 'ok' ? 'ok' : 'archived'}">${esc(T(COPY_STATUS[x.status] || x.status))}</span></div>
         </div>
         <div class="bacts">
@@ -654,6 +654,9 @@
         </div>`;
   }
 
+  // La caché del prompt de la IA dura cerca de una hora: pasado ese tiempo, retomar la sesión cuesta de nuevo todo su contexto.
+  const stale = (s) => !!s.updatedAt && Date.now() - Date.parse(s.updatedAt) > 60 * 60_000;
+
   // De dónde viene: el original ya no existe (respaldo del dueño) o es mi copia (el dueño no está).
   const originBadge = (s) =>
     s.copy ? ` · <span class="tag copy" title="${T('Copia local: {v1} no está conectado', { v1: esc(s.owner) })}">💾 ${T('copia de {v1}', { v1: ago(s.copy.syncedAt) })}</span>` : s.archived ? ` · <span class="tag archived" title="${T('El original ya no existe en {v1}', { v1: srcLabel(s) })}">🗄 ${T('solo en respaldo')}</span>` : '';
@@ -747,9 +750,11 @@
         }
         <button data-open="${esc(s.id)}" data-peer="${esc(s.ownerId)}">⟳ ${T('Recargar')}</button>
         ${cmd('sessionHub.useSessionInAi', `🤖 ${T('Usar en mi IA')}`, 'primary', [s.id, mine ? 'yo' : s.owner, s.title, s.copy ? 'copy' : s.archived ? 'archived' : '', s.projectKey || '', s.project || '', s.branch || ''])}
+        ${mine && !s.archived && !s.parentId ? cmd('sessionHub.continueSessionInAi', `⚡ ${T('Continuar sin gastar tokens')}`, stale(s) ? 'primary' : '', [s.id]) : ''}
         ${cmd('sessionHub.exportSession', `⤓ ${T('Exportar')}`, '', [s.id, s.ownerId])}
         ${(s.archived && mine) || s.copy ? cmd('sessionHub.removeFromBackup', T('Borrar del respaldo'), 'link danger', [s.id, mine ? null : s.ownerId, s.title]) : ''}
       </div>
+      ${mine && stale(s) && !s.archived && !s.parentId ? `<p class="banner-inline">⚡ ${T('Lleva más de una hora sin actividad: la caché del prompt de la IA ya venció. Si la retomas, la IA reprocesa toda la conversación ({v1} mensajes) y gasta mucha cuota. Con «Continuar sin gastar tokens» abres una conversación nueva que solo lee un extracto corto de esta.', { v1: num(s.messages) })}</p>` : ''}
       ${s.copy ? `<p class="banner-inline">💾 ${T('Copia local guardada {v1}: {v2} no está conectado. Puede no tener lo último.', { v1: ago(s.copy.syncedAt), v2: esc(s.owner) })}</p>` : ''}
       ${s.archived ? `<p class="banner-inline">🗄 ${T('El original ya no existe en {v1}; se muestra desde el respaldo de {v2}.', { v1: srcLabel(s), v2: esc(s.owner) })}</p>` : ''}
       ${s.parentId ? `<p class="banner-inline">🤖 ${T('Subagente ({v1}) de otra sesión.', { v1: esc(s.subagentType || T('subagente')) })} <button class="link" data-open="${esc(s.parentId)}" data-peer="${esc(s.ownerId)}">← ${T('Volver a la sesión principal')}</button></p>` : ''}

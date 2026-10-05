@@ -2,6 +2,25 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versiones con [SemVer](https://semver.org/lang/es/).
 
+## [0.12.0] — 2026-10-05
+
+### Añadido
+- **Continuar una sesión antigua sin gastar tokens.** Retomar una sesión que lleva más de una hora quieta obliga a la IA a reprocesar toda la conversación, porque su caché del prompt ya venció. Ahora, en *Mis sesiones*, el botón **⚡ Continuar sin gastar tokens** deja escrito en tu chat un pedido para que una conversación nueva lea solo un extracto corto de la sesión vieja: objetivo, últimas peticiones y respuestas, archivos cambiados y últimos comandos (unos 5.000 tokens en vez de cientos de miles). Incluye un **mapa de toda la sesión** (cada petición en una línea, con su número de mensaje): la IA lee con `get_session` solo el tramo que necesita y no pierde detalle. El panel avisa cuando una sesión lleva más de una hora sin actividad.
+- **Herramienta MCP `continue_session`** y atajo `/continue_session`: lo mismo desde la IA. Solo sesiones propias, con los secretos ocultos; si falta un detalle, la IA lo lee por partes con `get_session`.
+- **El respaldo dice de quién es cada sesión y de qué proyecto.** En la pestaña *Respaldo*, cada fila muestra el dueño, el proyecto y la rama, y marca si es del proyecto abierto («este proyecto») o de otro repositorio con el mismo nombre. Así no se confunde una copia de un compañero con una sesión propia.
+- **Borrar del respaldo, con confirmación, cualquier sesión.** Antes solo se podían borrar las que ya no existían en su herramienta. Ahora también las que siguen en Claude Code o Cursor: se borra solo el respaldo (el original no se toca) y no se vuelve a respaldar hasta pulsar **Volver a respaldar las borradas a mano**.
+- Manual, ayuda del panel y README explican qué es la caché del prompt y por qué conviene.
+
+### Corregido
+- **Al salir del equipo o ser expulsado, nadie conserva tus copias.** Al salir, tu hub envía un aviso firmado a los compañeros conectados (y ellos al resto) para que borren las copias de tus sesiones. Antes las conservaban hasta que vencía el plazo de retención. Quien expulsa a alguien borra en el acto sus copias y las de quienes esa persona invitó (antes solo las borraban los demás), y quien es expulsado borra las copias del equipo. También se terminan las conversaciones automáticas con esa persona, sus mensajes sin leer ya no llegan a tu IA y los tuyos en cola para ella vencen. Esa persona deja de aparecer como «desconectada» en *Personas*. Bloquear hace lo mismo, salvo borrar las copias.
+- **El expulsado se entera de su expulsión.** La conexión se cortaba antes de que le llegara el aviso; ahora se cierra en orden.
+- **La búsqueda podía conservar sesiones ya borradas.** La clave interna del índice llevaba un carácter que el SQLite de Node corta al leer, y quitar una sesión por su id no la encontraba. El índice se rehace solo al actualizar.
+- **Pausar o dejar de permitir copias se aplica en 15 s** en las copias de tus compañeros, no en su siguiente sincronización.
+- **Aceptar una conversación automática cuando el otro ya se desconectó** la deja pendiente para reintentarla, en vez de «en marcha» solo de tu lado.
+- **«Pasar a mi IA» con el mensaje de una conversación ya terminada** lo marca leído; antes quedaba sin leer para siempre.
+- El contexto al iniciar sesión ya no cuenta cambios de compañeros en pausa, bloqueados o que no permiten copias.
+- **Retomar una sesión ya no hace que Claude bloquee la conversación.** Session Hub nunca entrega el razonamiento interno del modelo, solo el texto visible y las acciones; ahora una prueba lo garantiza para Claude Code y Cursor. El bloqueo aparecía cuando la IA abría por su cuenta los archivos de historial (`~/.claude/projects/*.jsonl`), que sí lo guardan: las instrucciones del servidor MCP le piden usar `get_session` o `continue_session` en vez de leerlos.
+
 ## [0.11.3] — 2026-10-04
 
 ### Corregido

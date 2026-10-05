@@ -25,7 +25,7 @@ export function createTeam(cfg, hub, transport, teamState, t = (s) => s, inbox =
   // Copias locales de un compañero (capa 2): solo si las guardo, él las permite, no está en pausa y no lo bloqueé.
   const copiesOn = () => !!copies && cfg.teamCopies !== false;
   function copyUsable(m) {
-    if (!copiesOn() || m.self || teamState.isBlocked(m.id) || teamState.isRevoked?.(m.id)) return false;
+    if (!copiesOn() || m.self || teamState.isBlocked(m.id) || teamState.isCutOff?.(m.id) || teamState.hasLeft?.(m.id)) return false;
     const o = copies.owner(m.id);
     return !!o && copies.has(m.id) && o.allowCopies !== false && !o.paused;
   }
@@ -310,6 +310,11 @@ export function createTeam(cfg, hub, transport, teamState, t = (s) => s, inbox =
       });
     },
 
+    // Extracto de una sesión mía para continuarla en una sesión nueva (solo las propias).
+    continueSession(id) {
+      return hub.continueSession(id);
+    },
+
     whatChanged({ peer, since, project }, origin) {
       return fanOut(peer, (m) => liveOrCopy(m, () => ask(m, () => hub.whatChanged({ since, project }), 'changes', { since, project }, origin), () => copies.whatChanged(m.id, { since, project }, parseSince)));
     },
@@ -459,7 +464,12 @@ export function createTeam(cfg, hub, transport, teamState, t = (s) => s, inbox =
 
     async acceptConversation(id, mine) {
       const c = convs.accept(id, mine);
-      await api.sendConv(c, 'accept');
+      try {
+        await api.sendConv(c, 'accept');
+      } catch (err) {
+        convs.unaccept(c.id);
+        throw err;
+      }
       return c;
     },
 

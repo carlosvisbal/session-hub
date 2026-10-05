@@ -14,6 +14,7 @@ import { projectKey } from './projectkey.js';
 import { createOwnArchive } from './archive.js';
 import { createSearchIndex } from './searchindex.js';
 import { iso, samePath, parseSince, relPath, truncate } from './util.js';
+import { buildDigest } from './digest.js';
 
 const TEXT = (v) => (typeof v === 'string' ? v : '');
 
@@ -273,6 +274,7 @@ export function createHub(cfg, { log = () => {} } = {}) {
         title: redact(m.title || ''),
         project: nameOf(m.project),
         projectKey: keyOf(m.project),
+        branch: redact(m.branch || '') || null,
         shared: cfg.projects.some((p) => p.path === m.project),
         source: m.source,
         messages: m.stats?.count || 0,
@@ -282,13 +284,14 @@ export function createHub(cfg, { log = () => {} } = {}) {
         goneSince: m.goneSince,
         hasPrev: !!m.hasPrev,
       })),
-    // Borrar del respaldo: solo lo que ya no existe en el original (lo demás se volvería a respaldar).
+    // Borrar del respaldo. Si el original ya no existe, se borra sin más. Si todavía existe, se borra
+    // solo el respaldo (el original no se toca) y no se vuelve a respaldar hasta restoreIgnored().
     removeArchived(id) {
       if (!own?.has(id)) throw new Error('Esa sesión no está en tu respaldo.');
-      if (!own.isGone(id)) throw new Error('La sesión todavía existe en su herramienta; para que el equipo no la vea, ocúltala.');
-      own.remove(id);
+      own.remove(id, { ignore: !own.isGone(id) });
       return { ok: true };
     },
+    restoreIgnored: () => ({ restored: own ? own.unignoreAll() : 0 }),
     purgeArchive: (onlyGone = true) => ({ removed: own ? own.purge({ onlyGone }) : 0 }),
 
     // Para las copias de un compañero: qué pasó con cada sesión que tiene copiada.
@@ -409,6 +412,13 @@ export function createHub(cfg, { log = () => {} } = {}) {
         omittedMessages: total - msgs.length,
         conversation: msgs.map((m) => formatMessage(m, s, maxChars)),
       };
+    },
+
+    // Extracto corto de una sesión mía para seguirla en una sesión nueva (ver digest.js). Mismos permisos
+    // que getSession; el texto sale redactado.
+    continueSession(id, { viewer = null } = {}) {
+      const full = this.getSession(id, { offset: 0, limit: Infinity, maxChars: 1e9, viewer });
+      return buildDigest(full, full.conversation);
     },
 
     // Resumen para ponerse al día: qué se pidió, qué archivos se tocaron y en qué quedó cada sesión.

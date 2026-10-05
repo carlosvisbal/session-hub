@@ -140,3 +140,29 @@ test('dos sesiones de esta computadora quedan activas y el tercer chat no entra'
   assert.throws(() => a.convs.create({ peer: a.kp.publicKey, peerName: 'Carlos', mine: 'claude:uno', theirs: 'cursor:x', text: 'otra', local: true }), /otra conversación/);
   assert.throws(() => a.convs.create({ peer: a.kp.publicKey, peerName: 'Carlos', mine: 'cursor:y', theirs: 'claude:dos', text: 'otra', local: true }), /otra conversación/);
 });
+
+test('endWith: quien ya no está (o bloqueé) no deja conversaciones abiertas ni la sesión ocupada', () => {
+  const { a, b } = pair();
+  const c = a.convs.create({ peer: b.kp.publicKey, peerName: 'Ana', mine: 'claude:c1', theirs: 'cursor:a1', text: 'hola', turns: 3 });
+  b.convs.receive(a.convs.inviteDoc(c), a.peer);
+  b.convs.accept(c.id, 'cursor:a1');
+  a.convs.receive(b.convs.controlDoc(b.convs.get(c.id), 'accept'), b.peer);
+  const pending = a.convs.create({ peer: b.kp.publicKey, peerName: 'Ana', mine: 'claude:c2', theirs: 'cursor:a2', text: 'otra', turns: 3 });
+  assert.equal(a.convs.endWith(b.kp.publicKey, 'gone'), 2, 'la activa y la invitación');
+  assert.equal(a.convs.get(c.id).endReason, 'gone');
+  assert.equal(a.convs.get(pending.id).status, 'ended');
+  assert.equal(a.convs.forSession('claude:c1'), null, 'la sesión queda libre');
+  assert.equal(a.convs.endWith(b.kp.publicKey, 'gone'), 0, 'idempotente');
+});
+
+test('unaccept: si no se pudo avisar la aceptación, vuelve a quedar pendiente y la sesión libre', () => {
+  const { a, b } = pair();
+  const c = a.convs.create({ peer: b.kp.publicKey, peerName: 'Ana', mine: 'claude:c1', theirs: 'cursor:a1', text: 'hola', turns: 3 });
+  b.convs.receive(a.convs.inviteDoc(c), a.peer);
+  b.convs.accept(c.id, 'cursor:a1');
+  assert.equal(b.convs.unaccept(c.id).status, 'invited');
+  assert.equal(b.convs.forSession('cursor:a1'), null);
+  assert.equal(b.convs.accept(c.id, 'cursor:a1').status, 'active', 'se puede reintentar');
+  b.convs.countSent(c.id, 'ya hablé');
+  assert.equal(b.convs.unaccept(c.id), null, 'con vueltas hechas ya no se deshace');
+});

@@ -159,6 +159,17 @@ export function createInbox({ file, teamState, policy = () => 'hold', now = Date
       return m;
     },
 
+    // Alguien que ya no está (expulsado, salió) o que bloqueé: lo suyo sin leer no llega a mi IA
+    // (se descarta) y lo mío en cola para esa persona ya no se entregará (vence). Devuelve cuántos.
+    forget(pub) {
+      let n = 0;
+      const at = new Date(now()).toISOString();
+      for (const m of state.received) if (m.from === pub && (m.status === 'held' || m.status === 'delivered')) Object.assign(m, { status: 'dismissed', updatedAt: at }), n++;
+      for (const m of state.sent) if (m.to === pub && m.status === 'queued') (m.status = 'expired'), delete m.doc, n++;
+      if (n) save();
+      return n;
+    },
+
     markReplied(id) {
       const m = find(id);
       if (m) (m.repliedAt = new Date(now()).toISOString()), save();

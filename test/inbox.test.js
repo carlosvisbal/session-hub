@@ -119,3 +119,17 @@ test('un mensaje de conversación leído sin entregar vuelve a estar listo', () 
   carlos.inbox.takeConv('conv-2', 'cursor:este');
   assert.equal(carlos.inbox.reviveConv('conv-2', 'cursor:otro'), null);
 });
+
+test('forget: lo pendiente de quien ya no está no llega a la IA, y lo mío en cola para esa persona vence', () => {
+  const { carlos, ana } = pair({ policy: 'accept' });
+  const doc = carlos.inbox.compose({ to: ana.kp.publicKey, text: 'haz esto' });
+  ana.inbox.receive(doc, carlos.peer);
+  const out = ana.inbox.compose({ to: carlos.kp.publicKey, text: 'respuesta' });
+  ana.inbox.recordSent(out, 'Carlos');
+  ana.inbox.markSent(out.body.id, 'queued');
+  assert.equal(ana.inbox.forget(carlos.kp.publicKey), 2);
+  assert.equal(ana.inbox.takeForAi().messages.length, 0, 'check_inbox ya no lo trae');
+  assert.equal(ana.inbox.list().unread, 0);
+  assert.equal(ana.inbox.list().sent[0].status, 'expired');
+  assert.deepEqual(ana.inbox.queuedFor(carlos.kp.publicKey), [], 'ya no se reenvía');
+});

@@ -154,3 +154,48 @@ test('salir y entrar a otro equipo: misma identidad, nada del equipo anterior', 
   assert.ok(!ana.roster().some((m) => m.id === carlos.me()), 'ya no conoce a los del equipo anterior');
   assert.equal(carlos.admit(ana.myChain(), ana.me()).ok, false, 'el equipo anterior ya no la acepta con la cadena nueva');
 });
+
+test('fuera del equipo (isCutOff): el expulsado, sus invitados y yo si me expulsan', () => {
+  const { carlos, ana, pedro } = team();
+  for (const s of [carlos, ana, pedro]) for (const o of [carlos, ana, pedro]) s.admit(o.myChain(), o.me());
+  assert.ok(!carlos.isCutOff(pedro.me()));
+  const doc = carlos.revoke(ana.me());
+  assert.ok(carlos.isCutOff(ana.me()), 'la expulsada');
+  assert.ok(carlos.isCutOff(pedro.me()), 'a quien ella invitó');
+  assert.ok(!carlos.isCutOff(carlos.me()));
+  assert.ok(pedro.applyRevocation(doc));
+  assert.ok(pedro.isCutOff(pedro.me()), 'Pedro sabe que quedó fuera');
+});
+
+test('salida: aviso firmado por quien se va, se acepta una vez y viaja por chisme', () => {
+  const { carlos, ana, pedro } = team();
+  for (const s of [carlos, ana, pedro]) for (const o of [carlos, ana, pedro]) s.admit(o.myChain(), o.me());
+  const doc = pedro.departure();
+  assert.ok(carlos.applyDeparture(doc));
+  assert.ok(carlos.hasLeft(pedro.me()));
+  assert.ok(!carlos.applyDeparture(doc), 'la segunda vez no cuenta');
+  assert.ok(!carlos.isCutOff(pedro.me()), 'salir no es una expulsión');
+  assert.ok(carlos.gossip().departures.length === 1);
+  assert.ok(ana.applyDeparture(carlos.gossip().departures[0]), 'llega a quien no estaba conectado');
+
+  const fake = structuredClone(doc); fake.body.member = ana.me();
+  assert.ok(!carlos.applyDeparture(fake), 'nadie puede anunciar la salida de otro');
+  const otro = state('otro'); otro.createTeam('otro');
+  assert.ok(!otro.applyDeparture(doc), 'de otro equipo: no aplica');
+  assert.ok(!pedro.applyDeparture(doc), 'mi propio aviso no me afecta');
+});
+
+test('salida: si vuelve a entrar con otra invitación, el aviso viejo ya no cuenta', async () => {
+  const { carlos, ana, pedro } = team();
+  carlos.admit(pedro.myChain(), pedro.me());
+  const doc = pedro.departure();
+  pedro.leave();
+  assert.ok(carlos.applyDeparture(doc));
+  await new Promise((r) => setTimeout(r, 5)); // otra marca de tiempo
+  joinVia(carlos, pedro);
+  carlos.admit(pedro.myChain(), pedro.me());
+  assert.ok(!carlos.hasLeft(pedro.me()), 'volvió');
+  assert.ok(ana.applyDeparture(doc), 'Ana solo conoce la cadena vieja: para ella salió');
+  ana.admit(pedro.myChain(), pedro.me());
+  assert.equal(ana.hasLeft(pedro.me()), false, 'al conocer la cadena nueva, ya no');
+});

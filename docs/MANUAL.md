@@ -256,6 +256,22 @@ It's **counts only**: it never includes text written by your teammates. In Curso
 
 **Turning it off:** Settings → **Session Hub: Start Context** (`sessionHub.startContext`).
 
+## Continue an old session without spending tokens
+
+Every time you write, your AI re-reads the **whole** conversation (code, results, messages). To avoid processing it in full each time, the system keeps an already-processed copy for a short while, around one hour (the *prompt cache*); reading from it is much faster and cheaper.
+
+If you stay idle for more than an hour, that copy expires. Nothing is lost, but your next message forces the entire conversation to be reprocessed (hundreds of thousands of tokens in a long session): the first reply is slower and uses a lot of quota. That copy lives on the AI provider's servers; Session Hub can't save it or hand it back.
+
+What Session Hub does is give a **new conversation** just the essentials of the old one:
+
+1. In *Sessions → My sessions*, open the old session. If it has been idle for over an hour, the panel tells you.
+2. Click **⚡ Continue without spending tokens**. The request is typed into your chat; use it in a **new** conversation.
+3. Your AI reads an excerpt of a few thousand tokens: the original goal, a **map of the whole session** (each of your requests on one line, with its message number), your latest requests, its latest replies, the changed files and the latest commands. Secrets are hidden.
+
+You can also ask directly: *"Continue my session claude:… with Session Hub"* (the `continue_session` tool, or the `/mcp__session-hub__continue_session` shortcut in Claude Code). If it misses a detail, it uses the map to read just that stretch with `get_session`, so you lose nothing: the original stays intact and you only pay for what's read.
+
+**What to expect:** it's an excerpt, not the full session, and the AI doesn't load the detail until it needs it. In return, a long session costs about 5,000 tokens instead of hundreds of thousands. On a short or recent session it isn't worth it: just resume normally. It only works with **your own** sessions.
+
 ## Backup and export
 
 Claude Code deletes history after 30 days, and in Cursor a chat can be deleted or restored. Session Hub keeps a copy **on your computer** (**Privacy → Backup** tab):
@@ -266,7 +282,7 @@ Claude Code deletes history after 30 days, and in Cursor a chat can be deleted o
 | **Your team's copies** | Copies of what teammates share with you, to read even when they're offline (**💾 copy from…**: it may not have the latest). They're deleted automatically if the person hides the session, stops sharing it or turns copies off. |
 
 - **Always up to date:** while the original exists, the backup equals it; it updates every 1–2 minutes or with **Update now**.
-- **Delete:** in the conversation, **Delete from backup**; or in *Backup*, **Delete what no longer exists**, **Delete their copies** or **Delete all copies**. A copy you delete by hand isn't copied again.
+- **Delete:** in the conversation, **Delete from backup**; or in *Backup*, **Delete what no longer exists**, **Delete their copies** or **Delete all copies**. It always asks for confirmation. You can delete any backed‑up session: if its original no longer exists, it's gone for good; if the original is still in Claude Code or Cursor, only the backup is deleted (the original isn't touched) and it isn't backed up again until you click **Back up again the ones deleted by hand**. A teammate's copy you delete by hand isn't copied again either.
 - **Export:** in the conversation, **⤓ Export** (Markdown or JSON); in *Backup*, **Export all…** creates a folder with one file per session plus `index.json`.
 - **Your call:** if you don't want teammates to keep copies of yours, turn off `sessionHub.allowTeamCopies`. *Who read mine* shows "💾 Ana saved a copy of…".
 - Settings: `sessionHub.backupOwnSessions`, `sessionHub.keepTeamCopies`, `sessionHub.backupRetentionDays` (365), `sessionHub.teamCopiesRetentionDays` (180) and `sessionHub.backupMaxMB` (2048).
@@ -325,6 +341,8 @@ Opening the port — **Windows:** allow on *Private networks* when prompted. **m
 
 **Can I be in several teams?** Not at the same time. You can leave (*Session Hub: Salir del equipo*) and join another with no problem: you keep your fingerprint and the previous team's data is cleared. To go back you need a new invitation.
 
+**What happens to copies when someone leaves the team or is expelled?** They are deleted. When you leave, your hub tells the teammates who are online, and they tell the rest, so they delete their copies of your sessions. If nobody was online, those copies expire with the retention period. If you expel someone, you delete their copies right away, along with those of anyone they invited; the expelled person deletes the team's copies as soon as they find out. Automatic conversations with that person also end, their unread messages no longer reach your AI, and your queued messages to them expire. Blocking someone does the same except deleting their copies: it only hides them, because a block can be undone.
+
 **Is there a central server?** No. Your conversations stay on your computer; when someone reads one, it travels encrypted straight to their editor.
 
 **Can they change my code?** No. Session Hub only reads.
@@ -336,6 +354,8 @@ Opening the port — **Windows:** allow on *Private networks* when prompted. **m
 **What if Cursor didn't save a conversation in its database?** Session Hub reads it from the transcripts Cursor keeps in `~/.cursor/projects`. You don't have to do anything.
 
 **Why does my AI only see one project?** Because Session Hub limits it to the project you work in, so projects don't get mixed. If you want others, ask: *"search all projects"*. See [Current project](#current-project-dont-mix-projects).
+
+**I resumed an old session and Claude Code said the cache expired. Did I lose anything?** No, it's a cost and speed notice, not an error. See [Continue an old session without spending tokens](#continue-an-old-session-without-spending-tokens): Session Hub lets you carry that work on in a new conversation without reprocessing everything.
 
 **Is it free?** Yes. Free software (AGPL‑3.0). Not affiliated with Cursor or Anthropic.
 

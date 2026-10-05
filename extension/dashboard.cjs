@@ -22,7 +22,7 @@ const BACKUP_TOGGLES = ['archive', 'teamCopies', 'allowCopies'];
 const BACKUP_NUMBERS = ['archiveRetentionDays', 'copiesRetentionDays', 'archiveMaxMB'];
 const PANEL_COMMANDS = {
   ...Object.fromEntries(
-    ['whatChanged', 'togglePause', 'copyInvite', 'openSource', 'leaveTeam', 'shareWorkspace', 'doctor', 'copyNetReport', 'copyClaudeCommand', 'syncBackup', 'exportAll', 'purgeOwnBackup', 'installHooks', 'removeHooks', 'createTeam', 'joinTeam', 'start'].map((c) => [c, none]),
+    ['whatChanged', 'togglePause', 'copyInvite', 'openSource', 'leaveTeam', 'shareWorkspace', 'doctor', 'copyNetReport', 'copyClaudeCommand', 'syncBackup', 'exportAll', 'purgeOwnBackup', 'restoreIgnoredBackup', 'installHooks', 'removeHooks', 'createTeam', 'joinTeam', 'start'].map((c) => [c, none]),
   ),
   setLanguage: (args) => args.length === 1 && ['es', 'en'].includes(args[0]),
   sendMessage: optional(memberIds),
@@ -46,6 +46,8 @@ const PANEL_COMMANDS = {
   exportSession: (args, st, detail) => typeof args[0] === 'string' && sessionIds(st, detail).has(args[0]),
   // [id, dueño, título, origen, projectKey, proyecto, rama]: todo texto (lo de proyecto solo se muestra y compara).
   useSessionInAi: (args, st, detail) => typeof args[0] === 'string' && sessionIds(st, detail).has(args[0]) && args.every((a) => a == null || typeof a === 'string'),
+  // [id]: solo sesiones mías.
+  continueSessionInAi: known((st) => ids(st.mine)),
   removeFromBackup: (args, st, detail) => typeof args[0] === 'string' && sessionIds(st, detail).has(args[0]),
 };
 

@@ -177,3 +177,22 @@ test('respaldo dañado: también sale del índice de búsqueda (solo mi fila, no
   assert.deepEqual(searchIndex.ids('copy', 'ana'), ['claude:a'], 'la copia de Ana sigue');
   searchIndex.close();
 });
+
+test('borrar del respaldo una sesión cuyo original sigue: no se vuelve a respaldar hasta restaurar', () => {
+  const f = makeClaudeFixture();
+  const cfg = { ...f, id: 'c'.repeat(64), owner: { name: 'Carlos' }, projects: [{ path: f.project, name: 'demo-api', allow: ['*'] }], excludedSessions: [], paused: false, redactExtra: [], archiveDir: path.join(f.root, 'archive') };
+  const hub = createHub(cfg);
+  hub.syncArchive();
+  assert.equal(hub.archiveList().length, 1);
+  assert.equal(hub.archiveList()[0].goneSince, null, 'el original sigue');
+  hub.removeArchived('claude:s1');
+  assert.equal(hub.archiveList().length, 0, 'borrada del respaldo');
+  assert.equal(hub.archiveStatus().ignored, 1);
+  assert.equal(hub.listSessions().length, 1, 'el original no se toca');
+  hub.syncArchive();
+  assert.equal(hub.archiveList().length, 0, 'la sincronización no la trae de vuelta');
+  assert.equal(createHub(cfg).archiveStatus().ignored, 1, 'se recuerda al reiniciar');
+  assert.deepEqual(hub.restoreIgnored(), { restored: 1 });
+  hub.syncArchive();
+  assert.equal(hub.archiveList().length, 1, 'tras restaurar, vuelve a respaldarse');
+});

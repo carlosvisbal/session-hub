@@ -128,6 +128,7 @@ Guía completa: **[Trabajar desde redes distintas](docs/REMOTE.es.md)**. Las VPN
 | `what_changed` | Qué hizo cada compañero desde una fecha: peticiones, archivos, comandos y estado final |
 | `list_sessions` | Sesiones por persona, proyecto, fuente y fecha |
 | `get_session` | Una sesión **completa**: todos los mensajes, sin recortar |
+| `continue_session` | Un extracto corto de una sesión **tuya** (objetivo, últimas peticiones y respuestas, archivos cambiados) para seguirla en un chat nuevo sin reprocesar toda la conversación |
 | `search_sessions` | Búsqueda de texto en lo que tu equipo comparte contigo |
 | `list_agents` | Sesiones de IA que cada compañero tiene abiertas ahora (herramienta, proyecto, ocupada o libre) |
 | `send_message` | Un mensaje de texto firmado para un compañero (en cola hasta 24 h si está desconectado) |

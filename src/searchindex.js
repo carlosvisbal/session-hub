@@ -32,11 +32,13 @@ const hashOf = (messages, tag = '') => crypto.createHash('sha256').update(JSON.s
 // Versión del esquema (PRAGMA user_version). Al cambiarla, el índice se borra y se rehace desde
 // cero en la siguiente sincronización: es solo un acelerador. v2: clave (scope, owner_id, id), para
 // que la copia de un compañero no pise mi sesión con el mismo id, y texto guardado ya redactado (las
-// versiones anteriores guardaban el texto original, que se purga al actualizar).
-const SCHEMA_VERSION = 2;
+// versiones anteriores guardaban el texto original, que se purga al actualizar). v3: clave sin el
+// carácter NUL (node:sqlite la devolvía cortada en él y quitar una sesión por id no la encontraba).
+const SCHEMA_VERSION = 3;
 
 // Clave única de una sesión en el índice: el mismo id puede existir como mía y como copia de otros.
-const keyOf = (scope, ownerId, id) => `${scope}\u0000${ownerId}\u0000${id}`;
+// En JSON y no con un separador: node:sqlite corta en '\0' el texto que devuelve.
+const keyOf = (scope, ownerId, id) => JSON.stringify([scope, ownerId, id]);
 
 // Frase literal segura para FTS5: sin esto, puntuación o palabras como "OR"/"NOT"/"NEAR" en lo que
 // escribe la persona se interpretarían como sintaxis de consulta (y a veces ni siquiera es válida:

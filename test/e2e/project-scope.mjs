@@ -121,7 +121,7 @@ try {
     return (await res.json()).result;
   };
   const prompts = (await rpc('prompts/list', {})).prompts.map((p) => p.name).sort();
-  assert.deepEqual(prompts, ['catch_up', 'check_messages', 'search_team']);
+  assert.deepEqual(prompts, ['catch_up', 'check_messages', 'continue_session', 'search_team']);
   const catchUp = await rpc('prompts/get', { name: 'catch_up', arguments: { since: '3d' } }, [anaSame]);
   const text = catchUp.messages[0].content.text;
   assert.ok(text.includes('what_changed') && text.includes('3d') && text.includes(anaSame), 'el atajo arma el pedido con la carpeta actual');

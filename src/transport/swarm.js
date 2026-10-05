@@ -21,6 +21,7 @@ const HELLO_TIMEOUT_MS = 10_000;
 const REFRESH_MS = 30_000; // en redes chicas, entrar a la vez no basta: se vuelve a buscar
 const WHOAMI_MS = 15_000;
 const BAN_MS = 10 * 60_000;
+const CUT_GRACE_MS = 2_000; // al expulsar: margen para que el aviso le llegue antes de cortar
 const HELLO_MAX_FRAME = 8 * 1024 * 1024; // el saludo lleva cadena y chismes, nunca más que esto
 const PENDING_RETRY_MS = 15_000; // quien espera su admisión reintenta pronto
 const START_TIMEOUT_MS = 15_000;
@@ -141,8 +142,14 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
 
   // Corta a quien ya está conectado si lo expulsaron a él o a alguien de su cadena
   // (expulsar a alguien excluye también a quienes invitó).
+  // Se cierra en orden (end) para que lo ya enviado, como el aviso de su expulsión, le llegue; si no
+  // cierra a tiempo, se corta igual.
   function cutRevoked() {
-    for (const p of peers.values()) if (teamState.isRevoked(p.id) || (p.ancestors || []).some(teamState.isRevoked)) p.conn.destroy();
+    for (const p of peers.values())
+      if (teamState.isRevoked(p.id) || (p.ancestors || []).some(teamState.isRevoked)) {
+        p.conn.end();
+        setTimeout(() => p.conn.destroy(), CUT_GRACE_MS).unref?.();
+      }
   }
 
   function info(p) {
@@ -154,6 +161,7 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
       onEvent('revoked', msg.doc.body);
       cutRevoked();
     }
+    if (msg.t === 'leave' && msg.doc?.body?.member === peer.id && teamState.applyDeparture(msg.doc)) onEvent('departed', msg.doc.body);
     if (msg.t === 'admitted' && teamState.receiveAdmission(msg.doc, peer.id)) {
       log(`[equipo] ${peer.name} confirmó tu admisión: ya eres miembro de ${teamState.team().name}`);
       onEvent('admitted', { by: peer.id });
@@ -208,6 +216,7 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
       let revoked = false;
       for (const doc of list(msg.gossip?.revocations)) if (teamState.applyRevocation(doc)) (revoked = true), onEvent('revoked', doc.body);
       if (revoked) cutRevoked();
+      for (const doc of list(msg.gossip?.departures)) if (teamState.applyDeparture(doc)) onEvent('departed', doc.body);
       if (teamState.isRevoked(pub)) return reject(pub, 'expulsado del equipo', conn);
       if ((r.ancestors || []).some(teamState.isRevoked)) return reject(pub, 'lo invitó alguien que fue expulsado', conn);
       teamState.learnAddrs(Array.isArray(msg.addrs) ? msg.addrs.filter((a) => typeof a === 'string') : [], pub);
@@ -238,7 +247,10 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
   async function refreshWhoami(peer) {
     try {
       const w = await peer.rpc.call('whoami', { origin: { via: 'hub' } }, 8000);
+      const before = `${!!peer.paused}/${peer.allowCopies !== false}`;
       Object.assign(peer, { paused: !!w.paused, allowCopies: w.allowCopies !== false, projects: w.projects || [], projectKeys: w.projectKeys || {} });
+      // Pausó o dejó de permitir copias: que las copias lo sepan ya, no en la próxima sincronización.
+      if (before !== `${peer.paused}/${peer.allowCopies}`) onEvent('policy', { id: peer.id, paused: peer.paused, allowCopies: peer.allowCopies });
     } catch {
       // sin respuesta: se reintenta en el próximo ciclo
     }
@@ -318,7 +330,7 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
       const ids = new Set(online.map((p) => p.id));
       const offline = teamState
         .roster()
-        .filter((m) => !ids.has(m.id) && m.id !== teamState.me() && !m.revoked)
+        .filter((m) => !ids.has(m.id) && m.id !== teamState.me() && !teamState.isCutOff(m.id) && !teamState.hasLeft(m.id))
         .map((m) => ({ id: m.id, fingerprint: m.fingerprint, name: m.name || m.fingerprint, role: m.role || '', invitedBy: m.invitedBy, paused: false, projects: [], online: false }));
       return [...online, ...offline];
     },

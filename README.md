@@ -128,6 +128,7 @@ Full guide: **[Working across networks](docs/REMOTE.md)**. VPNs (WireGuard, Tail
 | `what_changed` | What each teammate did since a date: requests, files, commands, final state |
 | `list_sessions` | Sessions by person, project, source and date |
 | `get_session` | A **complete** session — every message, untruncated |
+| `continue_session` | A short excerpt of one of **your** sessions (goal, latest requests and replies, changed files) to continue it in a new chat without reprocessing the whole conversation |
 | `search_sessions` | Full‑text search across what your team shares with you |
 | `list_agents` | AI sessions each teammate has open right now (tool, project, busy/idle) |
 | `send_message` | A signed text message to one teammate (queued up to 24 h if they're offline) |

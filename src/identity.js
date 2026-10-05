@@ -139,6 +139,15 @@ export function verifyRevocation(teamId, doc, targetChain) {
   return v.ok && v.member === b.member && v.ancestors.includes(b.by);
 }
 
+// Aviso de salida: lo firma quien se va, para que los demás borren sus copias. No expulsa a nadie
+// ni cierra la puerta: solo dice "ya no estoy en este equipo".
+export const signDeparture = (kp, teamId) => signDoc(kp, { type: 'leave', team: teamId, member: kp.publicKey, at: now() });
+
+export function verifyDeparture(teamId, doc) {
+  const b = doc?.body || {};
+  return b.type === 'leave' && b.team === teamId && typeof b.member === 'string' && verifyDoc(b.member, doc);
+}
+
 // ---------- código de invitación ----------
 
 export const INVITE_PREFIX = 'SH2-';

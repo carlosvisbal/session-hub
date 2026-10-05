@@ -231,12 +231,30 @@ export function createConversations({ file, teamState, now = Date.now }) {
       return c;
     },
 
+    // No se pudo avisar la aceptación (el otro se desconectó): vuelve a quedar pendiente, para
+    // reintentarla, en vez de quedar "en marcha" solo de mi lado.
+    unaccept(id) {
+      const c = find(id);
+      if (!c || c.status !== 'active' || c.sent || c.received) return null;
+      Object.assign(c, { status: 'invited', startedAt: null });
+      save();
+      return c;
+    },
+
     end(id, reason = 'me') {
       const c = find(id);
       if (!c || c.status === 'ended') return null;
       Object.assign(c, { status: 'ended', endedAt: iso(), endReason: reason });
       save();
       return c;
+    },
+
+    // Termina todo lo no terminado con esa persona (invitaciones incluidas). Devuelve cuántas.
+    endWith(peerId, reason) {
+      let n = 0;
+      for (const c of list) if (!c.local && c.peer === peerId && c.status !== 'ended') Object.assign(c, { status: 'ended', endedAt: iso(), endReason: reason }), n++;
+      if (n) save();
+      return n;
     },
 
     // Conversación activa con esa persona (si hay una sola, o la indicada).

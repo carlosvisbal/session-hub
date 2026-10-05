@@ -82,6 +82,11 @@ export function createOwnArchive({ dir, log = () => {}, searchIndex = null, owne
   const base = path.join(dir, 'own');
   const indexFile = path.join(base, 'index.json');
   let index = readJson(indexFile, {}); // id -> meta
+  // Borradas a mano mientras su original sigue existiendo: no se vuelven a respaldar (si no, la próxima
+  // sincronización las traería de vuelta). Se vacía con unignoreAll().
+  const ignoredFile = path.join(base, 'ignored.json');
+  const ignored = new Set(readJson(ignoredFile, []));
+  const saveIgnored = () => writeAtomic(ignoredFile, JSON.stringify([...ignored]));
   const lastRef = new Map(); // id -> objeto de sesión ya respaldado (las fuentes lo reutilizan si no cambió)
   const cache = lru();
   let lastSync = null;
@@ -143,6 +148,7 @@ export function createOwnArchive({ dir, log = () => {}, searchIndex = null, owne
           const present = new Set();
           for (const s of sessions) {
             present.add(s.id);
+            if (ignored.has(s.id)) continue;
             const m = index[s.id];
             if (m && lastRef.get(s.id) === s && !m.goneSince) continue; // mismo objeto: nada cambió
             const h = hashOf(contentOf(s));
@@ -212,9 +218,10 @@ export function createOwnArchive({ dir, log = () => {}, searchIndex = null, owne
     isGone: (id) => !!index[id]?.goneSince,
     meta: (id) => index[id] || null,
 
-    remove(id, { save = true } = {}) {
+    remove(id, { save = true, ignore = false } = {}) {
       const m = index[id];
       if (!m) return false;
+      if (ignore) (ignored.add(id), saveIgnored());
       rm(path.join(base, m.file));
       rm(path.join(base, `${safeName(id)}.prev.json.gz`));
       delete index[id];
@@ -249,9 +256,16 @@ export function createOwnArchive({ dir, log = () => {}, searchIndex = null, owne
       return n;
     },
 
+    // Vuelve a respaldar lo que se borró a mano (se trae en la próxima sincronización).
+    unignoreAll() {
+      const n = ignored.size;
+      ignored.clear();
+      if (n) saveIgnored();
+      return n;
+    },
     all: () => Object.values(index),
     bytes: () => Object.values(index).reduce((a, m) => a + (m.bytes || 0), 0),
-    status: () => ({ sessions: Object.keys(index).length, onlyInBackup: Object.values(index).filter((m) => m.goneSince).length, bytes: Object.values(index).reduce((a, m) => a + (m.bytes || 0), 0), lastSync, lastError, dir: base }),
+    status: () => ({ ignored: ignored.size, sessions: Object.keys(index).length, onlyInBackup: Object.values(index).filter((m) => m.goneSince).length, bytes: Object.values(index).reduce((a, m) => a + (m.bytes || 0), 0), lastSync, lastError, dir: base }),
   };
 }
 

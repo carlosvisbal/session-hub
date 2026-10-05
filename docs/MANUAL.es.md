@@ -254,6 +254,22 @@ Son **solo cifras**: nunca incluye texto escrito por tus compañeros. En Cursor 
 
 **Apagarlo:** Ajustes → **Session Hub: Start Context** (`sessionHub.startContext`).
 
+## Continuar una sesión antigua sin gastar tokens
+
+Cada vez que escribes, tu IA vuelve a leer **toda** la conversación (código, resultados, mensajes). Para no procesarla completa cada vez, el sistema guarda una copia ya procesada durante poco tiempo, alrededor de una hora (la *caché del prompt*); leer desde ahí es mucho más rápido y barato.
+
+Si pasas más de una hora sin escribir, esa copia vence. No se pierde nada, pero tu siguiente mensaje obliga a reprocesar la conversación entera (en una sesión larga, cientos de miles de tokens): la primera respuesta tarda más y gasta mucha cuota. Esa copia vive en los servidores de la IA; Session Hub no puede guardarla ni devolvérsela.
+
+Lo que sí hace Session Hub es darle a una **conversación nueva** solo lo esencial de la vieja:
+
+1. En *Sesiones → Mis sesiones*, abre la sesión antigua. Si lleva más de una hora quieta, el panel te lo avisa.
+2. Pulsa **⚡ Continuar sin gastar tokens**. El pedido queda escrito en tu chat; úsalo en una conversación **nueva**.
+3. Tu IA lee un extracto de unos pocos miles de tokens: el objetivo original, un **mapa de toda la sesión** (cada petición tuya en una línea, con su número de mensaje), tus últimas peticiones, sus últimas respuestas, los archivos cambiados y los últimos comandos. Todo con los secretos ocultos.
+
+También puedes pedírselo directo: *"Continúa mi sesión claude:… con Session Hub"* (herramienta `continue_session`, o el atajo `/mcp__session-hub__continue_session` en Claude Code). Si le falta un detalle, usa el mapa para leer solo ese tramo con `get_session`, así que no pierdes nada: el original sigue intacto y solo se paga lo que se lee.
+
+**Qué esperar:** es un extracto, no la sesión completa, y la IA no carga el detalle hasta que lo necesita. A cambio, una sesión larga cuesta unos 5.000 tokens en lugar de cientos de miles. En una sesión corta o reciente no compensa: retómala normal. Solo funciona con **tus** sesiones.
+
 ## Respaldo y exportar
 
 Claude Code borra el historial a los 30 días, y en Cursor un chat se puede borrar o restaurar. Session Hub guarda una copia **en tu computadora** (pestaña **Privacidad → Respaldo**):
@@ -264,7 +280,7 @@ Claude Code borra el historial a los 30 días, y en Cursor un chat se puede borr
 | **Copias de tu equipo** | Copias de lo que tus compañeros comparten contigo, para leerlo aunque estén desconectados (**💾 copia de hace…**: puede no tener lo último). Se borran solas si la persona oculta la sesión, deja de compartirla o desactiva las copias. |
 
 - **Siempre al día:** mientras el original existe, el respaldo es igual al original; se actualiza cada 1–2 minutos o con **Actualizar ahora**.
-- **Borrar:** en la conversación, **Borrar del respaldo**; o en *Respaldo*, **Borrar lo que ya no existe**, **Borrar sus copias** o **Borrar todas las copias**. Si borras una copia a mano, no se vuelve a copiar.
+- **Borrar:** en la conversación, **Borrar del respaldo**; o en *Respaldo*, **Borrar lo que ya no existe**, **Borrar sus copias** o **Borrar todas las copias**. Siempre pide confirmación. Puedes borrar cualquier sesión respaldada: si su original ya no existe, se pierde para siempre; si el original sigue en Claude Code o Cursor, solo se borra el respaldo (el original no se toca) y no se vuelve a respaldar, hasta que pulses **Volver a respaldar las borradas a mano**. Si borras una copia de un compañero a mano, tampoco se vuelve a copiar.
 - **Exportar:** en la conversación, **⤓ Exportar** (Markdown o JSON); en *Respaldo*, **Exportar todo…** crea una carpeta con un archivo por sesión e `index.json`.
 - **Tu decisión:** si no quieres que tus compañeros guarden copias de lo tuyo, desactiva `sessionHub.allowTeamCopies`. En *Quién ha leído lo mío* verás "💾 Ana guardó una copia de…".
 - Ajustes: `sessionHub.backupOwnSessions`, `sessionHub.keepTeamCopies`, `sessionHub.backupRetentionDays` (365), `sessionHub.teamCopiesRetentionDays` (180) y `sessionHub.backupMaxMB` (2048).
@@ -323,6 +339,8 @@ Cómo abrir el puerto: en **Windows**, cuando pregunte, permite el acceso en *Re
 
 **¿Puedo estar en varios equipos?** No a la vez. Puedes salir (*Session Hub: Salir del equipo*) y unirte a otro sin problemas: conservas tu huella, y lo del equipo anterior se borra. Para volver al anterior necesitas una invitación nueva.
 
+**¿Qué pasa con mis copias si alguien sale del equipo o lo expulsan?** Se borran. Al salir, tu hub avisa a los compañeros conectados, y ellos al resto, para que borren las copias de tus sesiones. Si nadie estaba conectado, esas copias vencen con el plazo de retención. Si expulsas a alguien, borras en el acto sus copias y las de quienes él invitó; quien es expulsado borra las copias del equipo en cuanto se entera. Además se terminan las conversaciones automáticas con esa persona, sus mensajes sin leer ya no llegan a tu IA y los tuyos en cola para ella vencen. Bloquear a alguien hace lo mismo, salvo borrar sus copias: solo las oculta, porque el bloqueo se puede deshacer.
+
 **¿Hay un servidor central?** No. Tus conversaciones siguen en tu computadora. Cuando alguien lee una, viaja cifrada directo a su editor.
 
 **¿Pueden cambiar mi código?** No. Session Hub solo lee.
@@ -336,6 +354,8 @@ Cómo abrir el puerto: en **Windows**, cuando pregunte, permite el acceso en *Re
 **¿Qué pasa si Cursor no guardó una conversación en su base de datos?** Session Hub la lee de las transcripciones que Cursor guarda en `~/.cursor/projects`. No tienes que hacer nada.
 
 **¿Por qué mi IA solo ve un proyecto?** Porque Session Hub la limita al proyecto en el que trabajas, para no mezclar proyectos. Si quieres otros, pídeselo: *"busca en todos los proyectos"*. Ver [Proyecto actual](#proyecto-actual-no-mezclar-proyectos).
+
+**Retomé una sesión vieja y Claude Code avisó que la caché venció. ¿Se perdió algo?** No, es un aviso de costo y velocidad, no un error. Mira [Continuar una sesión antigua sin gastar tokens](#continuar-una-sesión-antigua-sin-gastar-tokens): Session Hub te deja seguir ese trabajo en una conversación nueva sin reprocesar todo.
 
 **¿Es gratis?** Sí. Es software libre (AGPL-3.0) y no está afiliado a Cursor ni a Anthropic.
 

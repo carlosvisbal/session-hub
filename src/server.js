@@ -28,6 +28,7 @@ import { makeT } from './i18n.js';
 const POLL_MS = 5000;
 const MAX_BODY = 1_000_000;
 const REQUEST_TIMEOUT_MS = 30_000; // ninguna petición HTTP queda colgada más de esto
+const LEAVE_FLUSH_MS = 500; // al salir del equipo, margen para que el aviso salga antes de cerrar la red
 const clamp = (n, lo, hi, dflt) => Math.min(hi, Math.max(lo, Number(n) || dflt));
 const FULL_TEXT = 1e9; // lectura completa: sin recortar mensajes
 // Sin límite por defecto; 0 o "all" también significan "todo".
@@ -124,6 +125,31 @@ export function startServer(cfg, { log = console.log } = {}) {
     }
   }
 
+  // Copias de quien ya no está en el equipo: expulsado, invitado por alguien expulsado, o yo mismo
+  // expulsado (entonces nada del equipo es para mí). Se llama tras cada expulsión y al arrancar
+  // (por si quedaron de antes).
+  function purgeOutsiders() {
+    if (teamState.isCutOff(teamState.me())) {
+      const n = copies.purgeAll();
+      if (n) say(`[copias] borradas ${n} copia(s): te expulsaron del equipo`);
+      for (const m of teamState.roster()) forgetPerson(m.id, 'gone');
+      return;
+    }
+    const ids = new Set([...copies.owners().map((o) => o.id), ...teamState.roster().map((m) => m.id)]);
+    for (const id of ids) {
+      if (teamState.isCutOff(id)) forgetPerson(id, 'gone', t('expulsado del equipo'));
+      else if (teamState.hasLeft(id)) forgetPerson(id, 'gone', t('salió del equipo'));
+    }
+  }
+
+  // Lo que queda pendiente con una persona que ya no está (o que bloqueé): sin copias (salvo al
+  // bloquear, que es reversible y ya las oculta), sin conversaciones abiertas y sin mensajes por entregar.
+  function forgetPerson(id, reason, copiesReason = null) {
+    if (copiesReason) copies.purgeOwner(id, copiesReason);
+    convs.endWith(id, reason);
+    inbox.forget(id);
+  }
+
   function onEvent(type, data) {
     if (type === 'rejected') access.record({ id: `key:${data.id}`, name: `Clave desconocida ${data.fingerprint}`, via: 'red' }, 'rejected', { reason: data.reason });
     if (type === 'conn-issue') say(`[red] no se pudo conectar con ${data.peer}: ${data.code}`);
@@ -131,9 +157,15 @@ export function startServer(cfg, { log = console.log } = {}) {
       team.flushQueue(data.id).catch(() => {});
       setTimeout(() => team.syncCopies().catch(() => {}), 5000); // al volver alguien, se ponen al día sus copias
     }
-    if (type === 'revoked') copies.purgeOwner(data.member, t('expulsado del equipo'));
+    if (type === 'revoked') purgeOutsiders();
+    if (type === 'policy' && copies.owner(data.id)) {
+      if (!data.allowCopies) copies.purgeOwner(data.id, t('el dueño no permite copias'));
+      else copies.setOwner(data.id, { paused: data.paused });
+    }
+    if (type === 'departed' && teamState.hasLeft(data.member)) forgetPerson(data.member, 'gone', t('salió del equipo'));
     if (type === 'receipt') inbox.receipt(data.from, data.id, data.status);
     if (type === 'revoked') say(`[equipo] ${fingerprint(data.member)} fue expulsado por ${fingerprint(data.by)}`);
+    if (type === 'departed') say(`[equipo] ${fingerprint(data.member)} salió del equipo`);
   }
 
   const CONV_ACTION = { invite: 'te invita a una conversación automática', accept: 'aceptó la conversación automática', decline: 'rechazó la conversación automática', end: 'terminó la conversación automática' };
@@ -259,7 +291,7 @@ ${m.text}
       if (ctx.keys.size && cfg.teamCopies !== false) {
         const since = new Date(now - 24 * 3600_000).toISOString();
         let changed = 0;
-        for (const o of copies.owners()) for (const key of ctx.keys) changed += copies.listSessions(o.id, { project: key, since }).length;
+        for (const o of copies.owners().filter((x) => team.copyUsable({ id: x.id }))) for (const key of ctx.keys) changed += copies.listSessions(o.id, { project: key, since }).length;
         if (changed) lines.push(t('- Sesiones de compañeros con cambios en este proyecto en las últimas 24 h: {v1} (what_changed da el detalle).', { v1: changed }));
       }
     }
@@ -398,7 +430,7 @@ ${m.text}
         owners: copies.status(),
         bytes: copies.bytes(),
         ...(q.detail
-          ? { list: copies.owners().flatMap((o) => copies.list(o.id).map((m) => ({ id: m.id, ownerId: o.id, owner: o.name || m.summary?.owner, title: m.summary?.title, project: m.summary?.project, projectKey: m.summary?.projectKey, source: m.summary?.source, messages: m.count, bytes: m.bytes || 0, updatedAt: m.remoteUpdatedAt, syncedAt: m.syncedAt, verifiedAt: m.verifiedAt, status: m.status }))) }
+          ? { list: copies.owners().flatMap((o) => copies.list(o.id).map((m) => ({ id: m.id, ownerId: o.id, owner: o.name || m.summary?.owner, title: m.summary?.title, project: m.summary?.project, projectKey: m.summary?.projectKey, branch: m.summary?.branch || null, source: m.summary?.source, messages: m.count, bytes: m.bytes || 0, updatedAt: m.remoteUpdatedAt, syncedAt: m.syncedAt, verifiedAt: m.verifiedAt, status: m.status }))) }
           : {}),
       },
       settings: { archive: cfg.archive !== false, teamCopies: cfg.teamCopies !== false, allowCopies: cfg.allowCopies !== false, archiveRetentionDays: cfg.archiveRetentionDays, copiesRetentionDays: cfg.copiesRetentionDays, archiveMaxMB: cfg.archiveMaxMB },
@@ -414,6 +446,7 @@ ${m.text}
     },
     'POST /api/archive/purge': (q, body) => {
       if (body.scope === 'own') return hub.purgeArchive(true);
+      if (body.scope === 'ignored') return hub.restoreIgnored();
       if (body.owner) return { removed: copies.purgeOwner(String(body.owner), t('borradas a mano')) };
       return { removed: copies.purgeAll() };
     },
@@ -421,7 +454,11 @@ ${m.text}
     // Permitir que mi IA lo lea (check_inbox), pasarlo al chat de mi IA (leído) o descartarlo.
     // Un mensaje de conversación automática no se marca leído aquí: lo entrega el hook al terminar el turno.
     'POST /api/inbox/approve': (q, body) => messageStatus(body.id, 'delivered'),
-    'POST /api/inbox/handoff': (q, body) => (inbox.get(String(body.id))?.conv ? inbox.get(String(body.id)) : messageStatus(body.id, 'read')),
+    // El de una conversación en marcha lo entrega el hook; si ya terminó, nadie más lo hará: queda leído.
+    'POST /api/inbox/handoff': (q, body) => {
+      const m = inbox.get(String(body.id));
+      return m?.conv && convs.get(m.conv)?.status === 'active' ? m : messageStatus(body.id, 'read');
+    },
     'POST /api/inbox/dismiss': (q, body) => messageStatus(body.id, 'dismissed'),
 
     'POST /api/team/create': async (q, body) => {
@@ -440,6 +477,12 @@ ${m.text}
     'POST /api/team/invite': (q, body) =>
       teamState.makeInvite({ hours: clamp(body.hours, 1, 168, 48), network: cfg.network, bootstrap: cfg.network === 'private' ? cfg.bootstrap : reachableAddresses().map((ip) => `${ip}:${cfg.dhtPort}`) }),
     'POST /api/team/leave': async () => {
+      // Aviso firmado a quienes están conectados (y, por chisme, al resto) para que borren mis copias.
+      const doc = teamState.departure();
+      if (doc && transport.list().some((p) => p.online)) {
+        transport.broadcast({ t: 'leave', doc });
+        await new Promise((r) => setTimeout(r, LEAVE_FLUSH_MS)); // que salga antes de cerrar las conexiones
+      }
       await transport.stop();
       teamState.leave();
       inbox.clear();
@@ -449,13 +492,13 @@ ${m.text}
     },
     'POST /api/members/block': (q, body) => {
       teamState.setBlocked(String(body.id), !!body.blocked);
-      if (body.blocked) transport.disconnect(String(body.id));
+      if (body.blocked) transport.disconnect(String(body.id)), forgetPerson(String(body.id), 'blocked');
       return { ok: true };
     },
     'POST /api/members/revoke': (q, body) => {
       const doc = teamState.revoke(String(body.id), body.reason);
-      transport.broadcast({ t: 'revoke', doc });
-      transport.disconnect(String(body.id));
+      transport.broadcast({ t: 'revoke', doc }); // también corta, en orden, al expulsado y a sus invitados
+      purgeOutsiders(); // el evento 'revoked' solo llega por la red: aquí, mi propia expulsión
       return { ok: true };
     },
   };
@@ -543,6 +586,7 @@ ${m.text}
   const ARCHIVE_MS = 60_000;
   const COPIES_MS = 120_000;
   const archiveTimer = setInterval(() => hub.syncArchive(), ARCHIVE_MS);
+  purgeOutsiders();
   const copiesTimer = setInterval(() => team.syncCopies().catch(() => {}), COPIES_MS);
   setTimeout(() => hub.syncArchive(), 2000);
 
