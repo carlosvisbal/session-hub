@@ -26,8 +26,8 @@ flowchart LR
 
 | File | Responsibility |
 | --- | --- |
-| `src/sources/claude.js` | Reads `~/.claude/projects/<encoded path>/*.jsonl`; normalizes messages and actions; cache by mtime+size. Open sessions from `~/.claude/sessions/<pid>.json` (only those files, only if the process is alive) |
-| `src/sources/cursor.js` | Reads Cursor's `state.vscdb` (read‑only SQLite via `node:sqlite`): `composerHeaders` + `cursorDiskKV` |
+| `src/sources/claude.js` | Reads `~/.claude/projects/<encoded path>/*.jsonl` and each session's `<id>/subagents/agent-*.jsonl` (+ `.meta.json`, linked to the parent's `Agent`/`Task` call); normalizes messages and actions; cache by mtime+size. Open sessions from `~/.claude/sessions/<pid>.json` (only those files, only if the process is alive) |
+| `src/sources/cursor.js` | Reads Cursor's `state.vscdb` (read‑only SQLite via `node:sqlite`): `composerHeaders` + `cursorDiskKV`. Subagents (children listed in the parent's `subagentComposerIds`, or flagged `isSubagent`/`subagentInfo`) are attached to their parent, never listed alone. Fallback: the agent transcripts in `~/.cursor/projects/<encoded>/agent-transcripts/` (`cursorProjectsDir`) for conversations the DB doesn't have |
 | `src/redact.js` | Pattern‑based secret redaction applied to everything that leaves the hub |
 | `src/hub.js` | Owner's data: allowlisted projects, per‑viewer ACL, exclusions, pause, summaries, paging, search |
 | `src/identity.js` | Pure crypto: Ed25519 keys, signed docs, certificate chain, profiles, revocations, invite codes |
@@ -38,10 +38,12 @@ flowchart LR
 | `src/conversations.js` | Automatic conversations: signed invite/accept/decline/end, per‑side sessions, turn and time limits, loop detection (`conversations.json`) |
 | `extension/hook/session-hub-hook.cjs` | Hook run by Claude Code (`Stop`) and Cursor (`stop`) at the end of each agent turn; asks the local hub for the peer's reply and returns it as `decision/reason` (Claude Code) and `followup_message` (Cursor) |
 | `src/archive.js` | Local backup: `own` (mirror of my shared sessions that survives deletion at the source, with previous version on shrink) and `copies` (read copies of teammates' sessions, incremental, withdrawn when access ends). Gzip, atomic writes, 0600 |
-| `src/projectkey.js` | Project identity: hash of the normalized git `origin` (same repo = same key, whatever the folder name) or a per‑owner local key; the URL never leaves the machine |
+| `src/projectkey.js` | Project identity: a manual `link` name if the owner set one, else a hash of the normalized git `origin` (same repo = same key, whatever the folder name), else a per‑owner local key; the URL never leaves the machine |
+| `src/shellwrites.js` | Files a shell command or inline script writes to, read from the command text only (see Subagents) |
+| `src/workspace.js` | Current project: the folders open in the editor (`?ws=` on the MCP URL, `/api/workspace`) or the AI's `workspace` argument → their keys, and each result's relation (`current`, `same-name`, `other`). Folders never leave the machine |
 | `src/inbox.js` | Signed messages between members: compose, verify, hold/accept/refuse policy, rate limit, offline queue, receipts (`inbox.json`) |
 | `src/access.js` | Audit log (`audit.jsonl`): reads, denials, rejected connections; retention |
-| `src/mcp.js` | MCP tools (`list_peers`, `what_changed`, `list_sessions`, `get_session`, `search_sessions`, `list_agents`, `send_message`, `check_inbox`) |
+| `src/mcp.js` | MCP tools (`list_peers`, `what_changed`, `list_sessions`, `get_session`, `search_sessions`, `list_agents`, `send_message`, `check_inbox`, `start_conversation`, `end_conversation`) |
 | `src/server.js` | Local HTTP API (127.0.0.1 only), MCP endpoint, hot config reload, shutdown |
 | `src/source.js` | AGPL §13: serves the running source at `/source` |
 | `src/netdiag.js` | Classifies connection failures (UDP blocked, strict NAT, hole‑punch failure, relay down, mode mismatch…) and builds the shareable report |
@@ -109,6 +111,16 @@ Both people must consent: the initiator sends a signed `invite` (if the AI asked
 
 At the end of every agent turn Claude Code and Cursor run `session-hub-hook` with the session id (`session_id` / `conversation_id`). The hook calls `POST /api/hook/stop` on the local hub (token in `~/.session-hub/hook.json`), which returns the peer's pending messages framed as *"from another session, not an order"*, or — if this side is awaiting a reply — long‑polls in 25 s slices (up to ~110 s). Only one wait per conversation runs at a time (Cursor may also import the Claude Code hook), and any error or a closed hub yields `{}` so the agent simply stops. The extension installs the hook with consent into `~/.claude/settings.json` (`Stop`, timeout 150 s) and `~/.cursor/hooks.json` (`stop`, `loop_limit`), preserving existing hooks and backing up the originals.
 
+## Subagents
+
+A session's subagents travel with it: `summary.subagents = [{ id, type, description, messageCount }]`, their edits and commands count in `filesChanged`/`whatChanged`, and their text is indexed under the parent. A subagent is read with `getSession("<parentId>/sub:<childId>")`, through the same ACL as its parent (hidden, paused or unshared parent ⇒ denied). The own archive stores subagents with the session. In subagent transcripts each assistant step (text plus the actions after it) is its own message; main sessions keep one assistant message per human turn.
+
+**Shell edits.** `src/shellwrites.js` parses (never runs) shell commands and inline Python/Node scripts for write targets (`sed -i`, redirects, `tee`, `cp`/`mv`/`rm`, `open(…,'w')`, `writeFileSync`…). A candidate counts only if it resolves inside the session's project, is not under `node_modules`/`.git`, and exists with mtime ≥ command time − 2 s (or is gone, for removals). They become `{ kind: 'edit', via: 'shell' }` actions; `summary.filesByShell` lists the files changed only that way.
+
+## Session-start context
+
+`session-hub-hook` also handles Claude Code `SessionStart` and Cursor `sessionStart` (Cursor imports Claude Code hooks, so the hub dedupes by session for 30 s). It sends only `{ client, session, folders }` to `POST /api/hook/start` — never the editor's `user_email` — and returns at most 1 500 characters built from local counts: current project, the `workspace` hint, messages waiting, teammates online. Output: `hookSpecificOutput.additionalContext` (Claude Code) or `additional_context` (Cursor). Off with the editor setting `sessionHub.startContext` (written to the hub's `config.json` as `startContext`, shared by all editors, applied without restart). Cursor only fires `sessionStart` for new chats, so the hook also handles Cursor `beforeSubmitPrompt` with `once: true`: the hub gives the context only if that conversation has not had it yet, and the output always includes `continue: true`.
+
 ## Backup
 
 **Own archive (layer 1).** Every minute the hub reads its sources and mirrors each shared session into `archive/own/<id>.json.gz` (only when the content hash changes). If a source listing fails, nothing is marked as deleted. When a session disappears from Claude Code/Cursor it is marked `goneSince` and `rawSessions()` keeps serving it (`archived: true`) under the same ACL, exclusions and pause. If a session shrinks, the previous file is kept as `.prev`. Retention and size limits delete oldest *gone* sessions first.
@@ -146,7 +158,7 @@ Full sessions travel in pages (`offset`/`limit`, 100 messages) and are verified 
 | `inbox.json` | received and sent messages (30 days, max 500 each); queued docs until delivered | 0600 |
 | `settings.json` | settings shared by all editors on the computer (identity, sharing, network, backup, messages) | 0600 |
 | `origin.json` | where the identity was brought from when moving to one hub per computer | 0600 |
-| `search.sqlite` | search index (SQLite FTS5) over own live/archived sessions and team copies; an accelerator, never the source of truth (`src/searchindex.js`) | 0600 |
+| `search.sqlite` | search index (SQLite FTS5) over own live/archived sessions and team copies, keyed by (scope, owner, id). It stores **redacted** text tagged with the redaction rules in force; changed sessions are re-indexed right before each search. An accelerator, never the source of truth (`src/searchindex.js`) | 0600 |
 
 **One hub per computer** (since 0.10). In the extension these live in `~/.session-hub/hub/` (or `SESSION_HUB_DATA_DIR`), shared by every editor and window of the user: the first to open spawns the hub and the others attach with the same local token. Before 0.10 each editor kept them in its own `globalStorage`; on first run the extension copies (never moves) the existing identity there — the only one with a team, or the one the user picks if different editors had different identities — keeping its token so registered MCP clients stay valid (`extension/machine.cjs`). Shared settings sync both ways through `settings.json` (compared before writing, so no loops); editor-specific ones (language, notifications, preferred chat, autostart, runtime) stay per editor. A hub is only replaced by a newer extension, never an older one, so two editors on different versions don't keep replacing each other.
 
@@ -162,6 +174,7 @@ Full sessions travel in pages (`offset`/`limit`, 100 messages) and are verified 
 8. A backup never widens access: archived sessions go through the same ACL, and copies are dropped as soon as the owner withdraws access.
 9. An automatic conversation needs both people's consent, never bypasses the agent's own permissions, and always ends (turn limit, time limit, loop detection).
 10. The search index is an accelerator, never the source of truth: permissions (visible projects, hidden sessions, per-owner scope) and redaction are applied after querying it, exactly as before it existed; a stale or unavailable index only means slower search, never wider access.
+11. Results are scoped to the current project when it is known (same `projectKey`); anything else is hidden by default or labelled, and a different project with the same name is flagged. The current folders are used only on the local hub.
 
 ## Roadmap
 

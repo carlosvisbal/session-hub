@@ -48,14 +48,18 @@ Always under your control: nothing is shared until you choose, it's read‑only,
 | | |
 |---|---|
 | 🤝 **Team view** | Everyone's Claude Code and Cursor sessions in one panel: who asked what, which files changed, where it ended up. |
+| 🎯 **Current project** | Session Hub knows the folder you work in, so you and your AI see this project first and a different repo with the same name is flagged, never mixed in. **Link project** joins folders without git. |
+| 🤖 **Subagents included** | What Claude Code and Cursor subagents did shows up inside their session: their steps, files and commands, searchable and with the same permissions. |
+| 🐚 **Files changed by commands** | Edits made with `sed -i`, redirections, `tee`, `cp`/`mv`/`rm` or scripts count in *Files changed*, marked *(by command)* — read from the command text, nothing is run. |
 | 🧠 **MCP built in** | Your AI (Cursor, VS Code agent mode, Claude Code) can list, search and read **complete** sessions from your teammates. |
 | 🔐 **Signed identity** | Every install has an Ed25519 key. Nobody can impersonate anyone — not even with a stolen certificate. |
+| 🚦 **Session‑start context** | With the hooks installed, every new AI session gets a short summary: current project, messages waiting, teammates online and recent changes in this project — counts only, never teammates' text. |
 | 🛰️ **No central server** | Each person runs their own hub; hubs talk directly over Hyperswarm, encrypted with Noise. Works on a LAN with no internet. |
 | 🎛️ **Personal control** | Choose which projects you share and with whom, hide single sessions, pause everything, block someone just for you. |
 | ✉️ **Messages between people** | Write to a teammate — or to one of their open AI sessions — from the panel or by asking your AI. Signed, held until they approve it, and one click passes it to their AI. Nothing runs by itself. |
 | 🗄️ **Local backup** | Your sessions stay available even after Claude Code (30 days) or Cursor delete them, and you can keep copies of your teammates' sessions to read offline — only while you still have access. Export to Markdown/JSON. |
 | 👁️ **Transparency** | Get notified when someone reads your session — who, which one, which project, from which tool. 90‑day audit log. |
-| 🧹 **Secret redaction** | Tokens, passwords, keys and credentialed URLs leave your machine as `[REDACTED]`. |
+| 🧹 **Secret redaction** | Tokens, passwords, keys and credentialed URLs leave your machine as `[REDACTED]` — and search never reveals them either. |
 | 📜 **Free software** | AGPL‑3.0‑or‑later. The running hub serves its own source at `/source`. |
 
 ## Quick start
@@ -130,11 +134,21 @@ Full guide: **[Working across networks](docs/REMOTE.md)**. VPNs (WireGuard, Tail
 | `check_inbox` | Messages you approved for your AI, marked as coming from a teammate, not from you |
 | `start_conversation` / `end_conversation` | Propose (you confirm, they accept) and end an automatic conversation |
 
-`list_sessions` accepts `origen: "respaldo"` to list only what comes from backups (originals already deleted) or local copies. Results carry `projectKey` (same repo = same key), `archived` and `copy`, so the AI never mixes projects and knows when it reads a copy.
+| Prompt (shortcut) | What it does |
+|---|---|
+| `catch_up` | Catch me up: what the team did (optional `since`, `peer`) |
+| `search_team` | Search the team's sessions for a `topic` |
+| `check_messages` | Review the messages waiting for you |
+
+In Cursor, type `/` in the chat (`/session-hub/catch_up`); in Claude Code they are MCP slash commands (`/mcp__session-hub__catch_up`).
+
+`list_sessions` accepts `origen: "respaldo"` to list only what comes from backups (originals already deleted) or local copies. Results carry `projectKey` (same repo = same key), `archived` and `copy`, so the AI never mixes projects and knows when it reads a copy. Subagents are read with `get_session` and the id `"<session id>/sub:<subagent id>"`.
 
 **Use any session in any chat:** click **🤖 Use in my AI** on a session (also in the *Backup* tab) and the request to read it with `get_session` is typed into Claude Code, Copilot or Cursor — just add your question. Or ask directly: *"Read in Session Hub my backed‑up session about signatures and summarize what changed."*
 
 All tools accept `peer` (name, fingerprint, `"me"` or `"all"`). Empty results explain *why* (nobody online vs. nothing shared).
+
+**Current project:** Session Hub knows which folder you are working in (the editor window, or the `workspace` argument your AI passes) and limits `list_sessions`, `search_sessions` and `what_changed` to that project. Every result is labelled *current project*, *other project* or **OTHER project with the same name**, so a same-named repo is never mixed in by mistake. Pass `project: "all"` to see everything; `get_session` warns when a session belongs to another project. Cursor passes the window's folder by itself (`${workspaceFolder}`); any other AI can pass `workspace`. For folders without git, **Link project** gives teammates a shared project key. Your folders never leave your machine.
 
 ## Command line (no editor)
 

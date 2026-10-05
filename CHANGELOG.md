@@ -2,6 +2,45 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versiones con [SemVer](https://semver.org/lang/es/).
 
+## [0.11.0] — 2026-10-04
+
+### Añadido
+- **Subagentes visibles, en Claude Code y en Cursor.** Lo que hacen los subagentes ya no se pierde: cada sesión muestra sus subagentes (🤖), sus archivos y comandos cuentan en el resumen y en *qué cambió*, y se encuentran al buscar. Cada subagente se abre con un clic (o por MCP con el id `<sesión>/sub:<subagente>`) y respeta los permisos de su sesión. Se guardan en el respaldo junto con la sesión.
+  - Claude Code: se leen de la carpeta de subagentes de cada sesión.
+  - Cursor: se leen los subagentes que su base asocia a cada conversación; ya no aparecen como conversaciones sueltas.
+  - Cada subagente muestra sus pasos (cada texto con las acciones que le siguen), no una sola respuesta.
+- **Archivos cambiados por comandos de terminal.** Los cambios hechos con `sed -i`, redirecciones, `tee`, `cp`/`mv`/`rm` o scripts de Python y Node también cuentan en *archivos modificados* y en *qué cambió*, marcados *(por comando)*. Solo cuentan si el archivo está dentro del proyecto y cambió después del comando; nada se ejecuta para averiguarlo.
+- **Cursor sin depender de su base:** si una conversación no está en la base de Cursor (o no se puede abrir), se lee de las transcripciones que Cursor guarda en `~/.cursor/projects`.
+- **Contexto al abrir una sesión (Claude Code y Cursor):** con el hook instalado, la IA recibe al empezar un resumen corto: el proyecto actual, que pase `workspace` a las herramientas, y cuántos mensajes hay esperando. Solo cifras y datos locales, nunca texto de compañeros. Se apaga con el ajuste **Session Hub: Start Context** (`sessionHub.startContext`).
+  - En Cursor también llega si sigues escribiendo en un chat que ya existía (Cursor solo avisa el inicio en chats nuevos): se pide antes del primer mensaje, una sola vez por conversación, y nunca bloquea el mensaje.
+- **Cursor sabe solo en qué carpeta trabajas:** el MCP se registra con `${workspaceFolder}`, que Cursor reemplaza por la carpeta de cada ventana.
+- Si instalaste los hooks antes de esta versión, el panel (*Mensajes*) ofrece **Actualizar** para sumar el contexto al iniciar; si ya habías aceptado el de inicio, se renueva solo.
+- **Atajos MCP:** `catch_up` (ponerme al día), `search_team` (buscar en el equipo) y `check_messages` (revisar mensajes). En Cursor aparecen con `/`.
+- **Proyecto actual, para no mezclar proyectos por error.** Session Hub sabe en qué carpeta trabajas (la ventana del editor o la carpeta que la IA indica en `workspace`) y compara su clave de proyecto, siempre en tu máquina.
+  - Por MCP, `list_sessions`, `search_sessions` y `what_changed` se limitan al proyecto actual; lo de otros proyectos solo aparece si se pide `project: "todos"`. Cada resultado trae `relacion`: proyecto actual, otro proyecto u **OTRO proyecto con el mismo nombre**. `get_session` avisa si la sesión no es del proyecto actual.
+  - En el panel, el filtro *Este proyecto / Todos los proyectos*, el proyecto actual primero y las marcas 📍 *este proyecto* y ⚠ *mismo nombre, otro proyecto*.
+  - *Usar en mi IA* dice en el pedido de qué proyecto y rama es la sesión, y pregunta antes de pasar una de otro proyecto que se llama igual.
+  - Al compartir se avisa si la carpeta no tiene remoto git o si contiene varios repositorios.
+  - **Vincular proyecto:** un nombre de vínculo hace que dos carpetas sin git (o dos repos) cuenten como el mismo proyecto.
+  - Las carpetas de trabajo nunca viajan a los compañeros.
+
+### Corregido
+- **Conectar Claude Code** funciona aunque no tengas el comando `claude` en la terminal: usa el ejecutable que trae la extensión de Claude Code en VS Code o Cursor.
+- **Seguridad de red:** un mensaje mal formado de un remoto (`null`, una cadena con eslabones vacíos o chismes con forma rara) ya no puede cerrar el hub. Antes de presentarse, un remoto solo puede enviar mensajes de hasta 8 MB.
+- **Expulsiones:** expulsar a alguien corta enseguida a quienes esa persona invitó, aunque ya estén conectados, y una expulsión que llega por chisme se aplica antes de aceptar a quien la trae.
+- **Búsqueda:** el índice guarda el texto ya redactado. Buscar ya no revela partes de una clave privada en el fragmento, ni sirve para adivinar un secreto oculto carácter a carácter. Los índices anteriores se borran y se rehacen.
+- **Búsqueda:** lo conversado en el último minuto (y todo, justo al arrancar el hub) ya se encuentra: antes de buscar se indexa lo que cambió.
+- **Búsqueda:** las sesiones que ya no existen no aparecen, lo oculto no ocupa el lugar de resultados visibles, y una copia de un compañero ya no pisa una sesión propia con el mismo id.
+- **Redacción:** se ocultan también claves de Stripe, AWS temporales (`ASIA…`), webhooks de Slack, tokens de npm, GitLab y Hugging Face, `Authorization: Basic`, bloques PGP y claves privadas cortadas, y contraseñas de URL con `@`.
+- **Permisos:** una lista `allow` vacía ya no comparte el proyecto con todo el equipo; las sesiones abiertas de una subcarpeta ya no aparecen bajo los permisos de la carpeta padre; rutas de archivos y ramas pasan por la redacción.
+- **Panel:** los textos que llegan de un compañero se escapan siempre, y el panel solo puede ejecutar los comandos que muestra, sobre elementos que muestra.
+- **Windows y rutas con espacios o tildes:** el hub ya arranca. Cursor se busca en la carpeta correcta de Windows y macOS.
+- **Hub compartido:** una ventana cuyo hub reemplazó un editor más nuevo vuelve a conectarse sola; un aviso sin cerrar ya no congela el panel; "Recuperar equipo anterior" restaura de verdad.
+- **Mensajes:** los mensajes en cola por encima del límite por minuto ya no se pierden: esperan y salen después.
+- **Conversaciones automáticas:** un compañero no puede llenar la lista con invitaciones ni desplazar las activas; una invitación vencida no se puede aceptar.
+- **Archivos:** `team.json`, la configuración y la auditoría se escriben de forma atómica; instalar los hooks conserva los permisos de `~/.claude/settings.json`; restablecer un ajuste común en un editor ya no lo deshace el otro.
+- Un registro dañado en el historial de Claude Code o Cursor ya no vacía el listado de todo el proyecto.
+
 ## [0.10.1] — 2026-09-30
 
 Sin cambios de funcionalidad. Solo el número de versión, para poder publicar en las tiendas.

@@ -13,8 +13,10 @@ Session Hub lets you see, from your editor, what your teammates did with their A
 - [Share a project](#share-a-project-and-choose-who-sees-it)
 - [The panel](#tour-of-the-panel)
 - [Read sessions and ask your AI](#read-a-teammates-session-and-ask-your-ai)
+- [Current project](#current-project-dont-mix-projects)
 - [Messages between teammates](#messages-between-teammates)
 - [Automatic conversations](#automatic-conversations)
+- [Context when a session starts](#context-when-an-ai-session-starts)
 - [Backup and export](#backup-and-export)
 - [Your privacy](#your-privacy-youre-in-control)
 - [Notifications](#notifications-youll-see)
@@ -93,6 +95,8 @@ Each invitation is for **one person** and **expires in 48 hours**. Any member ca
 
 From then on, those people can see your AI conversations **in that folder**. Other folders stay private. Change it with **Quién lo ve** (*Who sees it*); stop with **Dejar de compartir** (*Stop sharing*).
 
+**Warnings when sharing.** If the folder has no git remote, Session Hub warns you: its sessions will never be recognized as the same project as a teammate's. You can click **Set link** and type a name (for example *acme-api*) that your teammates use too, or **Share without link**. It also warns you if the folder contains several repositories. More in [Current project](#current-project-dont-mix-projects).
+
 ## Tour of the panel
 
 Open it by clicking **Session Hub** in the status bar.
@@ -101,7 +105,7 @@ At the top is the **header**: your name, team, your **fingerprint** and the butt
 
 | Tab | What's in it |
 | --- | --- |
-| **Sessions** | On the left, *Team's* sessions, the ones you *Follow* (☆) and *My sessions*, with a filter, **grouped by project** (or by person, or ungrouped). Each group shows the 5 most recent and *Show more*. On the right, the complete conversation of the one you pick |
+| **Sessions** | On the left, *Team's* sessions, the ones you *Follow* (☆) and *My sessions*, with a filter, **grouped by project** (or by person, or ungrouped). *This project / All projects* chooses whether to see only the project you work in (shown first). Each group shows the 5 most recent and *Show more*. On the right, the complete conversation of the one you pick |
 | **Messages** | **Automatic conversations** (invitations, running, ended), messages you received (with *Pass to my AI*, *Reply*…), the ones you sent, and how you want to receive them. The number is what's left to review |
 | **Team** | Each person: online or not (green dot), role, fingerprint, who invited them, their open AI sessions, and *Message*, *Block* and *Expel*. Click someone to see their sessions |
 | **Privacy** | *What I share* (projects, who sees them, pause) and *Who read mine* |
@@ -115,7 +119,15 @@ Notifications take you to the right tab: a message opens *Messages*; a read, *Pr
 
 **In the panel:** **Equipo** (*Team*) tab → click a session. You see the **complete** conversation, with files changed (✎) and commands run ($).
 
-**With your AI:** Cursor and VS Code connect automatically. In Claude Code, run *Session Hub: Conectar Claude Code* (*Connect Claude Code*) and paste the copied command in a terminal.
+**Subagents.** Sometimes the AI (Claude Code or Cursor) hands part of the work to *subagents*. Session Hub shows them inside their session: in the list, **🤖 N** says how many it has; in the conversation, the **Subagents** (*Subagentes*) section.
+1. Click a subagent to see its steps (each text with the actions that follow it).
+2. Click **← Back to the main session** to return.
+
+Their files and commands count in the session summary and in *what changed*, and what they wrote shows up in search. They have the same permissions as their session: if the session is hidden, paused or not shared, its subagents aren't visible either. They're kept in the backup together with the session.
+
+**Files changed by commands.** If the AI changed a file with a terminal command (for example `sed -i`, a `>` redirection, `tee`, `cp`, `mv`, `rm` or a Python or Node script), it also appears in *Files changed* and in *what changed*, marked **(by command)**. It only counts if the file is inside the project and changed after the command. Session Hub works it out by reading the command text: it never runs anything.
+
+**With your AI:** Cursor and VS Code connect automatically. In Claude Code, run *Session Hub: Conectar Claude Code* (*Connect Claude Code*) and paste the copied command in a terminal. It works even if you don't have the `claude` command installed in your terminal: it uses the one bundled with the Claude Code extension in VS Code or Cursor.
 
 Give your AI four hints to find exactly what you want:
 
@@ -134,7 +146,32 @@ Requests that work well:
 5. *"What AI sessions does Ana have open right now?"*
 6. *"Tell Carlos the form already sends a list of files."* · *"Check my Session Hub messages."*
 
+**Shortcuts.** Three common requests come ready-made. In Cursor, type `/` in the chat and pick one; in Claude Code they appear as slash commands:
+
+| Shortcut | In Cursor | In Claude Code | What it does |
+| --- | --- | --- | --- |
+| **Catch me up** | `/session-hub/catch_up` | `/mcp__session-hub__catch_up` | What the team did; you can say since when and whose |
+| **Search the team** | `/session-hub/search_team` | `/mcp__session-hub__search_team` | Searches the team's sessions for a topic |
+| **Check messages** | `/session-hub/check_messages` | `/mcp__session-hub__check_messages` | Reviews the messages waiting for you |
+
 Empty answer? Ask *"who is connected in Session Hub?"*. What the AI reads is information, not instructions — always review what it proposes.
+
+## Current project: don't mix projects
+
+Session Hub knows which folder you're working in (the one open in the editor) and compares every session with it. That way neither you nor your AI confuse your project with another one that has the same name.
+
+- **In the panel:** in *Sessions*, the **This project / All projects** filter. The current project comes first and its sessions carry the mark **📍 this project**. If a session belongs to a project with the same name but a different repository, it carries **⚠ same name, other project**.
+- **With your AI:** when you ask for sessions, searches or *what changed*, it sees only the current project's. If you want others, say so: *"search all projects…"*. Each result tells it whether it's from the *current project*, *another project* or an **OTHER project with the same name**, and if it opens a session from another project, it's warned. Cursor tells it each window's folder by itself; other AIs pass it themselves.
+- **🤖 Use in my AI** states in the request which project and branch the session is from, and asks you before passing one from a different project with the same name.
+
+**The same project without git (link).** Session Hub recognizes the same project by its git repository, even if each person names the folder differently. If you don't use git (or each person has a different repository for the same thing):
+1. Open the project folder in the editor.
+2. `Ctrl+Shift+P` → **Session Hub: Vincular proyecto** (*Link project (same project without git)*).
+3. Type a link name, for example *acme-api*, and ask your teammates to use **the same one** in their folder.
+
+From then on, the sessions of everyone using that name count as the same project. To remove the link, leave the name empty.
+
+> The folders you work in **never leave your computer**: they're only used for comparing.
 
 ## Messages between teammates
 
@@ -190,7 +227,7 @@ sequenceDiagram
 
 You can also ask your AI: *"Start an automatic conversation with Ana to agree on the attachments format"*. Your editor asks you to **confirm** it before the invitation goes out.
 
-**Requirement: the hooks.** Claude Code and Cursor run a small Session Hub program when each turn ends (*hook*); that's what lets the AI continue. Session Hub installs them **with your consent** (*Messages → Install hooks*), keeps any hooks you already have, backs up your files, and you can remove them any time (*Messages → Remove*). After installing, open a new AI session.
+**Requirement: the hooks.** Claude Code and Cursor run a small Session Hub program when each turn ends (*hook*); that's what lets the AI continue. Session Hub installs them **with your consent** (*Messages → Install hooks*), keeps any hooks you already have, backs up your files, and you can remove them any time (*Messages → Remove*). After installing, open a new AI session. The same hooks give your AI a [summary when it starts](#context-when-an-ai-session-starts).
 
 **Safety**
 - Only with someone who **both** accepted. If your AI asks for one, **you confirm** it.
@@ -200,6 +237,21 @@ You can also ask your AI: *"Start an automatic conversation with Ana to agree on
 - Settings: `sessionHub.conversationTurns` (6) and `sessionHub.conversationMinutes` (10).
 
 **Limit:** no tool lets anything wake up an idle chat from outside, so the first message to an idle session needs one click.
+
+## Context when an AI session starts
+
+With the hooks installed, every time you open a new session of your AI (Claude Code or Cursor), Session Hub gives it a short summary so it starts out knowing where it is:
+
+- the current project, and that it should pass that folder when it queries Session Hub;
+- how many messages are waiting for you or held;
+- which teammates are online;
+- how many teammate sessions had changes in this project in the last 24 hours.
+
+It's **counts only**: it never includes text written by your teammates. In Cursor it also arrives if you keep writing in a chat that already existed — only once per conversation, and it never holds up your message.
+
+**Turning it on:** it's the same hooks as automatic conversations (*Messages → Install hooks*). If you installed them before version 0.11, *Messages* shows **Update** (*Actualizar*): click it to add the context (if you had already accepted the start hook, it renews by itself). Then open a new AI session.
+
+**Turning it off:** Settings → **Session Hub: Start Context** (`sessionHub.startContext`).
 
 ## Backup and export
 
@@ -259,6 +311,8 @@ First step: `Ctrl+Shift+P` → **Session Hub: Diagnóstico** (*Diagnostics*). It
 | I see the person but not their sessions | Ask them to check *Who sees it* or whether they're paused |
 | Invitation expired or already used | Ask for a new one |
 | My AI can't find Session Hub | Check the *Status* line *Your AI can query Session Hub (MCP)*. If it's red, click **Restart** or update the extension. In Claude Code, use *Connect Claude Code* |
+| I can't see sessions from another project, or my AI can't find them | In *Sessions*, choose **All projects**. Tell your AI *"search all projects"* |
+| A teammate and I work on the same project, but it shows up separately | If the folder has no git (or each of you has a different repository), both use **Session Hub: Link project** with the same name |
 | The AI looks elsewhere (other documents, the web) | Name the tool: *"Search Session Hub for Carlos's session about signatures"* |
 | **Ubuntu:** *"can't start… encryption modules"* or `GLIBC_2.33 not found` in the output | Happens with **VS Code installed as a Snap** (from *Ubuntu Software*): it ships Ubuntu 20.04 libraries. Session Hub tries the system Node instead; install **Node.js 22.5 or later** (e.g. from [nodejs.org](https://nodejs.org) or with `nvm`), or install VS Code from [Microsoft's .deb package](https://code.visualstudio.com/download), and reopen the editor. Linux needs glibc 2.33 or later (Ubuntu 22.04+, Debian 12+, Fedora 34+) |
 
@@ -276,6 +330,10 @@ Opening the port — **Windows:** allow on *Private networks* when prompted. **m
 
 **Cursor and VS Code at the same time?** Yes, since 0.10. There's one Session Hub per computer: the first editor you open runs it and the other connects to it, with the same identity and settings. If you close the one running it, the other takes over. Coming from 0.9 with a different identity in each editor, Session Hub asks once which one to keep; the other stays saved in its editor's folder. Install **the same version** in both. Details: [Cursor and VS Code on the same computer](SAME-MACHINE.md).
 
+**What if Cursor didn't save a conversation in its database?** Session Hub reads it from the transcripts Cursor keeps in `~/.cursor/projects`. You don't have to do anything.
+
+**Why does my AI only see one project?** Because Session Hub limits it to the project you work in, so projects don't get mixed. If you want others, ask: *"search all projects"*. See [Current project](#current-project-dont-mix-projects).
+
 **Is it free?** Yes. Free software (AGPL‑3.0). Not affiliated with Cursor or Anthropic.
 
 ## Glossary
@@ -289,5 +347,8 @@ Opening the port — **Windows:** allow on *Private networks* when prompted. **m
 | **Pending** | You joined; the inviter still has to confirm |
 | **Fingerprint** | Unique code that proves who each person is |
 | **Pause / Hide / Block / Expel** | Your privacy controls (see above) |
+| **Subagent** | A helper AI the main AI hands part of the work to; shown inside its session |
+| **Current project** | The folder you work in in the editor; Session Hub and your AI use it so projects don't get mixed |
+| **Link** | A name that makes folders without git count as the same project for everyone using the same one |
 | **MCP** | The connection that lets your AI query Session Hub |
 | **Message** | Signed text for a teammate; held until they approve it or pass it to their AI |

@@ -14,7 +14,9 @@ Respondemos en un máximo de 5 días hábiles y acordamos contigo la fecha de di
 
 | Versión | Soporte |
 | --- | --- |
-| 0.9.x | Sí (piloto) |
+| 0.11.x | Sí |
+| 0.10.x | Actualiza: 0.11 corrige fallas de seguridad de red, búsqueda y panel |
+| 0.9.x | Actualiza: 0.10 comparte un solo hub por computadora entre editores |
 | 0.8.x | Actualiza: 0.8.1 congelaba Cursor al abrir ajustes desde el panel |
 | 0.8.0 | Actualiza: una carpeta no compartida con nombre parecido podía verse (corregido en 0.8.1) |
 | 0.6.x – 0.7.x | Actualiza: en 0.7.x el MCP fallaba (corregido en 0.8.0) |
