@@ -20,6 +20,10 @@ const INVITE_MINUTES = 30; // una invitación sin respuesta vence
 const CLOCK_SKEW_MS = 5 * 60_000;
 const KEEP_DAYS = 30;
 const ACTIONS = new Set(['invite', 'accept', 'decline', 'end']);
+// Razones de fin que se aceptan de un compañero; cualquier otra cosa se muestra como "la terminó él".
+const PEER_END_REASONS = new Set(['limit', 'time', 'loop', 'empty']);
+const MAX_PENDING_PER_PEER = 3; // invitaciones sin responder de una misma persona
+const MAX_INVITES_PER_HOUR = 20; // invitaciones de una misma persona por hora
 
 const err = (message, code = 'invalid') => Object.assign(new Error(message), { code });
 const clampInt = (v, lo, hi, d) => Math.min(hi, Math.max(lo, Number.parseInt(v, 10) || d));
@@ -36,7 +40,14 @@ export function createConversations({ file, teamState, now = Date.now }) {
   }
   const save = () => {
     const cutoff = now() - KEEP_DAYS * 86400e3;
-    list = list.filter((c) => c.status !== 'ended' || Date.parse(c.endedAt || c.createdAt) > cutoff).slice(-200);
+    list = list.filter((c) => c.status !== 'ended' || Date.parse(c.endedAt || c.createdAt) > cutoff);
+    // Tope de 200: se descartan primero las terminadas; nunca una activa por exceso de invitaciones.
+    while (list.length > 200) {
+      let i = list.findIndex((c) => c.status === 'ended');
+      if (i < 0) i = list.findIndex((c) => c.status !== 'active');
+      if (i < 0) break;
+      list.splice(i, 1);
+    }
     if (!file) return;
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify({ list }, null, 1), { mode: 0o600 });
@@ -127,9 +138,14 @@ export function createConversations({ file, teamState, now = Date.now }) {
       if (b.to !== teamState.me() || !team || b.team !== team.id) throw err('Esta orden no es para mí.');
       const at = Date.parse(b.at);
       if (!at || at > now() + CLOCK_SKEW_MS || at < now() - INVITE_MINUTES * 60_000) throw err('Orden fuera de plazo.');
+      expire(); // una invitación vencida no se puede aceptar
       let c = find(b.id);
       if (b.action === 'invite') {
+        if (c && c.peer !== peer.id) throw err('Orden de conversación con formato desconocido.');
         if (c) return { status: c.status };
+        const fromPeer = list.filter((x) => x.peer === peer.id && x.role === 'invitee');
+        if (fromPeer.filter((x) => x.status === 'invited').length >= MAX_PENDING_PER_PEER) throw err('Ya tienes invitaciones sin responder de esta persona.');
+        if (fromPeer.filter((x) => Date.parse(x.createdAt) > now() - 3600e3).length >= MAX_INVITES_PER_HOUR) throw err('Demasiadas invitaciones seguidas; espera un rato.');
         c = {
           id: String(b.id),
           role: 'invitee',
@@ -153,7 +169,7 @@ export function createConversations({ file, teamState, now = Date.now }) {
       if (!c || c.peer !== peer.id) throw err('No conozco esa conversación.');
       if (b.action === 'accept' && c.status === 'inviting') Object.assign(c, { status: 'active', theirs: b.mine || c.theirs, startedAt: iso(), expiresAt: new Date(now() + c.minutes * 60_000).toISOString() });
       if (b.action === 'decline' && c.status !== 'ended') Object.assign(c, { status: 'ended', endedAt: iso(), endReason: 'declined' });
-      if (b.action === 'end' && c.status !== 'ended') Object.assign(c, { status: 'ended', endedAt: iso(), endReason: b.reason || 'peer' });
+      if (b.action === 'end' && c.status !== 'ended') Object.assign(c, { status: 'ended', endedAt: iso(), endReason: PEER_END_REASONS.has(b.reason) ? b.reason : 'peer' });
       save();
       return { status: c.status };
     },

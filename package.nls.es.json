@@ -95,5 +95,8 @@
   "cmd.installHooks": "Instalar hooks para conversaciones automáticas",
   "cmd.removeHooks": "Quitar los hooks de conversaciones automáticas",
   "cfg.conversationTurns": "Conversaciones automáticas: mensajes máximos de cada lado.",
-  "cfg.conversationMinutes": "Conversaciones automáticas: minutos máximos."
+  "cfg.conversationMinutes": "Conversaciones automáticas: minutos máximos.",
+  "cmd.linkProject": "Vincular proyecto (mismo proyecto sin git)",
+  "cfg.sharedProjects.link": "Nombre de vínculo opcional: quienes usen el mismo verán estas sesiones como el mismo proyecto, aunque no haya remoto git.",
+  "cfg.startContext": "Al abrir una sesión nueva de la IA (Claude Code o Cursor, con los hooks instalados), darle un resumen corto de Session Hub: el proyecto actual y cuántos mensajes hay esperando. Solo cifras, nunca texto escrito por compañeros."
 }

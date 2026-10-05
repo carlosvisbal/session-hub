@@ -5,6 +5,7 @@
 // al arrancar se descartan las entradas más viejas que la retención configurada.
 import fs from 'node:fs';
 import path from 'node:path';
+import { writeAtomic } from './util.js';
 
 const MAX_IN_MEMORY = 500;
 
@@ -40,7 +41,7 @@ export function createAccessLog({ file, retentionDays = 90 } = {}) {
         // línea incompleta o corrupta: se descarta
       }
     }
-    fs.writeFileSync(file, kept.map((r) => JSON.stringify(r)).join('\n') + (kept.length ? '\n' : ''), { mode: 0o600 });
+    writeAtomic(file, kept.map((r) => JSON.stringify(r)).join('\n') + (kept.length ? '\n' : ''));
     for (const r of kept) {
       touchViewer({ id: r.whoId, name: r.who, role: r.role, via: r.via, client: r.client }, r.at).reads++;
       reads.unshift(r);

@@ -95,5 +95,8 @@
   "cmd.installHooks": "Install hooks for automatic conversations",
   "cmd.removeHooks": "Remove automatic-conversation hooks",
   "cfg.conversationTurns": "Automatic conversations: maximum messages from each side.",
-  "cfg.conversationMinutes": "Automatic conversations: maximum minutes."
+  "cfg.conversationMinutes": "Automatic conversations: maximum minutes.",
+  "cmd.linkProject": "Link project (same project without git)",
+  "cfg.sharedProjects.link": "Optional link name: teammates who use the same link see these sessions as the same project, even without a git remote.",
+  "cfg.startContext": "When a new AI session opens (Claude Code or Cursor, with the hooks installed), give it a short summary from Session Hub: the current project and how many messages are waiting. Counts only, never text written by teammates."
 }

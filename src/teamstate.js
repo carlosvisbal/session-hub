@@ -23,10 +23,20 @@ const empty = () => ({ v: 2, keyPair: null, team: null, members: {}, profiles: {
 
 export function openTeamState(file) {
   let s = empty();
-  if (fs.existsSync(file)) s = { ...s, ...JSON.parse(fs.readFileSync(file, 'utf8')) };
+  // Si el archivo está dañado no se pisa: tiene la clave privada (la identidad). Se avisa y se para.
+  if (fs.existsSync(file)) {
+    try {
+      s = { ...s, ...JSON.parse(fs.readFileSync(file, 'utf8')) };
+    } catch {
+      throw new Error(`El archivo del equipo está dañado (${file}); no se modifica para no perder tu identidad.`); // se traduce por plantilla
+    }
+  }
+  // Escritura atómica (temporal + renombrar): un corte a mitad nunca deja el archivo a medias.
   const save = () => {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(s, null, 2), { mode: 0o600 });
+    const tmp = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(s, null, 2), { mode: 0o600 });
+    fs.renameSync(tmp, file);
   };
   if (!s.keyPair) {
     s.keyPair = generateKeyPair();

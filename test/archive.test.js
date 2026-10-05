@@ -159,3 +159,21 @@ test('copias con índice: mismo resultado que el barrido, sin mezclar compañero
   assert.deepEqual(c.search(LUIS, 'firma-de-contratos'), [], 'purgeOwner también limpia el índice');
   searchIndex.close();
 });
+
+test('respaldo dañado: también sale del índice de búsqueda (solo mi fila, no la copia de otro)', () => {
+  const dir = tmp();
+  const searchIndex = createSearchIndex({ file: path.join(tmp(), 'search.sqlite') });
+  const ME = 'c'.repeat(64);
+  const a = createOwnArchive({ dir, searchIndex, ownerId: () => ME });
+  const P = { path: '/p' };
+  const msgs = [{ role: 'user', at: 1, text: 'firma digital', actions: [] }];
+  a.sync([P], () => ({ ok: true, sessions: [{ id: 'claude:a', source: 'claude-code', project: '/p', title: 't', updatedAt: 1, messages: msgs }] }));
+  searchIndex.indexSession({ id: 'claude:a', scope: 'own', ownerId: ME, source: 'claude-code', project: '/p', title: 't', updatedAt: 1, messages: msgs });
+  searchIndex.indexSession({ id: 'claude:a', scope: 'copy', ownerId: 'ana', source: 'claude-code', project: '/p', title: 't', updatedAt: 1, messages: msgs });
+  fs.writeFileSync(path.join(dir, 'own', a.meta('claude:a').file), 'dañado');
+  const b = createOwnArchive({ dir, searchIndex, ownerId: () => ME });
+  assert.deepEqual(b.goneFor('/p', null, new Set())[0].messages, []);
+  assert.deepEqual(searchIndex.ids('own', ME), [], 'mi fila salió del índice');
+  assert.deepEqual(searchIndex.ids('copy', 'ana'), ['claude:a'], 'la copia de Ana sigue');
+  searchIndex.close();
+});

@@ -14,12 +14,13 @@ import Hyperswarm from 'hyperswarm';
 import DHT from 'hyperdht';
 import { fingerprint, keyPairBuffers, signProfile, toHex, verifyProfile } from '../identity.js';
 import { lanAddresses, parseAddr, reachableAddresses, vpnAddresses, withTimeout } from '../net.js';
-import { createRpc } from './rpc.js';
+import { createRpc, MAX_FRAME } from './rpc.js';
 
 const HELLO_TIMEOUT_MS = 10_000;
 const REFRESH_MS = 30_000; // en redes chicas, entrar a la vez no basta: se vuelve a buscar
 const WHOAMI_MS = 15_000;
 const BAN_MS = 10 * 60_000;
+const HELLO_MAX_FRAME = 8 * 1024 * 1024; // el saludo lleva cadena y chismes, nunca más que esto
 const PENDING_RETRY_MS = 15_000; // quien espera su admisión reintenta pronto
 const START_TIMEOUT_MS = 15_000;
 const DIAL_MS = 15_000; // con pocos miembros la DHT no alcanza: se marca directo a los conocidos
@@ -133,6 +134,12 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
     onEvent('rejected', r);
   }
 
+  // Corta a quien ya está conectado si lo expulsaron a él o a alguien de su cadena
+  // (expulsar a alguien excluye también a quienes invitó).
+  function cutRevoked() {
+    for (const p of peers.values()) if (teamState.isRevoked(p.id) || (p.ancestors || []).some(teamState.isRevoked)) p.conn.destroy();
+  }
+
   function info(p) {
     return { id: p.id, fingerprint: p.fingerprint, name: p.name, role: p.role, invitedBy: p.invitedBy, paused: !!p.paused, allowCopies: p.allowCopies !== false, projects: p.projects || [], projectKeys: p.projectKeys || {}, online: true, since: p.since };
   }
@@ -140,12 +147,14 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
   function handleMessage(peer, msg) {
     if (msg.t === 'revoke' && teamState.applyRevocation(msg.doc)) {
       onEvent('revoked', msg.doc.body);
-      peers.get(msg.doc.body.member)?.conn.destroy();
+      cutRevoked();
     }
     if (msg.t === 'admitted' && teamState.receiveAdmission(msg.doc, peer.id)) {
       log(`[equipo] ${peer.name} confirmó tu admisión: ya eres miembro de ${teamState.team().name}`);
       onEvent('admitted', { by: peer.id });
-      bannedUntil.clear(); // que los demás vuelvan a intentarlo conmigo ya admitido
+      // Que los demás vuelvan a intentarlo conmigo ya admitido: solo se levantan las esperas cortas
+      // de "pendiente de admisión", no los bloqueos por suplantación.
+      for (const [k, until] of bannedUntil) if (until <= Date.now() + PENDING_RETRY_MS) bannedUntil.delete(k);
       discovery?.refresh().catch(() => {});
       setTimeout(dialKnown, 1000);
     }
@@ -164,6 +173,7 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
 
     const rpc = createRpc(conn, {
       label: fingerprint(pub),
+      maxFrame: () => (peer ? MAX_FRAME : HELLO_MAX_FRAME), // nadie sin presentarse manda 64 MB
       onRequest: (op, args) => {
         if (!peer) throw new Error('Primero preséntate');
         peer.lastSeen = Date.now();
@@ -188,13 +198,17 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
         log(`[equipo] admitiste a ${fingerprint(pub)} con tu invitación`);
       }
       // Chismes: miembros y expulsiones que el otro conoce (cada uno se verifica por separado).
-      for (const chain of (msg.gossip?.members || []).slice(0, 300)) teamState.admit(chain, null);
-      for (const doc of (msg.gossip?.revocations || []).slice(0, 300)) if (teamState.applyRevocation(doc)) onEvent('revoked', doc.body);
+      const list = (x) => (Array.isArray(x) ? x.slice(0, 300) : []);
+      for (const chain of list(msg.gossip?.members)) teamState.admit(chain, null);
+      let revoked = false;
+      for (const doc of list(msg.gossip?.revocations)) if (teamState.applyRevocation(doc)) (revoked = true), onEvent('revoked', doc.body);
+      if (revoked) cutRevoked();
       if (teamState.isRevoked(pub)) return reject(pub, 'expulsado del equipo', conn);
-      teamState.learnAddrs(msg.addrs || [], pub);
+      if ((r.ancestors || []).some(teamState.isRevoked)) return reject(pub, 'lo invitó alguien que fue expulsado', conn);
+      teamState.learnAddrs(Array.isArray(msg.addrs) ? msg.addrs.filter((a) => typeof a === 'string') : [], pub);
       const p = verifyProfile(pub, msg.profile) || { name: fingerprint(pub), role: '' };
       teamState.rememberProfile(pub, p);
-      peer = { id: pub, fingerprint: fingerprint(pub), name: p.name, role: p.role, invitedBy: r.invitedBy, conn, rpc, since: new Date().toISOString(), lastSeen: Date.now() };
+      peer = { id: pub, fingerprint: fingerprint(pub), name: p.name, role: p.role, invitedBy: r.invitedBy, ancestors: r.ancestors || [], conn, rpc, since: new Date().toISOString(), lastSeen: Date.now() };
       const prev = peers.get(pub);
       if (prev && prev.conn !== conn && !preferred(conn, pub)) return conn.destroy(); // me quedo con la otra
       peers.set(pub, peer);
@@ -229,10 +243,11 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
     async start() {
       if (swarm || !teamState.hasTeam()) return;
       lastError = null;
+      let mine;
       try {
         const keyPair = keyPairBuffers(teamState.keyPair());
         dht = makeDht(keyPair);
-        swarm = new Hyperswarm({ keyPair, dht, relayThrough: relayThrough(), firewall: (remote) => isBanned(toHex(remote)) });
+        swarm = mine = new Hyperswarm({ keyPair, dht, relayThrough: relayThrough(), firewall: (remote) => isBanned(toHex(remote)) });
         swarm.on('connection', onConnection);
         discovery = swarm.join(topic(), { server: true, client: true });
         startedAt = new Date().toISOString();
@@ -242,6 +257,7 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
         lastError = err.message;
         log(`[red] ${t(err.message)}`);
       }
+      if (!mine || swarm !== mine) return; // se detuvo (o reinició) mientras esperaba a la red
       dialKnown();
       timers.push(
         setInterval(dialKnown, DIAL_MS),
@@ -279,6 +295,7 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
 
     broadcast(msg) {
       for (const p of peers.values()) p.rpc.send(msg);
+      if (msg.t === 'revoke') cutRevoked(); // mi propia expulsión también corta a quienes esa persona invitó
     },
 
     disconnect(pub) {

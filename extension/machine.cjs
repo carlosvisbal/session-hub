@@ -38,6 +38,7 @@ const SHARED_SETTINGS = [
   'backupMaxMB',
   'conversationTurns',
   'conversationMinutes',
+  'startContext',
 ];
 
 // SESSION_HUB_DATA_DIR permite otra carpeta (pruebas, o varias personas en una misma cuenta).
@@ -170,7 +171,8 @@ const alive = (pid) => {
 // Crea la carpeta común una sola vez, aunque dos editores abran a la vez, y nunca a medias:
 // `fill(stage)` llena una carpeta temporal que al final se renombra a `dir` (todo o nada).
 // El candado es un archivo junto a `dir` con el pid de quien migra; si ese proceso ya no existe
-// (el editor se cerró a mitad de la copia) o lleva demasiado, se libera. Quien espera nunca sigue
+// (el editor se cerró a mitad de la copia) o lleva demasiado sin renovarse, se libera. Quien migra
+// lo renueva mientras copia, así una copia larga (un respaldo grande) no se toma por abandonada. Quien espera nunca sigue
 // con la carpeta vacía mientras otro migra: espera a que esté lista.
 // Devuelve 'done' (la creó este proceso), 'ready' (ya estaba o la creó otro) o 'timeout'.
 async function createOnce(dir, fill, { waitMs = 10 * 60000, staleMs = 10 * 60000 } = {}) {
@@ -195,6 +197,13 @@ async function createOnce(dir, fill, { waitMs = 10 * 60000, staleMs = 10 * 60000
     }
   }
   const stage = `${dir}.nuevo-${process.pid}`;
+  const heartbeat = setInterval(() => {
+    try {
+      const now = new Date();
+      fs.utimesSync(lock, now, now);
+    } catch {}
+  }, Math.max(50, Math.min(30000, Math.floor(staleMs / 4))));
+  heartbeat.unref?.();
   try {
     if (ready()) return 'ready'; // otro editor terminó mientras esperaba
     fs.rmSync(stage, { recursive: true, force: true });
@@ -205,15 +214,18 @@ async function createOnce(dir, fill, { waitMs = 10 * 60000, staleMs = 10 * 60000
     fs.renameSync(stage, dir);
     return 'done';
   } finally {
+    clearInterval(heartbeat);
     fs.rmSync(stage, { recursive: true, force: true });
     fs.rmSync(lock, { force: true });
   }
 }
 
-// Ajustes comunes: { values: { clave: valor }, updatedAt, by }.
+// Ajustes comunes: { values: { clave: valor }, removed: { clave: fecha }, updatedAt, by }.
+// `removed` son las claves que algún editor restableció: los demás también las restablecen en vez
+// de volver a agregar su valor viejo.
 const settingsFile = (dir) => path.join(dir, 'settings.json');
 const readSettings = (dir) => readJson(settingsFile(dir));
-const writeSettings = (dir, values, by) => writeJsonAtomic(settingsFile(dir), { values, updatedAt: new Date().toISOString(), by });
+const writeSettings = (dir, values, by, removed = {}) => writeJsonAtomic(settingsFile(dir), { values, removed, updatedAt: new Date().toISOString(), by });
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 // Compara versiones "x.y.z": <0 si a es anterior a b.

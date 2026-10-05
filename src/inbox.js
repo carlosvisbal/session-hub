@@ -113,6 +113,7 @@ export function createInbox({ file, teamState, policy = () => 'hold', now = Date
       if (!at || at > now() + CLOCK_SKEW_MS || at < now() - QUEUE_HOURS * 3600e3 - CLOCK_SKEW_MS) throw err('Mensaje fuera de plazo.', 'invalid');
       const text = cleanText(b.text);
       const dup = find(b.id);
+      if (dup && dup.from !== peer.id) throw err('Mensaje con formato desconocido.', 'invalid'); // id ajeno: no se mezcla con el de otra persona
       if (dup) return { status: dup.status }; // reintento del mismo mensaje
       const auto = !!b.conv && autoDeliver(b);
       const p = auto ? 'accept' : policy();

@@ -6,6 +6,8 @@
 // (sin credenciales, protocolo ni ".git"): dos personas con el mismo repo tienen la misma clave
 // aunque cada una lo llame distinto. Solo viaja un hash, nunca la URL.
 // Si no hay remoto, la clave es propia de esa persona y esa carpeta: nunca coincide con la de otro.
+// Vínculo manual: si el dueño le pone a la carpeta un nombre de vínculo ("link"), la clave sale de ese
+// nombre; quienes usen el mismo vínculo comparten clave aunque no haya git (p.ej. "acme-api").
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -54,7 +56,11 @@ export function originOf(dir) {
   }
 }
 
-export function projectKey(dir, ownerId) {
+export const normalizeLink = (link) => String(link || '').trim().toLowerCase().replace(/\s+/g, '-');
+
+export function projectKey(dir, ownerId, link = '') {
+  const l = normalizeLink(link);
+  if (l) return `link:${hash(`link\n${l}`)}`;
   const file = gitConfigFile(dir);
   const mtime = file && fs.existsSync(file) ? fs.statSync(file).mtimeMs : 0;
   const hit = cache.get(dir);

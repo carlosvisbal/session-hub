@@ -7,7 +7,8 @@ import { StringDecoder } from 'node:string_decoder';
 export const MAX_FRAME = 64 * 1024 * 1024;
 export const REQUEST_TIMEOUT_MS = 10_000;
 
-export function createRpc(stream, { onRequest, onMessage, label = 'compañero' }) {
+// maxFrame(): tope del mensaje en curso; permite uno más chico antes de que el otro se presente.
+export function createRpc(stream, { onRequest, onMessage, label = 'compañero', maxFrame = () => MAX_FRAME }) {
   const decoder = new StringDecoder('utf8'); // no parte caracteres multibyte entre trozos
   const pending = new Map();
   let buf = '';
@@ -21,6 +22,8 @@ export function createRpc(stream, { onRequest, onMessage, label = 'compañero' }
   };
 
   function dispatch(msg) {
+    // Solo objetos: `null`, números o listas de un remoto no deben tumbar el hub.
+    if (!msg || typeof msg !== 'object' || Array.isArray(msg)) return stream.destroy(new Error('mensaje mal formado'));
     if (msg.t === 'res') {
       const p = pending.get(msg.id);
       if (!p) return;
@@ -40,10 +43,11 @@ export function createRpc(stream, { onRequest, onMessage, label = 'compañero' }
   }
 
   stream.on('data', (chunk) => {
+    const from = buf.length; // solo se busca el salto de línea en lo nuevo (sin recorrer todo cada vez)
     buf += decoder.write(chunk);
-    if (buf.length > MAX_FRAME) return stream.destroy(new Error('mensaje demasiado grande'));
-    let i;
-    while ((i = buf.indexOf('\n')) >= 0) {
+    if (buf.length > maxFrame()) return stream.destroy(new Error('mensaje demasiado grande'));
+    let i = buf.indexOf('\n', from);
+    for (; i >= 0; i = buf.indexOf('\n')) {
       const line = buf.slice(0, i);
       buf = buf.slice(i + 1);
       if (!line) continue;
@@ -53,7 +57,12 @@ export function createRpc(stream, { onRequest, onMessage, label = 'compañero' }
       } catch {
         return stream.destroy(new Error('mensaje mal formado'));
       }
-      dispatch(msg);
+      try {
+        dispatch(msg);
+      } catch (err) {
+        // Un error al atender un mensaje cierra esa conexión, nunca el proceso.
+        return stream.destroy(err);
+      }
     }
   });
 

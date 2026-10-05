@@ -1,7 +1,7 @@
 {
   "name": "session-hub",
   "displayName": "Session Hub",
-  "version": "0.10.1",
+  "version": "0.11.0",
   "description": "%ext.description%",
   "publisher": "carlosvisbal",
   "author": {
@@ -57,7 +57,7 @@
     "package": "vsce package",
     "licenses": "node scripts/third-party-notices.mjs",
     "test": "node --test test/*.test.js",
-    "test:e2e": "node test/e2e/two-hubs.mjs && node test/e2e/relay.mjs && node test/e2e/backup.mjs && node test/e2e/conversation.mjs",
+    "test:e2e": "node test/e2e/two-hubs.mjs && node test/e2e/relay.mjs && node test/e2e/backup.mjs && node test/e2e/conversation.mjs && node test/e2e/project-scope.mjs",
     "test:ext": "node test/panel.mjs && node test/extension/flows.mjs && node test/extension/cursor.mjs && node test/extension/upgrade.mjs && node test/extension/conversation.mjs && node test/extension/runtime.mjs && node test/extension/machine.mjs",
     "infra": "node --disable-warning=ExperimentalWarning src/infra.js"
   },
@@ -93,6 +93,11 @@
       {
         "command": "sessionHub.shareWorkspace",
         "title": "%cmd.shareWorkspace%",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.linkProject",
+        "title": "%cmd.linkProject%",
         "category": "Session Hub"
       },
       {
@@ -522,6 +527,10 @@
                   "*"
                 ],
                 "description": "%cfg.sharedProjects.allow%"
+              },
+              "link": {
+                "type": "string",
+                "description": "%cfg.sharedProjects.link%"
               }
             },
             "required": [
@@ -664,6 +673,11 @@
             "%cfg.inboundMessages.enum2%"
           ],
           "description": "%cfg.inboundMessages%"
+        },
+        "sessionHub.startContext": {
+          "type": "boolean",
+          "default": true,
+          "description": "%cfg.startContext%"
         },
         "sessionHub.notifyMessages": {
           "type": "boolean",

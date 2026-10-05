@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Los autores de Session Hub (ver AUTHORS)
+import fs from 'node:fs';
 import path from 'node:path';
 
 // Acepta ISO ("2026-09-23T10:00"), relativo ("30m", "2h", "3d") o vacío (por defecto).
@@ -35,3 +36,17 @@ export const samePath = (a, b) => !!a && !!b && norm(a) === norm(b);
 export const isInside = (child, parent) => !!child && !!parent && (samePath(child, parent) || norm(child).startsWith(norm(parent) + path.sep));
 
 export const iso = (ms) => (ms ? new Date(ms).toISOString() : null);
+
+// Escritura atómica con permisos 0600: archivo temporal + renombrar, para que una caída a mitad
+// nunca deje el archivo a medias.
+export function writeAtomic(file, data) {
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
+  try {
+    fs.writeFileSync(tmp, data, { mode: 0o600 });
+    fs.renameSync(tmp, file);
+  } catch (err) {
+    fs.rmSync(tmp, { force: true });
+    throw err;
+  }
+}

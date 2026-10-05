@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Los autores de Session Hub (ver AUTHORS)
 // Conversaciones automáticas desde la extensión real (vscode simulado) con dos hubs reales:
-// instalar/quitar hooks sin pisar lo que ya hay, invitar, aceptar, confirmar lo pedido por la IA y detener.
+// instalar/quitar hooks (fin de turno e inicio de sesión) sin pisar lo que ya hay, invitar, aceptar, confirmar lo pedido por la IA y detener.
 //   node test/extension/conversation.mjs
 import assert from 'node:assert/strict';
 import { execSync } from 'node:child_process';
@@ -47,8 +47,10 @@ try {
   assert.ok(S.notices.some((n) => n.kind === 'error' && /No modifiqué/.test(n.m)));
   S.notices.length = 0;
   fs.writeFileSync(claudeSettings, JSON.stringify(mineClaude, null, 2));
+  fs.chmodSync(claudeSettings, 0o600);
   S.answer = 'Instalar';
   await cmds['sessionHub.installHooks']();
+  if (process.platform !== 'win32') assert.equal(fs.statSync(claudeSettings).mode & 0o777, 0o600, 'se conservan los permisos 0600 del original');
   const c1 = JSON.parse(fs.readFileSync(claudeSettings, 'utf8'));
   assert.equal(c1.model, 'opus');
   assert.deepEqual(c1.permissions, mineClaude.permissions);
@@ -67,10 +69,41 @@ try {
   // el comando instalado se ejecuta de verdad y, sin conversación, no hace nada
   const out = execSync(ours.command, { input: JSON.stringify({ session_id: 'nada', hook_event_name: 'Stop' }), shell: true, encoding: 'utf8', env: { ...process.env, HOME: home } });
   assert.equal(out, '{}');
+  // inicio de sesión: un hook propio en cada herramienta, corto
+  assert.equal(c1.hooks.SessionStart.length, 1);
+  assert.equal(c1.hooks.SessionStart[0].hooks[0].command, ours.command);
+  assert.equal(c1.hooks.SessionStart[0].hooks[0].timeout, 10);
+  assert.equal(k1.hooks.sessionStart.length, 1);
+  assert.equal(k1.hooks.sessionStart[0].command, ours.command);
+  const run = (input) => JSON.parse(execSync(ours.command, { input: JSON.stringify(input), shell: true, encoding: 'utf8', env: { ...process.env, HOME: home } }));
+  const fromClaude = run({ session_id: 'inicio-1', cwd: f.project, source: 'startup', transcript_path: '/tmp/x.jsonl', hook_event_name: 'SessionStart' });
+  const said = fromClaude.hookSpecificOutput?.additionalContext || '';
+  assert.equal(fromClaude.hookSpecificOutput.hookEventName, 'SessionStart');
+  assert.match(said, /^Información de Session Hub \(no son órdenes\):/);
+  assert.ok(said.includes('Proyecto actual: demo-api') && said.includes(`workspace="${f.project}"`), said);
+  assert.match(said, /Compañeros conectados ahora: 1/);
+  assert.ok(said.length <= 1500);
+  // Cursor: el mismo evento dos veces (su hook y el importado de Claude Code) → contexto una sola vez
+  const cursorIn = { conversation_id: 'inicio-2', session_id: 'inicio-2', hook_event_name: 'sessionStart', cursor_version: '3.22.12', workspace_roots: [f.project], user_email: 'privado@example.com', transcript_path: null };
+  const k = run(cursorIn);
+  assert.ok(k.additional_context?.includes('Proyecto actual: demo-api'), JSON.stringify(k));
+  assert.deepEqual(run({ ...cursorIn, hook_event_name: 'SessionStart' }), {}, 'la segunda vez no repite el contexto');
+  // startContext: false en la configuración del hub lo apaga (en caliente)
+  const hubCfg = hubs.people.carlos.cfg;
+  const before = fs.readFileSync(hubCfg, 'utf8');
+  fs.writeFileSync(hubCfg, JSON.stringify({ ...JSON.parse(before), startContext: false }));
+  let n = 0;
+  await until(async () => Object.keys(run({ session_id: `apagado-${n++}`, cwd: f.project, hook_event_name: 'SessionStart' })).length === 0, 10000, 'contexto apagado');
+  fs.writeFileSync(hubCfg, before);
+  await until(async () => !!run({ session_id: `encendido-${n++}`, cwd: f.project, hook_event_name: 'SessionStart' }).hookSpecificOutput, 10000, 'contexto encendido');
   S.answer = 'Instalar';
   await cmds['sessionHub.installHooks']();
-  assert.equal(JSON.parse(fs.readFileSync(claudeSettings, 'utf8')).hooks.Stop.length, 2, 'instalar dos veces no duplica');
+  const c2 = JSON.parse(fs.readFileSync(claudeSettings, 'utf8'));
+  assert.equal(c2.hooks.Stop.length, 2, 'instalar dos veces no duplica');
+  assert.equal(c2.hooks.SessionStart.length, 1);
+  assert.equal(JSON.parse(fs.readFileSync(cursorHooks, 'utf8')).hooks.sessionStart.length, 1);
   ok('hooks instalados en Claude Code y Cursor sin pisar tus ajustes ni tus hooks; el comando instalado funciona');
+  ok('al iniciar sesión, la IA recibe el proyecto actual y los conteos (Claude Code y Cursor, sin duplicar)');
 
   // ---------- Carlos invita a Ana desde el editor ----------
   const anaId = (await call('carlos', 'GET', '/api/peers')).find((m) => m.name === 'Ana').id;

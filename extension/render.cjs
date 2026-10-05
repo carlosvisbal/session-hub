@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 // Copyright (C) 2026 Los autores de Session Hub (ver AUTHORS)
 // HTML de los paneles (webview). Usa las variables de tema del editor, así se ve bien en claro y oscuro.
-const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-const when = (s) => (s ? new Date(s).toLocaleString() : '');
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const when = (s) => (s ? esc(new Date(s).toLocaleString()) : '');
+// Números que llegan de un compañero: nunca se interpolan como texto.
+const num = (x) => (Number.isFinite(Number(x)) ? Number(x) : 0);
 
 const page = (body) => `<!doctype html><html><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline';">
@@ -20,15 +22,16 @@ const page = (body) => `<!doctype html><html><head><meta charset="utf-8">
 </style></head><body>${body}</body></html>`;
 
 function renderSession(t, s) {
+  const files = s.filesChanged || []; // un hub de otra versión puede no mandarlos
   return page(`<h2>${esc(s.title)}</h2>
     <p class="meta"><b>${esc(s.owner)}</b> · <span class="badge">${esc(s.source)}</span> ${esc(s.project)}
-      ${s.branch ? ` · ${t('rama')} <code>${esc(s.branch)}</code>` : ''} · ${t('{v1} mensajes', { v1: s.messages })} · ${t('actualizada {v1}', { v1: when(s.updatedAt) })}</p>
-    ${s.filesChanged.length ? `<details><summary>${t('Archivos modificados ({v1})', { v1: s.filesChanged.length })}</summary><pre>${s.filesChanged.map(esc).join('\n')}</pre></details>` : ''}
-    ${s.omittedMessages ? `<p class="meta">${t('({v1} mensajes anteriores omitidos)', { v1: s.omittedMessages })}</p>` : ''}
-    ${s.conversation
+      ${s.branch ? ` · ${t('rama')} <code>${esc(s.branch)}</code>` : ''} · ${t('{v1} mensajes', { v1: num(s.messages) })} · ${t('actualizada {v1}', { v1: when(s.updatedAt) })}</p>
+    ${files.length ? `<details><summary>${t('Archivos modificados ({v1})', { v1: files.length })}</summary><pre>${files.map(esc).join('\n')}</pre></details>` : ''}
+    ${s.omittedMessages ? `<p class="meta">${t('({v1} mensajes anteriores omitidos)', { v1: num(s.omittedMessages) })}</p>` : ''}
+    ${(s.conversation || [])
       .map(
-        (m) => `<div class="msg ${m.role}"><div class="meta">${m.role === 'user' ? esc(s.owner) : t('IA')} · ${when(m.at)}</div>${esc(m.text)}${
-          m.actions.length ? '<div class="acts">' + m.actions.map((a) => (a.kind === 'edit' ? '✎ ' : '$ ') + esc(a.target)).join('<br>') + '</div>' : ''
+        (m) => `<div class="msg ${esc(m.role)}"><div class="meta">${m.role === 'user' ? esc(s.owner) : t('IA')} · ${when(m.at)}</div>${esc(m.text)}${
+          (m.actions || []).length ? '<div class="acts">' + m.actions.map((a) => (a.kind === 'edit' ? '✎ ' : a.kind === 'agent' ? '🤖 ' : '$ ') + esc(a.target) + (a.via === 'shell' ? ' ' + esc(t('(por comando)')) : '')).join('<br>') + '</div>' : ''
         }</div>`,
       )
       .join('')}`);
@@ -37,13 +40,13 @@ function renderSession(t, s) {
 function renderChanges(t, list, who) {
   const blocks = list.map((c) => {
     if (c.error) return `<h3>${esc(c.owner)}</h3><p class="err">${esc(c.error)}</p>`;
-    if (!c.sessions.length) return `<h3>${esc(c.owner)}</h3><p class="meta">${t('Nada nuevo.')}</p>`;
+    if (!(c.sessions || []).length) return `<h3>${esc(c.owner)}</h3><p class="meta">${t('Nada nuevo.')}</p>`;
     return `<h3>${esc(c.owner)}</h3>` + c.sessions
       .map(
         (s) => `<div class="msg"><b>${esc(s.title)}</b> <span class="badge">${esc(s.source)}</span>
           <div class="meta">${esc(s.project)}${s.branch ? ' · <code>' + esc(s.branch) + '</code>' : ''} · ${when(s.updatedAt)}</div>
-          ${s.requests.length ? `<p><b>${t('Se pidió:')}</b></p><ul>` + s.requests.map((r) => `<li>${esc(r)}</li>`).join('') + '</ul>' : ''}
-          ${s.filesChanged.length ? `<p><b>${t('Archivos ({v1}):', { v1: s.filesChanged.length })}</b></p><pre>${s.filesChanged.map(esc).join('\n')}</pre>` : ''}
+          ${(s.requests || []).length ? `<p><b>${t('Se pidió:')}</b></p><ul>` + s.requests.map((r) => `<li>${esc(r)}</li>`).join('') + '</ul>' : ''}
+          ${(s.filesChanged || []).length ? `<p><b>${t('Archivos ({v1}):', { v1: s.filesChanged.length })}</b></p><pre>${s.filesChanged.map(esc).join('\n')}</pre>` : ''}
           ${s.lastAssistantMessage ? `<p><b>${t('Último estado según la IA:')}</b></p>${esc(s.lastAssistantMessage)}` : ''}
         </div>`,
       )
@@ -52,4 +55,7 @@ function renderChanges(t, list, who) {
   return page(`<h2>${t('Novedades de {v1}', { v1: esc(who) })}</h2>${blocks.join('') || `<p class="meta">${t('No hay compañeros en línea.')}</p>`}`);
 }
 
-module.exports = { renderSession, renderChanges };
+// Error al cargar un panel: el mensaje puede traer texto de un compañero.
+const renderError = (message) => page(`<p class="err">Error: ${esc(message)}</p>`);
+
+module.exports = { renderSession, renderChanges, renderError, esc };

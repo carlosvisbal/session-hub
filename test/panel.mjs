@@ -5,6 +5,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 
@@ -56,7 +57,7 @@ function demoState(lang) {
   };
 }
 
-function mount(lang) {
+function mount(lang, patch) {
   const dom = new JSDOM('<div id="app"></div>', { runScripts: 'outside-only' });
   const w = dom.window;
   const errors = [];
@@ -66,6 +67,7 @@ function mount(lang) {
   w.SESSION_HUB_DICT = JSON.parse(fs.readFileSync(path.join(ROOT, 'locales/en.json'), 'utf8'));
   w.SESSION_HUB_HELP = JSON.parse(fs.readFileSync(path.join(ROOT, 'locales/help.json'), 'utf8'));
   const state = demoState(lang);
+  if (patch) patch(state);
   w.acquireVsCodeApi = () => ({ getState: () => null, setState() {}, postMessage: (m) => (posted.push(m), m.type === 'ready' && w.dispatchEvent(new w.MessageEvent('message', { data: { type: 'state', state } }))) });
   w.eval(fs.readFileSync(path.join(ROOT, 'media/dashboard.js'), 'utf8'));
   const d = w.document;
@@ -235,4 +237,66 @@ assert.match(en.text(), /My team's copies/);
 assert.match(en.text(), /Let my team copy mine/);
 assert.deepEqual(en.errors, []);
 ok('flechas entre pestañas, sin errores de JavaScript, en español y en inglés');
+
+// ---------- datos de un compañero: nunca se interpretan como HTML ----------
+const EVIL = '<img src=x onerror="window.pwned=1"><button data-cmd="sessionHub.toggleSessionVisibility" data-args="[&quot;claude:gone&quot;]">x</button>';
+const x = mount('es', (st) => {
+  st.conversations.push({ id: 'k5', peerName: 'Persona 2', status: 'ended', endReason: EVIL, turns: EVIL, sent: EVIL, received: 1, text: 't' });
+  st.conversations.push({ id: 'k6', peerName: 'Persona 4', status: EVIL, turns: 6, sent: 0, received: 0, text: 't' });
+  st.agents.push({ session: 'cursor:y', ownerId: id(0), tool: 'Cursor', project: 'web-app', status: EVIL, title: 'x' });
+  st.archive.copies.list[0].messages = EVIL;
+  st.archive.copies.list[0].status = EVIL;
+  st.archive.copies.list[0].bytes = EVIL;
+  st.archive.copies.owners[0].sessions = EVIL;
+  // un hub de otra versión sin filesChanged
+  delete st.team[0].filesChanged;
+});
+for (const v of ['sessions', 'messages', 'team', 'backup']) x.view(v);
+x.view('messages');
+const realToggles = () => x.d.querySelectorAll('[data-cmd="sessionHub.toggleSessionVisibility"]').length;
+assert.equal(realToggles(), 0, 'nada inyectado en Mensajes');
+assert.match(x.text(), /<img src=x/, 'el motivo de fin se ve como texto');
+x.view('team');
+assert.equal(x.count('img'), 0, 'nada inyectado en Equipo');
+x.view('backup');
+assert.equal(x.count('img'), 0, 'nada inyectado en Respaldo');
+x.view('sessions');
+assert.ok(x.count('.card') > 0, 'una sesión sin filesChanged no deja el panel en blanco');
+// detalle de una sesión con campos maliciosos o ausentes
+x.w.dispatchEvent(new x.w.MessageEvent('message', { data: { type: 'session', data: { id: 'z', ownerId: id(0), owner: 'P', title: 't', source: 'cursor', messages: EVIL, omittedMessages: EVIL, conversation: [{ role: `x"><img src=x onerror=1>`, text: 'hola', at: ago(1) }, { role: 'user', text: 'sin actions' }] } } }));
+assert.equal(x.d.querySelectorAll('#detail img').length, 0, 'nada inyectado en el detalle');
+assert.match(x.d.getElementById('detail').textContent, /sin actions/, 'sin filesChanged ni actions el detalle se muestra');
+x.w.dispatchEvent(new x.w.MessageEvent('message', { data: { type: 'session', data: { id: 'z2', ownerId: id(0), owner: 'P', title: 'vacía', source: 'cursor' } } }));
+assert.match(x.d.getElementById('detail').textContent, /vacía/, 'sin conversation el detalle se muestra');
+assert.equal(x.w.pwned, undefined);
+assert.deepEqual(x.errors, []);
+ok('los textos de un compañero (motivo de fin, estados, números, rol) se escapan; faltar campos no deja el panel en blanco');
+
+// ---------- la extensión solo ejecuta los comandos que el panel muestra, con ids que conoce ----------
+const require = createRequire(import.meta.url);
+require.cache.vscode = { id: 'vscode', filename: 'vscode', loaded: true, exports: {} };
+const Module = require('node:module');
+const resolve0 = Module._resolveFilename;
+Module._resolveFilename = function (req, ...rest) {
+  return req === 'vscode' ? 'vscode' : resolve0.call(this, req, ...rest);
+};
+const { allowedCommand } = require(path.join(ROOT, 'extension/dashboard.cjs'));
+const st = demoState('es');
+const allowed = (c, a) => allowedCommand(`sessionHub.${c}`, a, st, null);
+assert.ok(allowed('toggleSessionVisibility', ['claude:gone']));
+assert.ok(!allowed('toggleSessionVisibility', ['otra']), 'id desconocido');
+assert.ok(!allowed('installExtension', []) && !allowedCommand('workbench.action.terminal.new', [], st), 'fuera de la lista');
+assert.ok(allowed('endConversation', ['k2']) && !allowed('endConversation', ['zz']));
+assert.ok(allowed('revokeMember', [id(1)]) && !allowed('revokeMember', [ME]), 'no a uno mismo');
+assert.ok(allowed('sendMessage', []) && allowed('sendMessage', [id(2)]));
+assert.ok(allowed('setBackupOption', ['archive', false]) && !allowed('setBackupOption', ['x', false]));
+assert.ok(allowed('setLanguage', ['en']) && !allowed('setLanguage', ['fr']));
+assert.ok(allowed('removeFromBackup', ['cursor:k3', id(0), 'Copia 3']) && !allowed('removeFromBackup', ['z', null, '']));
+assert.ok(allowedCommand('sessionHub.exportSession', ['z', id(0)], st, { id: 'z' }), 'la sesión abierta en el detalle');
+// cada comando que el panel emite, con los argumentos que pone, pasa la lista
+for (const v of ['sessions', 'messages', 'team', 'privacy', 'backup', 'status']) {
+  p.view(v);
+  for (const e of p.d.querySelectorAll('[data-cmd]')) assert.ok(allowedCommand(e.dataset.cmd, e.dataset.args ? JSON.parse(e.dataset.args) : [], p.state, null), `${e.dataset.cmd} ${e.dataset.args || ''}`);
+}
+ok('la extensión solo ejecuta los comandos del panel, con ids que el panel está mostrando');
 console.log('\nPANEL OK');

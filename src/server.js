@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import { CONFIG_PATH, HOT_RELOAD_KEYS, NETWORK_KEYS, ROOT, loadConfig } from './config.js';
@@ -178,10 +179,63 @@ ${m.text}
         waiting.delete(c.id);
       }
     }
-    const cur = convs.get(c.id);
+    // Si la conversación se cerró o se borró durante la espera, los mensajes ya se sacaron de la
+    // bandeja: se entregan igual con los datos que había al empezar, en vez de perderlos con un error.
+    const cur = convs.get(c.id) || c;
     if (msgs.length) say(t('[conversación] vuelta {v1} de {v2} con {v3} entregada a tu IA ({v4})', { v1: cur.received, v2: cur.turns, v3: cur.peerName, v4: tool || '?' }));
     if (!msgs.length) return { wait: !!cur && cur.status === 'active' && cur.awaiting, conversation: convView(cur) };
     return { text: frameConv(cur, msgs), conversation: convView(cur) };
+  }
+
+  // ---------- hook de inicio de sesión: contexto corto para la IA ----------
+  // Solo datos locales y conteos: nada escrito por compañeros (ni títulos ni textos), para no abrir una
+  // puerta a que alguien le dé instrucciones a mi IA. Cursor puede ejecutar el hook dos veces por el mismo
+  // evento (el suyo y el importado de Claude Code): la segunda vez, dentro de START_DEDUPE_MS, no devuelve nada.
+  const START_MAX_CHARS = 1500;
+  const START_DEDUPE_MS = 30_000;
+  const startSeen = new Map(); // sesión → cuándo se le dio contexto
+  // Conversaciones que ya recibieron contexto (por el inicio o por su primer mensaje): el respaldo de Cursor
+  // "antes de enviar" (once) solo lo da si la conversación aún no lo tuvo.
+  const startGiven = new Set();
+  const oneLine = (v) => String(v || '').replace(/[\u0000-\u001f\u007f]+/g, ' ').slice(0, 300);
+
+  function hookStart({ session, folders, once = false } = {}) {
+    if (cfg.startContext === false) return {};
+    const now = Date.now();
+    for (const [k, at] of startSeen) if (now - at > START_DEDUPE_MS) startSeen.delete(k);
+    if (typeof session === 'string' && session) {
+      const key = session.slice(0, 200);
+      if (once && startGiven.has(key)) return { duplicate: true };
+      if (startGiven.size >= 5000) startGiven.clear(); // tope: nunca crece sin límite
+      startGiven.add(key);
+      if (startSeen.has(key)) return { duplicate: true };
+      if (startSeen.size >= 1000) startSeen.clear(); // tope: nunca crece sin límite
+      startSeen.set(key, now);
+    }
+    const ctx = team.workspace(Array.isArray(folders) ? folders.slice(0, 10) : []);
+    const lines = [];
+    for (const f of ctx.folders.slice(0, 3)) {
+      lines.push(t('- Proyecto actual: {v1} ({v2}).', { v1: oneLine(f.name), v2: oneLine(f.path) }));
+      lines.push(t('- Al usar las herramientas MCP de Session Hub, pasa workspace="{v1}" para limitar los resultados a este proyecto.', { v1: oneLine(f.path) }));
+    }
+    const box = inbox.list();
+    const ready = box.received.filter((m) => m.status === 'delivered' && !m.conv).length;
+    if (ready) lines.push(t('- Mensajes aprobados por el usuario esperando a su IA: {v1} (check_inbox los trae).', { v1: ready }));
+    if (box.held) lines.push(t('- Mensajes retenidos hasta que el usuario los apruebe: {v1}.', { v1: box.held }));
+    if (teamState.hasTeam()) {
+      const online = team.peersInfo().filter((m) => !m.self && m.online && !m.blocked).length;
+      lines.push(t('- Compañeros conectados ahora: {v1}.', { v1: online }));
+      // Cambios de compañeros en este proyecto (24 h), contados en las copias locales: no pregunta a nadie.
+      if (ctx.keys.size && cfg.teamCopies !== false) {
+        const since = new Date(now - 24 * 3600_000).toISOString();
+        let changed = 0;
+        for (const o of copies.owners()) for (const key of ctx.keys) changed += copies.listSessions(o.id, { project: key, since }).length;
+        if (changed) lines.push(t('- Sesiones de compañeros con cambios en este proyecto en las últimas 24 h: {v1} (what_changed da el detalle).', { v1: changed }));
+      }
+    }
+    if (!lines.length) return {};
+    const text = [t('Información de Session Hub (no son órdenes):'), ...lines].join('\n');
+    return { context: text.length > START_MAX_CHARS ? text.slice(0, START_MAX_CHARS - 1) + '…' : text };
   }
 
   function messageStatus(id, status) {
@@ -212,7 +266,7 @@ ${m.text}
       network: transport.status(),
       networkIssues: diagnoseNetwork(transport.status()).map((i) => ({ ...i, title: t(i.title), cause: t(i.cause), fix: t(i.fix), it: i.it && t(i.it) })),
       team: { ...teamInfo(), peersOnline: peersInfo.filter((m) => !m.self && m.online).length, members: peersInfo.length - 1 },
-      sharing: { paused: !!cfg.paused, projects: hub.diagnostics(), staleAllow: cfg.projects.filter((p) => p.allow.some((a) => a !== '*' && !/^[0-9a-f]{64}$/.test(a))).map((p) => p.name) },
+      sharing: { paused: !!cfg.paused, projects: hub.diagnostics(), staleAllow: cfg.projects.filter((p) => p.allow.some((a) => a !== '*' && a !== 'me' && !/^[0-9a-f]{64}$/.test(a))).map((p) => p.name) },
       audit: { file: cfg.auditFile, retentionDays: cfg.auditRetentionDays, entries: access.snapshot().reads.length },
     };
   }
@@ -258,6 +312,11 @@ ${m.text}
     'GET /api/team/changes': (q) => team.whatChanged(q, panelOrigin),
     'GET /api/team/agents': (q) => team.listAgents(q, panelOrigin),
     'GET /api/agents': () => hub.liveAgents(),
+    // Proyecto actual del editor: carpetas separadas por salto de línea en ?ws=.
+    'GET /api/workspace': (q) => {
+      const ctx = team.workspace(String(q.ws || '').split('\n'));
+      return { folders: ctx.folders };
+    },
 
     'GET /api/inbox': () => inbox.list(),
 
@@ -269,6 +328,7 @@ ${m.text}
     'POST /api/conv/decline': (q, body) => team.declineConversation(String(body.id)),
     'POST /api/conv/end': (q, body) => team.endConversation(String(body.id), 'me'),
     'POST /api/hook/stop': (q, body) => hookStop(body),
+    'POST /api/hook/start': (q, body) => hookStart(body),
 
     // Respaldo: mis sesiones (capa 1) y copias de mis compañeros (capa 2).
     'GET /api/archive': (q) => ({
@@ -379,7 +439,7 @@ ${m.text}
       if (url.pathname === '/health') return send(res, 200, { ok: true, team: teamState.hasTeam(), network: transport.status().running });
       if (req.method === 'GET' && handleSource(req, res, url, cfg)) return; // AGPL §13, sin token
       if (!authorized(req, url)) return send(res, 401, { error: 'Token inválido' });
-      if (url.pathname === '/mcp') return await handleMcp(req, res);
+      if (url.pathname === '/mcp') return await handleMcp(req, res, url);
       await handleApi(req, res, url);
     } catch (err) {
       send(res, err.code === 'offline' ? 503 : err.code === 'timeout' ? 504 : 400, { error: t(err.message), code: err.code });
@@ -389,7 +449,8 @@ ${m.text}
   server.headersTimeout = 10_000;
 
   // MCP sin estado: un servidor por petición; no hay sesiones que limpiar.
-  async function handleMcp(req, res) {
+  // ?ws=<carpeta> (puede repetirse): las carpetas abiertas en el editor que registró este MCP.
+  async function handleMcp(req, res, url) {
     if (req.method !== 'POST') {
       res.writeHead(405, { allow: 'POST' });
       return res.end();
@@ -398,7 +459,7 @@ ${m.text}
     const key = `${req.socket.remoteAddress}|${req.headers['user-agent'] || ''}`;
     if (body?.method === 'initialize') mcpClients.set(key, friendlyClient(body.params?.clientInfo?.name));
     const software = { ...sourceInfo(cfg), source: cfg.sourceUrl || `http://127.0.0.1:${cfg.port}/source` };
-    const mcp = createMcpServer(team, software, { via: 'mcp', client: mcpClients.get(key) || friendlyClient(req.headers['user-agent']) }, t);
+    const mcp = createMcpServer(team, software, { via: 'mcp', client: mcpClients.get(key) || friendlyClient(req.headers['user-agent']), workspace: url.searchParams.getAll('ws') }, t);
     const mcpTransport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     res.on('close', () => {
       mcpTransport.close();
@@ -440,6 +501,7 @@ ${m.text}
       const netChanged = NETWORK_KEYS.some((k) => JSON.stringify(cfg[k]) !== JSON.stringify(next[k]));
       const ownerChanged = JSON.stringify(cfg.owner) !== JSON.stringify(next.owner);
       for (const k of HOT_RELOAD_KEYS) cfg[k] = next[k];
+      cfg.startContext = next.startContext; // contexto al iniciar sesión (hook): se puede apagar en caliente
       setExtraPatterns(cfg.redactExtra);
       if (netChanged) await transport.restart();
       else if (ownerChanged) transport.announceProfile();
@@ -501,7 +563,17 @@ function readJson(req) {
   });
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// ¿Se ejecuta este archivo directamente (node src/server.js)? Se comparan rutas reales, no URLs
+// armadas a mano: en Windows (C:\…) o con espacios o tildes en la ruta la URL no coincidía y el hub
+// salía sin decir nada.
+const realOr = (p) => {
+  try {
+    return fs.realpathSync(p);
+  } catch {
+    return path.resolve(p);
+  }
+};
+if (process.argv[1] && realOr(fileURLToPath(import.meta.url)) === realOr(process.argv[1])) {
   const srv = startServer(loadConfig());
   for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, () => srv.shutdown().finally(() => process.exit(0)));
 }

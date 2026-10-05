@@ -5,10 +5,13 @@
 // Toda consulta termina: responde, falla o vence; un compañero lento no bloquea a los demás.
 import { fingerprint } from './identity.js';
 import { parseSince } from './util.js';
+import { workspaceContext } from './workspace.js';
 
 const ME = new Set(['yo', 'me', 'mi', 'mío', 'mio', 'self']);
 const ALL = new Set(['todos', 'all', '*']);
 const PAGE = 100;
+const FULL_READ_MS = 5 * 60_000; // lectura completa de una sesión, sumando todas sus páginas
+const RATE_RETRY_MS = 61_000; // el límite de mensajes del otro lado es por minuto
 // En el MCP y la API, limit 0 o vacío = todos. Para mis sesiones y las copias se convierte aquí
 // (a los compañeros les llega tal cual y su hub hace lo mismo).
 const allIfZero = (q) => ({ ...q, limit: !q.limit || Number(q.limit) <= 0 ? Infinity : Number(q.limit) });
@@ -77,13 +80,28 @@ export function createTeam(cfg, hub, transport, teamState, t = (s) => s, inbox =
     const first = await ask(m, null, 'session', { id, offset: from, limit: PAGE, full: true }, origin);
     const conversation = [...first.conversation];
     const expected = first.total - first.offset;
+    // Plazo total además del de cada página: un compañero que manda de a un mensaje no cuelga la lectura.
+    const deadline = Date.now() + FULL_READ_MS;
     while (conversation.length < expected) {
+      if (Date.now() > deadline) throw Object.assign(new Error('La sesión tardó demasiado en llegar; vuelve a intentarlo.'), { code: 'timeout' });
       const page = await ask(m, null, 'session', { id, offset: first.offset + conversation.length, limit: PAGE, full: true }, origin);
       if (!page.conversation.length) break;
       conversation.push(...page.conversation);
     }
     if (conversation.length !== expected) throw new Error(`La sesión llegó incompleta (${conversation.length} de ${expected} mensajes); vuelve a intentarlo.`);
     return { ...first, omittedMessages: first.offset, conversation };
+  }
+
+  // Un solo reintento pendiente por persona, pasado el límite de mensajes por minuto.
+  const retries = new Map();
+  function retryLater(pub) {
+    if (retries.has(pub)) return;
+    const timer = setTimeout(() => {
+      retries.delete(pub);
+      api.flushQueue(pub).catch(() => {});
+    }, RATE_RETRY_MS);
+    timer.unref?.();
+    retries.set(pub, timer);
   }
 
   // Entrega un mensaje ya firmado. Si la persona no está, queda en cola y sale cuando se conecte.
@@ -94,6 +112,11 @@ export function createTeam(cfg, hub, transport, teamState, t = (s) => s, inbox =
       return r.status;
     } catch (err) {
       if (['offline', 'closed', 'timeout'].includes(err.code)) return 'queued';
+      // Límite por minuto del otro lado: queda en cola y se reintenta cuando pase el minuto.
+      if (err.code === 'rate') {
+        retryLater(pub);
+        return 'queued';
+      }
       // Hub de una versión sin mensajes: responde "Operación desconocida".
       const msg = /Operación desconocida/.test(err.message) ? 'Su Session Hub es de una versión sin mensajes; debe actualizarlo.' : err.message;
       inbox.markSent(doc.body.id, err.code === 'refused' ? 'refused' : 'failed', msg);
@@ -251,6 +274,11 @@ export function createTeam(cfg, hub, transport, teamState, t = (s) => s, inbox =
       return fanOut(peer, (m) => liveOrCopy(m, () => ask(m, () => hub.whatChanged({ since, project }), 'changes', { since, project }, origin), () => copies.whatChanged(m.id, { since, project }, parseSince)));
     },
 
+    // Proyecto actual a partir de las carpetas abiertas (editor) o la carpeta de trabajo de la IA.
+    workspace(folders) {
+      return workspaceContext(folders, { keyOf: hub.keyOf, projects: hub.sharedProjects() });
+    },
+
     async listSessions({ peer, ...q }, origin) {
       const local = allIfZero(q);
       const res = await fanOut(peer, (m) => liveOrCopy(m, () => ask(m, () => hub.listSessions(local), 'sessions', q, origin), () => copies.listSessions(m.id, local)));
@@ -395,7 +423,10 @@ export function createTeam(cfg, hub, transport, teamState, t = (s) => s, inbox =
 
     // Reintenta lo que estaba en cola para alguien que acaba de conectarse.
     async flushQueue(pub) {
-      for (const doc of inbox?.queuedFor(pub) || []) await deliver(pub, doc).catch(() => {});
+      for (const doc of inbox?.queuedFor(pub) || []) {
+        // Si vuelve a la cola (desconectado o límite por minuto), el resto espera al próximo intento.
+        if ((await deliver(pub, doc).catch(() => null)) === 'queued') break;
+      }
     },
 
     // Aviso al remitente de qué pasó con su mensaje (retenido, entregado, leído, descartado).

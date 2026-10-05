@@ -70,6 +70,22 @@ try {
     await until(async () => JSON.parse(fs.readFileSync(path.join(dataDir, 'config.json'), 'utf8')).paused === true, 8000, 'la pausa llega al hub');
     ok('pausar en VS Code pausa también en Cursor y en el hub (ajustes comunes)');
 
+    // Restablecer un ajuste común en un editor lo restablece en el otro (no vuelve con el valor viejo).
+    // De paso: una clave de config.json que la extensión no administra (puesta a mano) se conserva.
+    const confFile = path.join(dataDir, 'config.json');
+    fs.writeFileSync(confFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(confFile, 'utf8')), puestaAMano: 'se-conserva' }));
+    await wv.vscode.workspace.getConfiguration('sessionHub').update('redactExtra', ['secreto-x']);
+    await until(async () => JSON.stringify(cursor.shared.settings.redactExtra) === '["secreto-x"]', 8000, 'redactExtra llega a Cursor');
+    await until(async () => JSON.stringify(JSON.parse(fs.readFileSync(confFile, 'utf8')).redactExtra) === '["secreto-x"]', 8000, 'redactExtra llega al hub');
+    assert.equal(JSON.parse(fs.readFileSync(confFile, 'utf8')).puestaAMano, 'se-conserva', 'config.json conserva las claves que la extensión no administra');
+    await wv.vscode.workspace.getConfiguration('sessionHub').update('redactExtra', undefined);
+    await until(async () => cursor.shared.settings.redactExtra === undefined, 8000, 'el restablecimiento llega a Cursor');
+    await wait(2500);
+    const sharedFile = JSON.parse(fs.readFileSync(path.join(dataDir, 'settings.json'), 'utf8'));
+    assert.ok(!('redactExtra' in sharedFile.values) && sharedFile.removed.redactExtra, 'queda marcado como restablecido');
+    assert.equal(code.shared.settings.redactExtra, undefined, 'Cursor no lo vuelve a agregar');
+    ok('restablecer un ajuste común en VS Code lo restablece en Cursor, sin que vuelva el valor viejo');
+
     // Se cierra Cursor, que tenía el hub: VS Code lo relanza.
     open.splice(open.indexOf(wc), 1);
     wc.close();
@@ -78,6 +94,16 @@ try {
       return w.pid !== w1.pid && w.fingerprint === w1.fingerprint;
     }, 40000, 'VS Code toma el relevo');
     ok('al cerrar Cursor, VS Code relanza el hub con la misma identidad');
+
+    // El hub de VS Code se cierra sin que esa ventana lo pida (como cuando lo reemplaza otro editor
+    // y ese editor no llega a lanzar el suyo): la ventana lo vuelve a lanzar, no se queda sin hub.
+    const w3 = await call(port, token, 'GET', '/api/whoami');
+    await call(port, token, 'POST', '/api/shutdown', {});
+    await until(async () => {
+      const w = await call(port, token, 'GET', '/api/whoami');
+      return w.pid !== w3.pid && w.fingerprint === w1.fingerprint;
+    }, 40000, 'VS Code relanza el hub cerrado');
+    ok('un hub cerrado sin que la ventana lo pidiera (código 0) se vuelve a lanzar');
     await closeAll();
   }
 

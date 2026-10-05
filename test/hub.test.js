@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AccessDenied, createHub } from '../src/hub.js';
+import { setExtraPatterns } from '../src/redact.js';
 import { LONG_TEXT, makeClaudeFixture } from './fixtures.js';
 
 const ANA = { id: 'a'.repeat(64), name: 'Ana' };
@@ -122,4 +123,87 @@ test('sesiones abiertas: Claude Code vivo en un proyecto compartido, respetando 
   cfg.excludedSessions.length = 0;
   cfg.paused = true;
   assert.equal(hub.liveAgents(ANA).length, 0, 'en pausa no se ve nada');
+});
+
+// Buscar no debe servir para adivinar un secreto: ni el índice ni el barrido miran el texto sin redactar.
+for (const withIndex of [false, true]) {
+  test(`buscar (${withIndex ? 'con índice' : 'barrido'}): no encuentra secretos ni corta el fragmento antes de redactar`, () => {
+    const extra = withIndex ? { searchIndexFile: path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'shub-si-')), 'search.sqlite') } : {};
+    const { hub } = setup(extra);
+    if (withIndex) hub.syncArchive();
+    assert.deepEqual(hub.search('sk-abcdefghijklmnop1234', { viewer: ANA }), [], 'el valor de la clave no da resultados');
+    assert.deepEqual(hub.search('abcdefghijklmnop', { viewer: ANA }), [], 'ni un trozo');
+    for (const h of hub.search('probar', { viewer: ANA })) assert.ok(!/sk-abcdef/.test(h.snippet), h.snippet);
+    if (withIndex) assert.ok(!fs.readFileSync(extra.searchIndexFile).includes('sk-abcdefghijklmnop1234'), 'el índice guarda texto ya redactado');
+  });
+}
+
+test('buscar con índice: reglas extra nuevas se aplican enseguida y el índice se rehace', () => {
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'shub-si-')), 'search.sqlite');
+  const { cfg, hub } = setup({ searchIndexFile: file });
+  hub.syncArchive();
+  assert.equal(hub.search('attachments').length, 1);
+  cfg.redactExtra = ['attachments'];
+  setExtraPatterns(cfg.redactExtra); // como la recarga en caliente de server.js
+  assert.equal(hub.search('attachments').length, 0, 'antes de reindexar ya no se encuentra (barrido)');
+  hub.syncArchive();
+  assert.equal(hub.search('attachments').length, 0, 'tras reindexar tampoco');
+  assert.ok(!fs.readFileSync(file).includes('attachments acepte'), 'el texto viejo salió del índice');
+  setExtraPatterns([]);
+});
+
+test('buscar con índice: una sesión que ya no existe no se devuelve y sale del índice', () => {
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'shub-si-')), 'search.sqlite');
+  const { cfg, hub } = setup({ searchIndexFile: file });
+  hub.syncArchive();
+  assert.equal(hub.search('attachments').length, 1);
+  const dir = path.join(cfg.claudeDir, cfg.project.replace(/[^a-zA-Z0-9]/g, '-'));
+  fs.rmSync(path.join(dir, 's1.jsonl'));
+  assert.equal(hub.search('attachments').length, 0, 'antes de sincronizar: se comprueba que exista');
+  hub.syncArchive();
+  assert.deepEqual(hub.searchIndex.ids('own', cfg.id), [], 'después: fuera del índice');
+});
+
+test('buscar con índice: las ocultas no ocupan el lugar de las visibles (filtro antes del LIMIT)', () => {
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'shub-si-')), 'search.sqlite');
+  const { cfg, hub } = setup({ searchIndexFile: file });
+  const dir = path.join(cfg.claudeDir, cfg.project.replace(/[^a-zA-Z0-9]/g, '-'));
+  for (let i = 0; i < 20; i++) {
+    const line = { cwd: cfg.project, sessionId: `h${i}`, type: 'user', timestamp: new Date(Date.UTC(2026, 8, 23, 11, i)).toISOString(), message: { role: 'user', content: 'attachments attachments attachments' } };
+    fs.writeFileSync(path.join(dir, `h${i}.jsonl`), JSON.stringify(line) + '\n');
+    cfg.excludedSessions.push(`claude:h${i}`);
+  }
+  hub.syncArchive();
+  const hits = hub.search('attachments', { viewer: ANA, limit: 1 });
+  assert.deepEqual(hits.map((h) => h.sessionId), ['claude:s1']);
+});
+
+test('sesiones abiertas: una subcarpeta no hereda el acceso del proyecto padre, y el nombre se redacta', () => {
+  const { cfg, hub } = setup();
+  const sub = path.join(cfg.project, 'privado');
+  fs.mkdirSync(sub);
+  cfg.projects.push({ path: sub, name: 'privado', allow: [PEDRO.id] });
+  const dir = path.join(path.dirname(cfg.claudeDir), 'sessions');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${process.pid}.json`), JSON.stringify({ pid: process.pid, sessionId: 'sub1', cwd: sub, name: 'x', status: 'idle' }));
+  fs.writeFileSync(path.join(dir, `${process.ppid}.json`), JSON.stringify({ pid: process.ppid, sessionId: 's1', cwd: cfg.project, name: 'token=abc123secreto', status: 'idle' }));
+  const live = hub.liveAgents(ANA);
+  assert.deepEqual(live.map((a) => a.session), ['claude:s1'], 'la de la subcarpeta no aparece para Ana');
+  assert.equal(live[0].name, 'token=[REDACTED]');
+  assert.deepEqual(hub.liveAgents(PEDRO).map((a) => [a.session, a.project]).sort(), [['claude:s1', 'demo-api'], ['claude:sub1', 'privado']], 'cada una en su proyecto exacto');
+});
+
+test('archivos y rama pasan por redact() en el resumen y en qué hay nuevo', () => {
+  const { cfg, hub } = setup({ redactExtra: ['serializers', 'adjuntos'] });
+  setExtraPatterns(cfg.redactExtra);
+  try {
+    const [s] = hub.listSessions();
+    assert.deepEqual(s.filesChanged, ['app/[REDACTED].py']);
+    assert.equal(s.branch, 'feature/[REDACTED]');
+    const [w] = hub.whatChanged({ since: 'all' }).sessions;
+    assert.deepEqual(w.filesChanged, ['app/[REDACTED].py']);
+    assert.equal(w.branch, 'feature/[REDACTED]');
+  } finally {
+    setExtraPatterns([]);
+  }
 });

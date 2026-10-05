@@ -153,6 +153,7 @@ export function createEditor({ appName = 'Visual Studio Code', settings = {}, st
           },
         }),
         onDidChangeConfiguration: (fn) => (shared.configListeners.push(fn), { dispose: () => shared.configListeners.splice(shared.configListeners.indexOf(fn), 1) }),
+        onDidChangeWorkspaceFolders: () => ({ dispose() {} }),
       },
       commands: {
         registerCommand: (id, fn) => ((cmds[id] = fn), { dispose() {} }),

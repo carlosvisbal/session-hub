@@ -4,9 +4,17 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeAtomic } from './util.js';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const CONFIG_PATH = process.env.SESSION_HUB_CONFIG || path.join(ROOT, 'config.json');
+
+// Dónde guarda Cursor sus datos en cada sistema (igual que VS Code: %APPDATA%, Application Support, ~/.config).
+function cursorUserDirFor(platform) {
+  if (platform === 'win32') return path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'Cursor', 'User');
+  if (platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', 'Cursor', 'User');
+  return path.join(os.homedir(), '.config', 'Cursor', 'User');
+}
 
 const defaults = {
   // Idioma de los mensajes: 'auto' (el del sistema), 'es' o 'en'.
@@ -51,7 +59,9 @@ const defaults = {
   auditRetentionDays: 90,
   claudeDir: path.join(os.homedir(), '.claude', 'projects'),
   claudeSessionsDir: '', // sesiones de Claude Code abiertas; vacío = ~/.claude/sessions
-  cursorUserDir: path.join(os.homedir(), '.config', 'Cursor', 'User'),
+  cursorUserDir: cursorUserDirFor(process.platform),
+  // Transcripciones .jsonl de Cursor (complemento de state.vscdb, ver sources/cursor.js).
+  cursorProjectsDir: path.join(os.homedir(), '.cursor', 'projects'),
   // URL pública del repositorio (AGPL §13). Vacío = el hub sirve su propio código en /source.
   sourceUrl: '',
   // Regex adicionales (como string) a ocultar, p.ej. nombres de clientes.
@@ -71,9 +81,9 @@ export function normalizeConfig(raw) {
   cfg.host = '127.0.0.1'; // la API nunca se expone a la red; entre hubs se habla por el canal cifrado
   if (!['lan', 'private', 'public'].includes(cfg.network)) cfg.network = 'lan';
   cfg.projects = cfg.projects.map((p) => {
-    const { path: p0, name, allow } = typeof p === 'string' ? { path: p } : p;
+    const { path: p0, name, allow, link } = typeof p === 'string' ? { path: p } : p;
     const abs = path.resolve(p0);
-    return { path: abs, name: name || path.basename(abs), allow: Array.isArray(allow) && allow.length ? allow : ['*'] };
+    return { path: abs, name: name || path.basename(abs), allow: normalizeAllow(allow), ...(typeof link === 'string' && link.trim() ? { link: link.trim().slice(0, 80) } : {}) };
   });
   // Dos carpetas con el mismo nombre visible se distinguen ("api (clientes)"), para no confundirlas.
   const seen = new Set();
@@ -96,11 +106,19 @@ export function normalizeConfig(raw) {
 }
 
 export function saveConfig(cfg) {
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600 });
+  writeAtomic(CONFIG_PATH, JSON.stringify(cfg, null, 2) + '\n');
+}
+
+// Solo si falta `allow` se comparte con todo el equipo (lo de siempre). Una lista vacía o inválida
+// nunca abre el proyecto a todos: queda como "solo yo" (['me'], lo mismo que escribe la extensión).
+export function normalizeAllow(allow) {
+  if (allow === undefined || allow === null) return ['*'];
+  const list = Array.isArray(allow) ? allow.filter((a) => typeof a === 'string' && a) : [];
+  return list.length ? list : ['me'];
 }
 
 // Se recarga en caliente al cambiar el archivo. Las claves de red reinician solo la conexión entre hubs.
 export const HOT_RELOAD_KEYS = ['language', 'owner', 'projects', 'paused', 'excludedSessions', 'inbound', 'archive', 'archiveRetentionDays', 'teamCopies', 'copiesRetentionDays', 'allowCopies', 'archiveMaxMB', 'redactExtra', 'peers', 'auditRetentionDays', 'network', 'dhtPort', 'bootstrap', 'relay', 'forceRelay'];
 export const NETWORK_KEYS = ['network', 'dhtPort', 'bootstrap', 'relay', 'forceRelay'];
 
-export { defaults };
+export { cursorUserDirFor, defaults };

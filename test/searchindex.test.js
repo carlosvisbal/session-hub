@@ -121,3 +121,61 @@ test('vuelve a abrir el mismo archivo y sigue ahí (persistencia real, no en mem
   assert.equal(idx2.search('persistente').length, 1);
   idx2.close();
 });
+
+test('el mismo id como mío y como copia de un compañero: filas separadas, quitar una no toca la otra', () => {
+  const idx = createSearchIndex({ file: tmp() });
+  const base = { id: 'claude:x', source: 'claude-code', project: '/p', title: 't', updatedAt: '2026-01-01' };
+  idx.indexSession({ ...base, scope: 'own', ownerId: 'me', messages: [msg('texto propio sobre firmas')] });
+  idx.indexSession({ ...base, scope: 'copy', ownerId: 'ana', messages: [msg('texto de ana sobre firmas')] });
+  assert.equal(idx.search('firmas', { scope: 'own', ownerId: 'me' }).length, 1, 'la copia no pisó la mía');
+  assert.equal(idx.search('firmas', { scope: 'copy', ownerId: 'ana' }).length, 1);
+  idx.removeSession('claude:x', { scope: 'copy', ownerId: 'ana' });
+  assert.equal(idx.search('firmas', { scope: 'own', ownerId: 'me' }).length, 1, 'quitar la copia no borra la mía');
+  assert.equal(idx.search('firmas', { scope: 'copy', ownerId: 'ana' }).length, 0);
+  assert.deepEqual(idx.ids('own', 'me'), ['claude:x']);
+  idx.close();
+});
+
+test('transform + tag: guarda el texto transformado y reindexa si cambian las reglas', () => {
+  const idx = createSearchIndex({ file: tmp() });
+  const s = { id: 's1', scope: 'own', ownerId: 'me', source: 'claude-code', project: '/p', title: 'clave hunter22', updatedAt: '2026-01-01', messages: [msg('la clave es hunter22 de verdad')] };
+  idx.indexSession({ ...s, transform: (t) => t.replace(/hunter22/g, '[REDACTED]'), tag: 'v1' });
+  assert.deepEqual(idx.search('hunter22'), [], 'el secreto no está en el índice');
+  assert.equal(idx.search('verdad')[0].title, 'clave [REDACTED]');
+  assert.equal(idx.isCurrent('own', 'me', 'v1'), true);
+  assert.equal(idx.isCurrent('own', 'me', 'v2'), false, 'reglas nuevas: no fiarse hasta reindexar');
+  assert.equal(idx.indexSession({ ...s, transform: (t) => t.replace(/verdad/g, '[REDACTED]'), tag: 'v2' }), true, 'mismos mensajes, reglas nuevas: reindexa');
+  assert.deepEqual(idx.search('verdad'), []);
+  assert.equal(idx.isCurrent('own', 'me', 'v2'), true);
+  idx.close();
+});
+
+test('projects y excludeIds filtran antes del LIMIT', () => {
+  const idx = createSearchIndex({ file: tmp() });
+  for (let i = 0; i < 30; i++) idx.indexSession({ id: `oculto${i}`, scope: 'own', ownerId: 'me', source: 'cursor', project: '/privado', title: 't', updatedAt: '2026-01-01', messages: [msg('firma firma firma')] });
+  for (let i = 0; i < 30; i++) idx.indexSession({ id: `excluida${i}`, scope: 'own', ownerId: 'me', source: 'cursor', project: '/compartido', title: 't', updatedAt: '2026-01-01', messages: [msg('firma firma firma')] });
+  idx.indexSession({ id: 'visible', scope: 'own', ownerId: 'me', source: 'cursor', project: '/compartido', title: 't', updatedAt: '2026-01-01', messages: [msg('una firma entre mucho texto de relleno que baja la relevancia '.repeat(5))] });
+  const excludeIds = Array.from({ length: 30 }, (_, i) => `excluida${i}`);
+  const r = idx.search('firma', { limit: 1, scope: 'own', ownerId: 'me', projects: ['/compartido'], excludeIds });
+  assert.deepEqual(r.map((x) => x.sessionId), ['visible']);
+  assert.deepEqual(idx.search('firma', { projects: [] }), [], 'sin proyectos visibles, nada');
+  idx.close();
+});
+
+test('índice de una versión anterior (texto sin redactar, id global): se borra y se rehace', async () => {
+  const file = tmp();
+  const { DatabaseSync } = await import('node:sqlite');
+  const old = new DatabaseSync(file);
+  old.exec(`CREATE TABLE sessions (id TEXT PRIMARY KEY, scope TEXT NOT NULL, owner_id TEXT NOT NULL, source TEXT, project TEXT, title TEXT, updated_at TEXT, hash TEXT NOT NULL);
+    CREATE VIRTUAL TABLE messages USING fts5(text, session_id UNINDEXED, role UNINDEXED, seq UNINDEXED, at UNINDEXED);
+    INSERT INTO sessions VALUES ('s1','own','me','claude-code','/p','t','2026-01-01','h');
+    INSERT INTO messages VALUES ('API_KEY=supersecreto123', 's1', 'user', 0, NULL);`);
+  old.close();
+  const idx = createSearchIndex({ file });
+  assert.equal(idx.available, true);
+  assert.deepEqual(idx.search('supersecreto123'), [], 'lo viejo se purgó');
+  assert.ok(!fs.readFileSync(file).includes('supersecreto123'), 'ni queda en el archivo');
+  idx.indexSession({ id: 's1', scope: 'own', ownerId: 'me', source: 'claude-code', project: '/p', title: 't', updatedAt: '2026-01-01', messages: [msg('nuevo contenido')] });
+  assert.equal(idx.search('nuevo').length, 1);
+  idx.close();
+});

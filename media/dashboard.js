@@ -6,7 +6,7 @@
   const saved = vscode.getState() || {};
   let state = null;
   const VIEWS = ['sessions', 'messages', 'team', 'privacy', 'backup', 'status', 'help'];
-  let ui = { view: VIEWS.includes(saved.view) ? saved.view : 'sessions', tab: saved.tab || 'team', filter: '', q: {}, helpQ: '', peopleFilter: 'all', backupFilter: 'all', copyOwner: '', person: saved.person || '', group: ['project', 'person', 'none'].includes(saved.group) ? saved.group : 'project', collapsed: new Set(saved.collapsed || []), expanded: new Set(), selected: null, detail: null, loading: false, error: null, page: { reads: 0, team: 0, following: 0, mine: 0, inbox: 0 } };
+  let ui = { view: VIEWS.includes(saved.view) ? saved.view : 'sessions', tab: saved.tab || 'team', filter: '', q: {}, helpQ: '', peopleFilter: 'all', backupFilter: 'all', copyOwner: '', person: saved.person || '', group: ['project', 'person', 'none'].includes(saved.group) ? saved.group : 'project', scope: saved.scope === 'all' ? 'all' : 'here', collapsed: new Set(saved.collapsed || []), expanded: new Set(), selected: null, detail: null, loading: false, error: null, page: { reads: 0, team: 0, following: 0, mine: 0, inbox: 0 } };
   const PAGE_SIZE = { convs: 6, ownbackup: 10, copieslist: 10, reads: 15, team: 15, following: 15, mine: 15, inbox: 10, sent: 10, people: 12, shares: 8, checks: 20, copyowners: 8, groups: 10 };
   const BOXES = {}; // listas con buscador: clave -> { items, render, text, empty, wrap }
 
@@ -57,7 +57,7 @@
     return T('hace {v1} d', { v1: Math.round(min / 1440) });
   };
   const when = (iso) => (iso ? new Date(iso).toLocaleString(state?.lang === 'en' ? 'en' : 'es') : '');
-  const persist = () => vscode.setState({ view: ui.view, tab: ui.tab, person: ui.person, group: ui.group, collapsed: [...ui.collapsed] });
+  const persist = () => vscode.setState({ view: ui.view, tab: ui.tab, person: ui.person, group: ui.group, scope: ui.scope, collapsed: [...ui.collapsed] });
   const GROUP_PREVIEW = 5; // sesiones visibles por grupo antes de "Ver más"
   const cmd = (command, label, cls = '', args) =>
     `<button class="${cls}" data-cmd="${command}"${args ? ` data-args="${esc(JSON.stringify(args))}"` : ''}>${label}</button>`;
@@ -68,6 +68,8 @@
   const srcLabel = (s) => (s.source === 'cursor' ? 'Cursor' : 'Claude Code');
   const me = () => state.members.find((m) => m.self) || {};
   const b = (x) => `<b>${esc(x)}</b>`;
+  // Números que llegan de un compañero (o de un hub de otra versión): nunca se interpolan como texto.
+  const num = (x) => (Number.isFinite(Number(x)) ? Number(x) : 0);
   const clip = (s, n) => (s && s.length > n ? s.slice(0, n) + '…' : s || '');
   const AGENT_STATUS = { busy: 'ocupada', idle: 'libre', recent: 'activa hace poco' };
   const MSG_STATUS = { held: 'esperando tu aprobación', delivered: 'visible para tu IA', read: 'leído', dismissed: 'descartado' };
@@ -99,11 +101,30 @@
 
   const isFollowed = (s) => state.follows.sessions.includes(s.id) || state.follows.people.includes(s.ownerId);
 
+  // Proyecto actual (las carpetas abiertas en esta ventana): mismo projectKey = mismo proyecto.
+  // Mismo nombre con otra clave = OTRO proyecto que se llama igual: se marca para no confundirlo.
+  const sameName = (a) => String(a || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const hereFolders = () => state.workspace?.folders || [];
+  const hasHere = () => hereFolders().length > 0;
+  function relationOf(s) {
+    if (!hasHere() || !s?.projectKey) return null;
+    if (hereFolders().some((f) => f.projectKey === s.projectKey)) return 'current';
+    return hereFolders().some((f) => sameName(f.name) === sameName(s.project)) ? 'same-name' : 'other';
+  }
+  const scopeHere = () => ui.scope === 'here' && hasHere() && ui.tab !== 'following';
+  const relationBadge = (r) =>
+    r === 'current'
+      ? `<span class="tag here" title="${T('Mismo repositorio que la carpeta abierta en esta ventana')}">📍 ${T('este proyecto')}</span>`
+      : r === 'same-name'
+        ? `<span class="tag warn-tag" title="${T('Se llama igual que tu carpeta, pero es otro repositorio')}">⚠ ${T('mismo nombre, otro proyecto')}</span>`
+        : '';
+
   function sessionsForTab() {
     let list =
       ui.tab === 'mine' ? state.mine : ui.tab === 'following' ? state.team.filter(isFollowed) : state.team.filter((s) => !ui.person || s.ownerId === ui.person);
     const q = ui.filter.trim().toLowerCase();
     if (q) list = list.filter((s) => [s.title, s.project, s.owner, s.branch, ...(s.filesChanged || [])].join(' ').toLowerCase().includes(q));
+    if (scopeHere()) list = list.filter((s) => relationOf(s) === 'current');
     return list;
   }
 
@@ -202,6 +223,7 @@
               ? `<select id="person" aria-label="${T('Persona')}"><option value="">${T('Todos')}</option>${others.map((m) => `<option value="${esc(m.id)}" ${ui.person === m.id ? 'selected' : ''}>${esc(m.name)}</option>`).join('')}</select>`
               : ''
           }
+          ${hasHere() && ui.tab !== 'following' ? `<select id="scope" aria-label="${T('Proyectos')}" title="${T('Proyectos')}"><option value="here" ${ui.scope === 'here' ? 'selected' : ''}>${T('Este proyecto')}</option><option value="all" ${ui.scope === 'all' ? 'selected' : ''}>${T('Todos los proyectos')}</option></select>` : ''}
           <select id="group" aria-label="${T('Agrupar sesiones')}" title="${T('Agrupar sesiones')}">${[['project', 'Por proyecto'], ['person', 'Por persona'], ['none', 'Sin agrupar']]
             .filter(([v]) => v !== 'person' || ui.tab !== 'mine')
             .map(([v, l]) => `<option value="${v}" ${groupMode() === v ? 'selected' : ''}>${T(l)}</option>`)
@@ -227,7 +249,7 @@
     return `<div class="page">
       ${pageHead(T('Mensajes'), T(POLICY_TEXT[box.policy] || POLICY_TEXT.hold), actions)}
       ${conversationsHtml()}
-      <h3>${T('Recibidos')}${box.unread ? ` <span class="badge">${box.unread}</span>` : ''}</h3>
+      <h3>${T('Recibidos')}${box.unread ? ` <span class="badge">${num(box.unread)}</span>` : ''}</h3>
       <div id="messages">${receivedHtml()}</div>
       <h3>${T('Enviados ({v1})', { v1: box.sent.length })}</h3>
       ${sentHtml()}
@@ -241,7 +263,7 @@
     const list = state.conversations || [];
     const hk = state.hooks || {};
     const hookLine = hk.any
-      ? `<span class="ok-txt">✓ ${T('Hooks instalados en {v1}', { v1: [hk.claude && 'Claude Code', hk.cursor && 'Cursor'].filter(Boolean).join(T(' y ')) })}</span> ${cmd('sessionHub.removeHooks', T('Quitar'), 'link small')}`
+      ? `<span class="ok-txt">✓ ${T('Hooks instalados en {v1}', { v1: [hk.claude && 'Claude Code', hk.cursor && 'Cursor'].filter(Boolean).join(T(' y ')) })}</span> ${hk.complete === false ? ` ${cmd('sessionHub.installHooks', T('Actualizar (nuevo: contexto al abrir una sesión)'), 'link small')}` : ''} ${cmd('sessionHub.removeHooks', T('Quitar'), 'link small')}`
       : `<span class="warn-txt">! ${T('Sin hooks: tu IA no continuará sola')}</span> ${cmd('sessionHub.installHooks', T('Instalar hooks'), 'link')}`;
     const row = (c) => {
       const left = c.status === 'active' && c.expiresAt ? Math.max(0, Math.round((Date.parse(c.expiresAt) - Date.now()) / 60000)) : null;
@@ -251,10 +273,10 @@
         inviting: cmd('sessionHub.endConversation', T('Cancelar'), 'link small', [c.id]),
         active: cmd('sessionHub.endConversation', `■ ${T('Detener')}`, 'small-btn', [c.id]),
       }[c.status] || '';
-      return `<div class="brow conv ${c.status}">
+      return `<div class="brow conv ${esc(c.status)}">
         <div class="bmain">
-          <div class="btitle">🤝 ${esc(c.peerName || '')} <span class="tag ${c.status === 'active' ? 'ok' : c.status === 'ended' ? '' : 'copy'}">${T(CONV_STATUS[c.status] || c.status)}</span></div>
-          <div class="muted small">${T('vueltas: {v1} enviadas · {v2} recibidas · máximo {v3}', { v1: c.sent || 0, v2: c.received || 0, v3: c.turns })}${left != null ? ` · ${T('quedan {v1} min', { v1: left })}` : ''}${c.status === 'ended' && c.endReason ? ` · ${T(CONV_END[c.endReason] || c.endReason)}` : ''}</div>
+          <div class="btitle">🤝 ${esc(c.peerName || '')} <span class="tag ${c.status === 'active' ? 'ok' : c.status === 'ended' ? '' : 'copy'}">${esc(T(CONV_STATUS[c.status] || c.status))}</span></div>
+          <div class="muted small">${T('vueltas: {v1} enviadas · {v2} recibidas · máximo {v3}', { v1: num(c.sent), v2: num(c.received), v3: num(c.turns) })}${left != null ? ` · ${T('quedan {v1} min', { v1: left })}` : ''}${c.status === 'ended' && c.endReason ? ` · ${esc(T(CONV_END[c.endReason] || c.endReason))}` : ''}</div>
           ${c.text ? `<div class="small ellipsis" title="${esc(c.text)}">“${esc(clip(c.text, 140))}”</div>` : ''}
         </div>
         <div class="bacts">${acts}</div>
@@ -334,7 +356,10 @@
     </div>`;
   }
 
-  const mb = (bytes) => (!bytes ? '0 KB' : bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+  const mb = (x) => {
+    const bytes = num(x);
+    return !bytes ? '0 KB' : bytes >= 1024 ** 3 ? `${(bytes / 1024 ** 3).toFixed(1)} GB` : bytes >= 1024 * 1024 ? `${(bytes / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  };
 
   // ---------- pestaña Respaldo: mis sesiones respaldadas, copias de mi equipo y configuración ----------
   function backupView() {
@@ -354,9 +379,9 @@
     const stale = !own.list;
     const staleNote = stale ? `<p class="banner warnbg">⟳ ${T('El hub que está corriendo es de otra versión y no trae el detalle del respaldo. Cierra todas las ventanas del editor y vuelve a abrirlo para actualizarlo.')}</p>` : '';
     const summary = `${staleNote}<div class="bsum">
-      <div class="bstat"><div class="bnum">${stale ? own.sessions || 0 : own.list.length}</div><div class="muted small">${T('mis sesiones respaldadas')}</div></div>
-      <div class="bstat"><div class="bnum ${own.onlyInBackup ? 'warn-txt' : ''}">${own.onlyInBackup || 0}</div><div class="muted small">${T('solo en el respaldo')}</div></div>
-      <div class="bstat"><div class="bnum">${stale ? (cp.owners || []).reduce((n, o) => n + (o.sessions || 0), 0) : (cp.list || []).length}</div><div class="muted small">${T('copias de mi equipo')}</div></div>
+      <div class="bstat"><div class="bnum">${stale ? num(own.sessions) : own.list.length}</div><div class="muted small">${T('mis sesiones respaldadas')}</div></div>
+      <div class="bstat"><div class="bnum ${own.onlyInBackup ? 'warn-txt' : ''}">${num(own.onlyInBackup)}</div><div class="muted small">${T('solo en el respaldo')}</div></div>
+      <div class="bstat"><div class="bnum">${stale ? (cp.owners || []).reduce((n, o) => n + num(o.sessions), 0) : (cp.list || []).length}</div><div class="muted small">${T('copias de mi equipo')}</div></div>
       <div class="bstat grow"><div class="small">${T('Espacio: {v1} de {v2}', { v1: mb(used), v2: mb(max) })}</div><div class="bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>
         <div class="muted small">${own.lastSync ? T('Actualizado {v1}', { v1: ago(own.lastSync) }) : T('Aún no se ha actualizado.')}${own.lastError ? ` · <span class="err">${esc(T(own.lastError))}</span>` : ''}</div></div>
     </div>`;
@@ -370,12 +395,12 @@
     const ownRow = (x) => `<div class="brow">
         <div class="bmain">
           <div class="btitle" title="${esc(x.title)}">${esc(x.title || x.id)}</div>
-          <div class="muted small">${esc(x.project)} · ${x.source === 'cursor' ? 'Cursor' : 'Claude Code'} · ${T('{v1} mensajes', { v1: x.messages })} · ${mb(x.bytes)} · ${T('actualizada {v1}', { v1: ago(x.updatedAt) })}</div>
+          <div class="muted small">${esc(x.project)} · ${x.source === 'cursor' ? 'Cursor' : 'Claude Code'} · ${T('{v1} mensajes', { v1: num(x.messages) })} · ${mb(x.bytes)} · ${T('actualizada {v1}', { v1: ago(x.updatedAt) })}</div>
           <div class="small">${x.goneSince ? `<span class="tag archived">🗄 ${T('solo en respaldo desde {v1}', { v1: ago(x.goneSince) })}</span>` : `<span class="tag ok">✓ ${T('el original sigue en {v1}', { v1: x.source === 'cursor' ? 'Cursor' : 'Claude Code' })}</span>`}${x.shared ? '' : ` <span class="tag">${T('proyecto ya no compartido')}</span>`}${x.hasPrev ? ` <span class="tag" title="${T('Se acortó (p. ej. al restaurar en Cursor) y se guardó la versión anterior')}">${T('con versión anterior')}</span>` : ''}</div>
         </div>
         <div class="bacts">
           <button class="small-btn" data-openin="${esc(x.id)}" data-peer="${esc(meId)}">${T('Ver')}</button>
-          ${cmd('sessionHub.useSessionInAi', `🤖 ${T('Usar en mi IA')}`, 'small-btn', [x.id, 'yo', x.title, x.goneSince ? 'archived' : ''])}
+          ${cmd('sessionHub.useSessionInAi', `🤖 ${T('Usar en mi IA')}`, 'small-btn', [x.id, 'yo', x.title, x.goneSince ? 'archived' : '', x.projectKey || '', x.project || '', x.branch || ''])}
           ${cmd('sessionHub.exportSession', `⤓ ${T('Exportar')}`, 'small-btn', [x.id, meId])}
           ${x.goneSince ? cmd('sessionHub.removeFromBackup', T('Borrar'), 'link danger small', [x.id, null, x.title]) : ''}
         </div>
@@ -400,19 +425,19 @@
     const copyRow = (x) => `<div class="brow">
         <div class="bmain">
           <div class="btitle" title="${esc(x.title)}">${esc(x.title || x.id)}</div>
-          <div class="muted small"><b>${esc(x.owner || '')}</b> · ${esc(x.project || '')} · ${x.source === 'cursor' ? 'Cursor' : 'Claude Code'} · ${T('{v1} mensajes', { v1: x.messages })} · ${mb(x.bytes)}</div>
-          <div class="small"><span class="tag copy">💾 ${T('copiada {v1}', { v1: ago(x.syncedAt) })}</span> <span class="tag ${x.status === 'ok' ? 'ok' : 'archived'}">${T(COPY_STATUS[x.status] || x.status)}</span></div>
+          <div class="muted small"><b>${esc(x.owner || '')}</b> · ${esc(x.project || '')} · ${x.source === 'cursor' ? 'Cursor' : 'Claude Code'} · ${T('{v1} mensajes', { v1: num(x.messages) })} · ${mb(x.bytes)}</div>
+          <div class="small"><span class="tag copy">💾 ${T('copiada {v1}', { v1: ago(x.syncedAt) })}</span> <span class="tag ${x.status === 'ok' ? 'ok' : 'archived'}">${esc(T(COPY_STATUS[x.status] || x.status))}</span></div>
         </div>
         <div class="bacts">
           <button class="small-btn" data-openin="${esc(x.id)}" data-peer="${esc(x.ownerId)}">${T('Ver')}</button>
-          ${cmd('sessionHub.useSessionInAi', `🤖 ${T('Usar en mi IA')}`, 'small-btn', [x.id, x.owner, x.title, 'copy'])}
+          ${cmd('sessionHub.useSessionInAi', `🤖 ${T('Usar en mi IA')}`, 'small-btn', [x.id, x.owner, x.title, 'copy', x.projectKey || '', x.project || '', x.branch || ''])}
           ${cmd('sessionHub.exportSession', `⤓ ${T('Exportar')}`, 'small-btn', [x.id, x.ownerId])}
           ${cmd('sessionHub.removeFromBackup', T('Borrar copia'), 'link danger small', [x.id, x.ownerId, x.title])}
         </div>
       </div>`;
     const ownerChips = owners.length
       ? `<div class="fchips"><button class="fchip ${!ui.copyOwner ? 'on' : ''}" data-cowner="">${T('Todos')} <span class="n">${copyAll.length}</span></button>${owners
-          .map((o) => `<button class="fchip ${ui.copyOwner === o.id ? 'on' : ''}" data-cowner="${esc(o.id)}" title="${o.lastSync ? T('al día {v1}', { v1: ago(o.lastSync) }) : ''}">${esc(o.name || o.id.slice(0, 8))} <span class="n">${o.sessions}</span>${o.paused ? ' ⏸' : ''}</button>`)
+          .map((o) => `<button class="fchip ${ui.copyOwner === o.id ? 'on' : ''}" data-cowner="${esc(o.id)}" title="${o.lastSync ? T('al día {v1}', { v1: ago(o.lastSync) }) : ''}">${esc(o.name || o.id.slice(0, 8))} <span class="n">${num(o.sessions)}</span>${o.paused ? ' ⏸' : ''}</button>`)
           .join('')}</div>`
       : '';
     const sel = owners.find((o) => o.id === ui.copyOwner);
@@ -485,7 +510,7 @@
 
   function sentHtml() {
     return listBox('sent', state.inbox?.sent || [], {
-      render: (m) => `<div class="read small">${T('Para {v1}', { v1: b(m.toName) })}: ${esc(clip(m.text, 160))}<div class="muted">${T(SENT_STATUS[m.status] || m.status)}${m.error ? ' · ' + esc(T(m.error)) : ''} · ${ago(m.updatedAt || m.at)}</div></div>`,
+      render: (m) => `<div class="read small">${T('Para {v1}', { v1: b(m.toName) })}: ${esc(clip(m.text, 160))}<div class="muted">${esc(T(SENT_STATUS[m.status] || m.status))}${m.error ? ' · ' + esc(T(m.error)) : ''} · ${ago(m.updatedAt || m.at)}</div></div>`,
       text: (m) => [m.toName, m.text].join(' '),
       empty: `<p class="empty small">${T('Todavía no has enviado mensajes.')}</p>`,
       placeholder: T('Buscar en los enviados…'),
@@ -497,8 +522,8 @@
 
   function messageHtml(m) {
     const pending = m.status === 'held' || m.status === 'delivered';
-    const long = m.text.length > 280;
-    const notes = [T(MSG_STATUS[m.status] || m.status), m.toSession ? T('para tu sesión {v1}', { v1: b(clip(sessionName(m.toSession), 50)) }) : '', m.replyTo ? T('es una respuesta') : '', m.repliedAt ? T('respondido') : ''].filter(Boolean);
+    const long = String(m.text ?? '').length > 280;
+    const notes = [esc(T(MSG_STATUS[m.status] || m.status)), m.toSession ? T('para tu sesión {v1}', { v1: b(clip(sessionName(m.toSession), 50)) }) : '', m.replyTo ? T('es una respuesta') : '', m.repliedAt ? T('respondido') : ''].filter(Boolean);
     return `<div class="read msgbox ${pending ? 'fresh' : 'dim'}">
       <div><b>${esc(m.fromName)}</b>${m.fromRole ? ` <span class="muted">(${esc(m.fromRole)})</span>` : ''} <span class="muted small" title="${T('Huella de su clave')}: ${esc(m.fingerprint)}">· ${ago(m.receivedAt)}</span></div>
       <div class="text">${esc(long ? clip(m.text, 280) : m.text)}</div>
@@ -521,7 +546,7 @@
       text: (p) => [p.name, p.path, p.audience].join(' '),
       placeholder: T('Buscar proyecto…'),
       render: (p) => `<div class="share ${state.sharing.paused ? 'dim' : ''}">
-          <div><b>${esc(p.name)}</b> <span class="muted small" title="${esc(p.path)}">${T(p.sessions === 1 ? '{v1} sesión' : '{v1} sesiones', { v1: p.sessions })}${p.hidden ? ` · ${T(p.hidden === 1 ? '{v1} oculta' : '{v1} ocultas', { v1: p.hidden })}` : ''}</span></div>
+          <div><b>${esc(p.name)}</b> <span class="muted small" title="${esc(p.path)}">${T(p.sessions === 1 ? '{v1} sesión' : '{v1} sesiones', { v1: num(p.sessions) })}${p.hidden ? ` · ${T(p.hidden === 1 ? '{v1} oculta' : '{v1} ocultas', { v1: num(p.hidden) })}` : ''}</span></div>
           <div class="small">${T('Lo ve: {v1}', { v1: b(p.audience) })}</div>
           <div class="actions">${cmd('sessionHub.editProjectAccess', T('Quién lo ve'), '', [p.path])}${cmd('sessionHub.unshareProject', T('Dejar de compartir'), 'link', [p.path])}</div>
         </div>`,
@@ -539,7 +564,7 @@
     const list = [...state.checks].sort((a, b) => order[a.status] - order[b.status]);
     return `${pageHead(T('Estado'), sub, actions)}
       ${listBox('checks', list, {
-        render: (c) => `<div class="check ${c.status}"><span class="ic" aria-hidden="true">${icon[c.status]}</span><div>${esc(c.label)}${c.hint ? `<div class="muted small">${esc(c.hint)}</div>` : ''}</div></div>`,
+        render: (c) => `<div class="check ${esc(c.status)}"><span class="ic" aria-hidden="true">${icon[c.status] || ''}</span><div>${esc(c.label)}${c.hint ? `<div class="muted small">${esc(c.hint)}</div>` : ''}</div></div>`,
         text: (c) => `${c.label} ${c.hint || ''}`,
         empty: `<p class="empty">${T('Cargando…')}</p>`,
         placeholder: T('Buscar en el estado…'),
@@ -573,7 +598,7 @@
     ].join('');
     const liveHtml = live.length
       ? `<div class="pblock"><div class="plabel">${T('Sesiones abiertas')}</div>${live
-          .map((a) => `<div class="prow" title="${esc(a.title || a.session)}"><span class="dot ${a.status === 'busy' ? 'busy' : 'on'}"></span><b>${esc(a.tool)}</b> · ${esc(a.project)} · ${T(AGENT_STATUS[a.status] || a.status)}${a.title ? `<div class="muted small ellipsis">${esc(a.title)}</div>` : ''}</div>`)
+          .map((a) => `<div class="prow" title="${esc(a.title || a.session)}"><span class="dot ${a.status === 'busy' ? 'busy' : 'on'}"></span><b>${esc(a.tool)}</b> · ${esc(a.project)} · ${esc(T(AGENT_STATUS[a.status] || a.status))}${a.title ? `<div class="muted small ellipsis">${esc(a.title)}</div>` : ''}</div>`)
           .join('')}</div>`
       : '';
     const projects = (m.projects || []).length
@@ -624,7 +649,7 @@
           ${action}
           <span class="meta muted small">
             ${showOwner ? `<b>${esc(s.owner)}</b> · ` : ''}<span class="src ${esc(s.source)}">${srcLabel(s)}</span>
-            ${showProject ? `${esc(s.project)} · ` : ''}${ago(s.updatedAt)} · ${T('{v1} archivos', { v1: s.filesChanged.length })}${s.hidden ? ` · <b>${T('oculta al equipo')}</b>` : ''}${originBadge(s)}
+            ${showProject ? `${esc(s.project)} · ` : ''}${ago(s.updatedAt)} · ${T('{v1} archivos', { v1: (s.filesChanged || []).length })}${(s.subagents || []).length ? ` · 🤖 ${num(s.subagents.length)}` : ''}${s.hidden ? ` · <b>${T('oculta al equipo')}</b>` : ''}${originBadge(s)}${showProject && relationOf(s) ? ` ${relationBadge(relationOf(s))}` : ''}
             ${readers.length ? `<br><span class="seen">👁 ${readers.map((r) => esc(r.who)).join(', ')}</span>` : ''}
           </span>
         </div>`;
@@ -648,7 +673,9 @@
       if ((s.updatedAt || '') > g.latest) g.latest = s.updatedAt || '';
     }
     for (const g of groups.values()) g.sessions.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
-    const out = [...groups.values()].sort((a, b) => b.latest.localeCompare(a.latest));
+    // El proyecto actual va primero; el resto, por la actividad más reciente.
+    const here = (g) => (mode === 'project' && relationOf(g.sessions[0]) === 'current' ? 1 : 0);
+    const out = [...groups.values()].sort((a, b) => here(b) - here(a) || b.latest.localeCompare(a.latest));
     if (mode === 'project') {
       // Un mismo repo con nombres distintos se muestra "web-app / frontend"; dos proyectos distintos con
       // el mismo nombre se distinguen por su dueño: "web-app · Ana" y "web-app · Luis".
@@ -670,7 +697,7 @@
     return `<section class="group">
       <button class="group-head" data-group="${esc(g.key)}" aria-expanded="${open}">
         <span class="chev" aria-hidden="true">${open ? '▾' : '▸'}</span>
-        <span class="g-name">${esc(g.label)}</span>
+        <span class="g-name">${esc(g.label)}</span>${mode === 'project' ? relationBadge(relationOf(g.sessions[0])) : ''}
         <span class="muted small g-sub">${count}${who ? ` · ${esc(who)}` : ''} · ${ago(g.latest)}</span>
       </button>
       ${open ? shown.map(cardHtml).join('') + (rest > 0 ? `<button class="link more" data-more="${esc(g.key)}">${T('Ver {v1} más', { v1: rest })}</button>` : all && g.sessions.length > GROUP_PREVIEW ? `<button class="link more" data-more="${esc(g.key)}">${T('Ver menos')}</button>` : '') : ''}
@@ -685,6 +712,7 @@
         following: 'Sigue a una persona o sesión con ☆ para verla aquí.',
         team: state.members.some((m) => !m.self && m.online) ? 'Tus compañeros no tienen sesiones compartidas contigo en este rango.' : 'No hay compañeros en línea. Revisa la pestaña “Estado”.',
       };
+      if (scopeHere()) return `<p class="empty">${T('No hay sesiones de este proyecto ({v1}) en este rango.', { v1: esc(hereFolders().map((f) => f.name).join(', ')) })} <button class="link" data-scope="all">${T('Ver todos los proyectos')}</button></p>`;
       return `<p class="empty">${T(msg[ui.tab])}</p>`;
     }
     const mode = groupMode();
@@ -708,9 +736,10 @@
     const hidden = mine && state.mine.find((x) => x.id === s.id)?.hidden;
     const readers = mine ? readersOf(s.id) : [];
     const followed = state.follows.sessions.includes(s.id);
+    const files = s.filesChanged || []; // un hub de otra versión puede no mandarlo
     return `<h2>${esc(s.title)}</h2>
       <div class="muted small"><b>${esc(s.owner)}</b> · <span class="src ${esc(s.source)}">${srcLabel(s)}</span>
-        ${esc(s.project)}${s.branch ? ` · ${T('rama')} <code>${esc(s.branch)}</code>` : ''} · ${T('{v1} mensajes', { v1: s.messages })} · ${T('actualizada {v1}', { v1: when(s.updatedAt) })}</div>
+        ${esc(s.project)}${s.branch ? ` · ${T('rama')} <code>${esc(s.branch)}</code>` : ''} · ${T('{v1} mensajes', { v1: num(s.messages) })} · ${T('actualizada {v1}', { v1: esc(when(s.updatedAt)) })}</div>
       <div class="actions">
         ${
           mine
@@ -718,23 +747,32 @@
             : `<button data-follow="session" data-id="${esc(s.id)}">${followed ? `★ ${T('Siguiendo')}` : `☆ ${T('Seguir esta sesión')}`}</button>`
         }
         <button data-open="${esc(s.id)}" data-peer="${esc(s.ownerId)}">⟳ ${T('Recargar')}</button>
-        ${cmd('sessionHub.useSessionInAi', `🤖 ${T('Usar en mi IA')}`, 'primary', [s.id, mine ? 'yo' : s.owner, s.title, s.copy ? 'copy' : s.archived ? 'archived' : ''])}
+        ${cmd('sessionHub.useSessionInAi', `🤖 ${T('Usar en mi IA')}`, 'primary', [s.id, mine ? 'yo' : s.owner, s.title, s.copy ? 'copy' : s.archived ? 'archived' : '', s.projectKey || '', s.project || '', s.branch || ''])}
         ${cmd('sessionHub.exportSession', `⤓ ${T('Exportar')}`, '', [s.id, s.ownerId])}
         ${(s.archived && mine) || s.copy ? cmd('sessionHub.removeFromBackup', T('Borrar del respaldo'), 'link danger', [s.id, mine ? null : s.ownerId, s.title]) : ''}
       </div>
       ${s.copy ? `<p class="banner-inline">💾 ${T('Copia local guardada {v1}: {v2} no está conectado. Puede no tener lo último.', { v1: ago(s.copy.syncedAt), v2: esc(s.owner) })}</p>` : ''}
       ${s.archived ? `<p class="banner-inline">🗄 ${T('El original ya no existe en {v1}; se muestra desde el respaldo de {v2}.', { v1: srcLabel(s), v2: esc(s.owner) })}</p>` : ''}
+      ${s.parentId ? `<p class="banner-inline">🤖 ${T('Subagente ({v1}) de otra sesión.', { v1: esc(s.subagentType || T('subagente')) })} <button class="link" data-open="${esc(s.parentId)}" data-peer="${esc(s.ownerId)}">← ${T('Volver a la sesión principal')}</button></p>` : ''}
+      ${(s.subagents || []).length ? `<details open><summary>🤖 ${T('Subagentes ({v1})', { v1: s.subagents.length })}</summary>${s.subagents.map((x) => `<div class="small"><button class="link" data-open="${esc(x.id)}" data-peer="${esc(s.ownerId)}">${esc(x.description || x.type || T('subagente'))}</button> <span class="muted">${esc(x.type || '')} · ${T('{v1} mensajes', { v1: num(x.messageCount) })}</span></div>`).join('')}</details>` : ''}
       ${hidden ? `<p class="small warn-txt">${T('Esta sesión está oculta: nadie del equipo la ve.')}</p>` : ''}
       ${readers.length ? `<p class="small seen">👁 ${T('Leída por: {v1}', { v1: readers.map((r) => `${esc(r.who)} (${ago(r.at)}${r.client ? ', ' + esc(r.client) : ''})`).join(' · ') })}</p>` : ''}
-      ${s.filesChanged.length ? `<details><summary>${T('Archivos modificados ({v1})', { v1: s.filesChanged.length })}</summary><pre>${s.filesChanged.map(esc).join('\n')}</pre></details>` : ''}
-      ${s.omittedMessages ? `<p class="muted small">${T('({v1} mensajes anteriores omitidos)', { v1: s.omittedMessages })}</p>` : ''}
-      ${s.conversation
+      ${files.length ? `<details><summary>${T('Archivos modificados ({v1})', { v1: files.length })}</summary><pre>${files.map((f) => esc(f) + ((s.filesByShell || []).includes(f) ? `  (${T('por comando')})` : '')).join('\n')}</pre></details>` : ''}
+      ${s.omittedMessages ? `<p class="muted small">${T('({v1} mensajes anteriores omitidos)', { v1: num(s.omittedMessages) })}</p>` : ''}
+      ${(s.conversation || [])
         .map(
-          (m) => `<div class="msg ${m.role}"><div class="muted small">${m.role === 'user' ? esc(s.owner) : T('IA')} · ${when(m.at)}</div>${esc(m.text)}${
-            m.actions.length ? '<div class="acts">' + m.actions.map((a) => (a.kind === 'edit' ? '✎ ' : '$ ') + esc(a.target)).join('<br>') + '</div>' : ''
+          (m) => `<div class="msg ${esc(m.role)}"><div class="muted small">${m.role === 'user' ? esc(s.owner) : T('IA')} · ${esc(when(m.at))}</div>${esc(m.text)}${
+            (m.actions || []).length ? '<div class="acts">' + m.actions.map(actionHtml).join('<br>') + '</div>' : ''
           }</div>`,
         )
         .join('')}`;
+  }
+
+  // Acción de un mensaje: edición, comando o subagente (este último se abre con un clic).
+  function actionHtml(a) {
+    if (a.kind === 'agent') return a.subagent ? `<button class="link" data-open="${esc(a.subagent)}" data-peer="${esc(ui.detail?.ownerId || '')}">🤖 ${esc(a.target)}</button>` : `🤖 ${esc(a.target)}`;
+    if (a.kind === 'edit' && a.via === 'shell') return `<span title="${T('Cambiado por un comando de terminal')}">✎ ${esc(a.target)} <span class="muted">(${T('por comando')})</span></span>`;
+    return (a.kind === 'edit' ? '✎ ' : '$ ') + esc(a.target);
   }
 
   function open(id, peer) {
@@ -748,7 +786,7 @@
   }
 
   document.addEventListener('click', (e) => {
-    const t = e.target.closest('[data-page],[data-follow],[data-cmd],[data-act],[data-helpsec],[data-view],[data-bfilter],[data-cowner],[data-openin],[data-pfilter],[data-group],[data-more],[data-groups],[data-tab],[data-open],[data-person]');
+    const t = e.target.closest('[data-scope],[data-page],[data-follow],[data-cmd],[data-act],[data-helpsec],[data-view],[data-bfilter],[data-cowner],[data-openin],[data-pfilter],[data-group],[data-more],[data-groups],[data-tab],[data-open],[data-person]');
     if (!t) return;
     if (t.dataset.group || t.dataset.more || t.dataset.groups) {
       if (t.dataset.group) ui.collapsed.has(t.dataset.group) ? ui.collapsed.delete(t.dataset.group) : ui.collapsed.add(t.dataset.group);
@@ -781,6 +819,11 @@
     if (t.dataset.openin) {
       setView('sessions');
       return open(t.dataset.openin, t.dataset.peer);
+    }
+    if (t.dataset.scope) {
+      ui.scope = t.dataset.scope === 'all' ? 'all' : 'here';
+      persist();
+      return render();
     }
     if (t.dataset.pfilter) {
       ui.peopleFilter = t.dataset.pfilter;
@@ -865,6 +908,14 @@
     }
   });
   document.addEventListener('change', (e) => {
+    if (e.target.id === 'scope') {
+      ui.scope = e.target.value === 'all' ? 'all' : 'here';
+      ui.page[ui.tab] = 0;
+      persist();
+      const list = document.getElementById('list');
+      if (list) list.innerHTML = listHtml();
+      return;
+    }
     if (e.target.id === 'group') {
       ui.group = e.target.value;
       ui.page[ui.tab] = 0;
