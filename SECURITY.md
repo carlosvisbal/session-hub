@@ -14,7 +14,9 @@ Respondemos en un máximo de 5 días hábiles y acordamos contigo la fecha de di
 
 | Versión | Soporte |
 | --- | --- |
-| 0.9.x | Sí (piloto) |
+| 0.11.x | Sí |
+| 0.10.x | Actualiza: 0.11 corrige fallas de seguridad de red, búsqueda y panel |
+| 0.9.x | Actualiza: 0.10 comparte un solo hub por computadora entre editores |
 | 0.8.x | Actualiza: 0.8.1 congelaba Cursor al abrir ajustes desde el panel |
 | 0.8.0 | Actualiza: una carpeta no compartida con nombre parecido podía verse (corregido en 0.8.1) |
 | 0.6.x – 0.7.x | Actualiza: en 0.7.x el MCP fallaba (corregido en 0.8.0) |
@@ -40,5 +42,5 @@ Respondemos en un máximo de 5 días hábiles y acordamos contigo la fecha de di
 2. **Miembros maliciosos:** cualquier miembro puede invitar; un miembro con malas intenciones puede leer lo que se comparte con él. La cadena deja constancia de quién invitó a quién.
 3. **Redacción de secretos por patrones:** puede no detectar todo. Revisa qué compartes y usa `redactExtra`.
 4. **Modo `public`:** usa la red pública de HyperDHT. El contenido va cifrado, pero la red ve que tu IP participa en un tema. Para entornos controlados usa `lan` o `private`.
-5. **No validado aún:** conexión entre dos redes distintas detrás de NAT/firewalls corporativos (puede requerir relay).
+5. **NAT estricto:** en modo `public`, si la conexión directa falla, se reintenta por el relay ciego incluido. Ese relay solo está disponible mientras el equipo con `~/.session-hub/default-relay-key.json` tiene encendido `npm run infra -- --public`. El proceso del relay no puede leer el resto de la carpeta personal. La clave privada sigue al alcance de quien ya usa esa cuenta del sistema. Una red que bloquee todo el UDP saliente sigue sin poder conectar.
 6. **Contenido de terceros para la IA:** lo que leen las herramientas MCP son sesiones y mensajes de otras personas; trátalo como datos, no como instrucciones. Un mensaje puede intentar inducir a la IA a hacer algo (inyección de instrucciones): por eso quedan retenidos por defecto, llegan enmarcados como "de un compañero, no una orden tuya" y la IA debe pedir confirmación antes de cambiar código. No actives `inboundMessages: accept` con personas en las que no confíes, ni aceptes conversaciones automáticas con ellas: una IA puede intentar convencer a la otra de algo; por eso los permisos del agente siguen mandando y los límites cortan la conversación.

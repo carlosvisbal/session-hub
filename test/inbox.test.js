@@ -83,3 +83,53 @@ test('cola para desconectados y persistencia en disco (0600)', () => {
   assert.equal(saved.received[0].text, 'cuando vuelvas');
   if (process.platform !== 'win32') assert.equal(fs.statSync(ana.file).mode & 0o777, 0o600);
 });
+
+test('un mensaje local solo lo recibe la sesión a la que va', () => {
+  const { carlos } = pair();
+  const a = carlos.inbox.deliverLocal({ text: 'para la otra pestaña', toSession: 'claude:dos', conv: 'conv-1', fromName: 'Carlos', fromRole: 'backend' });
+  carlos.inbox.deliverLocal({ text: 'respuesta', toSession: 'claude:uno', conv: 'conv-1', fromName: 'Carlos', fromRole: 'backend' });
+  const forTwo = carlos.inbox.takeConv('conv-1', 'claude:dos');
+  assert.deepEqual(forTwo.map((m) => m.id), [a.id]);
+  assert.equal(forTwo[0].local, true);
+  assert.equal(forTwo[0].status, 'read');
+  const forOne = carlos.inbox.takeConv('conv-1', 'claude:uno');
+  assert.equal(forOne.length, 1);
+  assert.equal(forOne[0].text, 'respuesta');
+  assert.equal(carlos.inbox.takeConv('conv-1', 'claude:tres').length, 0);
+});
+
+test('un mensaje de conversación no sale por check_inbox', () => {
+  const { carlos, ana } = pair({ policy: 'accept' });
+  const doc = carlos.inbox.compose({ to: ana.kp.publicKey, text: 'hola de bandeja' });
+  ana.inbox.receive(doc, carlos.peer);
+  const local = ana.inbox.deliverLocal({ text: 'para el otro chat', toSession: 'claude:dos', conv: 'conv-1', fromName: 'Carlos', fromRole: 'backend' });
+  const r = ana.inbox.takeForAi();
+  assert.deepEqual(r.messages.map((m) => m.id), [doc.body.id]);
+  assert.equal(ana.inbox.get(local.id).status, 'delivered', 'la conversación sigue para el hook');
+});
+
+test('un mensaje de conversación leído sin entregar vuelve a estar listo', () => {
+  const { carlos } = pair();
+  const a = carlos.inbox.deliverLocal({ text: 'conversen', toSession: 'cursor:este', conv: 'conv-2', fromName: 'Carlos', fromRole: 'backend' });
+  carlos.inbox.setStatus(a.id, 'read');
+  const back = carlos.inbox.reviveConv('conv-2', 'cursor:este');
+  assert.equal(back.id, a.id);
+  assert.equal(back.status, 'delivered');
+  assert.equal(carlos.inbox.reviveConv('conv-2', 'cursor:este'), null, 'ya hay uno listo: no se duplica');
+  carlos.inbox.takeConv('conv-2', 'cursor:este');
+  assert.equal(carlos.inbox.reviveConv('conv-2', 'cursor:otro'), null);
+});
+
+test('forget: lo pendiente de quien ya no está no llega a la IA, y lo mío en cola para esa persona vence', () => {
+  const { carlos, ana } = pair({ policy: 'accept' });
+  const doc = carlos.inbox.compose({ to: ana.kp.publicKey, text: 'haz esto' });
+  ana.inbox.receive(doc, carlos.peer);
+  const out = ana.inbox.compose({ to: carlos.kp.publicKey, text: 'respuesta' });
+  ana.inbox.recordSent(out, 'Carlos');
+  ana.inbox.markSent(out.body.id, 'queued');
+  assert.equal(ana.inbox.forget(carlos.kp.publicKey), 2);
+  assert.equal(ana.inbox.takeForAi().messages.length, 0, 'check_inbox ya no lo trae');
+  assert.equal(ana.inbox.list().unread, 0);
+  assert.equal(ana.inbox.list().sent[0].status, 'expired');
+  assert.deepEqual(ana.inbox.queuedFor(carlos.kp.publicKey), [], 'ya no se reenvía');
+});

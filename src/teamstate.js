@@ -2,7 +2,7 @@
 // Copyright (C) 2026 Los autores de Session Hub (ver AUTHORS)
 // Estado del equipo de esta instalación, guardado en disco (0600):
 //   mis claves · el equipo y mi cadena · miembros conocidos · invitaciones usadas ·
-//   expulsiones · mis bloqueos personales · direcciones de arranque conocidas.
+//   expulsiones · salidas · mis bloqueos personales · direcciones de arranque conocidas.
 import fs from 'node:fs';
 import path from 'node:path';
 import {
@@ -14,19 +14,31 @@ import {
   foundTeam,
   generateKeyPair,
   signAdmission,
+  signDeparture,
   signRevocation,
   verifyChain,
+  verifyDeparture,
   verifyRevocation,
 } from './identity.js';
 
-const empty = () => ({ v: 2, keyPair: null, team: null, members: {}, profiles: {}, usedInvites: {}, redeemed: {}, revocations: {}, blocked: [], addrs: [], memberAddrs: {} });
+const empty = () => ({ v: 2, keyPair: null, team: null, members: {}, profiles: {}, usedInvites: {}, redeemed: {}, revocations: {}, departures: {}, blocked: [], addrs: [], memberAddrs: {} });
 
 export function openTeamState(file) {
   let s = empty();
-  if (fs.existsSync(file)) s = { ...s, ...JSON.parse(fs.readFileSync(file, 'utf8')) };
+  // Si el archivo está dañado no se pisa: tiene la clave privada (la identidad). Se avisa y se para.
+  if (fs.existsSync(file)) {
+    try {
+      s = { ...s, ...JSON.parse(fs.readFileSync(file, 'utf8')) };
+    } catch {
+      throw new Error(`El archivo del equipo está dañado (${file}); no se modifica para no perder tu identidad.`); // se traduce por plantilla
+    }
+  }
+  // Escritura atómica (temporal + renombrar): un corte a mitad nunca deja el archivo a medias.
   const save = () => {
     fs.mkdirSync(path.dirname(file), { recursive: true });
-    fs.writeFileSync(file, JSON.stringify(s, null, 2), { mode: 0o600 });
+    const tmp = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, JSON.stringify(s, null, 2), { mode: 0o600 });
+    fs.renameSync(tmp, file);
   };
   if (!s.keyPair) {
     s.keyPair = generateKeyPair();
@@ -35,6 +47,13 @@ export function openTeamState(file) {
 
   const me = () => s.keyPair.publicKey;
   const isRevoked = (pub) => !!s.revocations[pub];
+  // Fuera del equipo: expulsado, o invitado (directa o indirectamente) por alguien expulsado.
+  const isCutOff = (pub) => {
+    if (!s.team) return false;
+    if (isRevoked(pub)) return true;
+    const chain = pub === me() ? s.team.chain : s.members[pub];
+    return !!chain && verifyChain(s.team.id, chain).ancestors?.some(isRevoked);
+  };
 
   // Registra un miembro verificado (propio o recibido por chisme de otro hub).
   function remember(v, chain) {
@@ -60,6 +79,7 @@ export function openTeamState(file) {
       s.usedInvites = {};
       s.redeemed = {};
       s.revocations = {};
+      s.departures = {};
       save();
       return s.team;
     },
@@ -91,6 +111,7 @@ export function openTeamState(file) {
       s.usedInvites = {};
       s.redeemed = {};
       s.revocations = {};
+      s.departures = {};
       s.addrs = [...new Set([...(inv.bootstrap || []), ...s.addrs])];
       s.memberAddrs = { [inviter.member]: inv.bootstrap || [] }; // para marcarle directo al entrar
       save();
@@ -105,6 +126,7 @@ export function openTeamState(file) {
       s.usedInvites = {};
       s.redeemed = {};
       s.revocations = {};
+      s.departures = {};
       s.addrs = [];
       s.memberAddrs = {};
       save();
@@ -182,6 +204,27 @@ export function openTeamState(file) {
       return true;
     },
 
+    // Aviso de que salgo, para enviarlo antes de irme (null si no tengo equipo).
+    departure: () => (s.team ? signDeparture(s.keyPair, s.team.id) : null),
+
+    // Salidas recibidas (directas o por chisme): true solo la primera vez que llega una válida.
+    applyDeparture(doc) {
+      const who = doc?.body?.member;
+      if (!s.team || !who || who === me() || !verifyDeparture(s.team.id, doc)) return false;
+      if (s.departures[who] && s.departures[who].body.at >= doc.body.at) return false;
+      s.departures[who] = doc;
+      save();
+      return api.hasLeft(who); // un aviso viejo de alguien que ya volvió no borra nada
+    },
+    // Salió y no volvió a entrar: si después se unió con otra invitación, su certificado de miembro
+    // es posterior al aviso (las dos fechas son del reloj de esa persona).
+    hasLeft(pub) {
+      const d = s.departures?.[pub];
+      if (!d) return false;
+      const cert = (s.members[pub] || []).findLast((c) => c?.body?.type === 'member' && c.body.member === pub);
+      return !cert || String(cert.body.issued) <= String(d.body.at);
+    },
+
     // Bloqueo personal: solo afecta a mi hub; el resto del equipo no se entera.
     setBlocked(pub, blocked) {
       s.blocked = blocked ? [...new Set([...s.blocked, pub])] : s.blocked.filter((x) => x !== pub);
@@ -198,6 +241,7 @@ export function openTeamState(file) {
     },
     profileOf: (pub) => s.profiles[pub] || null,
     isRevoked,
+    isCutOff,
 
     // Direcciones "host:puerto" conocidas: en general y por miembro (para marcarle directo).
     learnAddrs(addrs = [], pub = null) {
@@ -222,7 +266,7 @@ export function openTeamState(file) {
     },
 
     gossip() {
-      return { members: Object.values(s.members).slice(0, 300), revocations: Object.values(s.revocations) };
+      return { members: Object.values(s.members).slice(0, 300), revocations: Object.values(s.revocations), departures: Object.values(s.departures || {}).slice(0, 300) };
     },
   };
   return api;

@@ -1,7 +1,7 @@
 {
   "name": "session-hub",
   "displayName": "Session Hub",
-  "version": "0.10.1",
+  "version": "0.12.0",
   "description": "%ext.description%",
   "publisher": "carlosvisbal",
   "author": {
@@ -57,7 +57,7 @@
     "package": "vsce package",
     "licenses": "node scripts/third-party-notices.mjs",
     "test": "node --test test/*.test.js",
-    "test:e2e": "node test/e2e/two-hubs.mjs && node test/e2e/relay.mjs && node test/e2e/backup.mjs && node test/e2e/conversation.mjs",
+    "test:e2e": "node test/e2e/two-hubs.mjs && node test/e2e/relay.mjs && node test/e2e/backup.mjs && node test/e2e/conversation.mjs && node test/e2e/project-scope.mjs && node test/e2e/team-exit.mjs",
     "test:ext": "node test/panel.mjs && node test/extension/flows.mjs && node test/extension/cursor.mjs && node test/extension/upgrade.mjs && node test/extension/conversation.mjs && node test/extension/runtime.mjs && node test/extension/machine.mjs",
     "infra": "node --disable-warning=ExperimentalWarning src/infra.js"
   },
@@ -93,6 +93,11 @@
       {
         "command": "sessionHub.shareWorkspace",
         "title": "%cmd.shareWorkspace%",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.linkProject",
+        "title": "%cmd.linkProject%",
         "category": "Session Hub"
       },
       {
@@ -232,6 +237,11 @@
         "category": "Session Hub"
       },
       {
+        "command": "sessionHub.restoreIgnoredBackup",
+        "title": "%cmd.restoreIgnoredBackup%",
+        "category": "Session Hub"
+      },
+      {
         "command": "sessionHub.removeFromBackup",
         "title": "%cmd.removeFromBackup%",
         "category": "Session Hub"
@@ -254,6 +264,11 @@
       {
         "command": "sessionHub.useSessionInAi",
         "title": "%cmd.useSessionInAi%",
+        "category": "Session Hub"
+      },
+      {
+        "command": "sessionHub.continueSessionInAi",
+        "title": "%cmd.continueSessionInAi%",
         "category": "Session Hub"
       },
       {
@@ -344,6 +359,10 @@
         },
         {
           "command": "sessionHub.useSessionInAi",
+          "when": "false"
+        },
+        {
+          "command": "sessionHub.continueSessionInAi",
           "when": "false"
         },
         {
@@ -522,6 +541,10 @@
                   "*"
                 ],
                 "description": "%cfg.sharedProjects.allow%"
+              },
+              "link": {
+                "type": "string",
+                "description": "%cfg.sharedProjects.link%"
               }
             },
             "required": [
@@ -665,6 +688,11 @@
           ],
           "description": "%cfg.inboundMessages%"
         },
+        "sessionHub.startContext": {
+          "type": "boolean",
+          "default": true,
+          "description": "%cfg.startContext%"
+        },
         "sessionHub.notifyMessages": {
           "type": "boolean",
           "default": true,
@@ -724,17 +752,10 @@
         },
         "sessionHub.conversationTurns": {
           "type": "number",
-          "default": 6,
+          "default": 100,
           "minimum": 1,
-          "maximum": 20,
+          "maximum": 100,
           "description": "%cfg.conversationTurns%"
-        },
-        "sessionHub.conversationMinutes": {
-          "type": "number",
-          "default": 10,
-          "minimum": 1,
-          "maximum": 60,
-          "description": "%cfg.conversationMinutes%"
         }
       }
     }

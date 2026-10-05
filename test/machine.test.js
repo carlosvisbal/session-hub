@@ -132,6 +132,26 @@ test('restos de un intento anterior sin terminar se apartan, no se borran', asyn
   assert.ok(aside && fs.existsSync(path.join(path.dirname(dir), aside, 'archive', 'a.gz')));
 });
 
+test('una copia larga renueva el candado: el otro editor no la toma por abandonada', async () => {
+  const dir = path.join(tmp(), 'hub');
+  let runs = 0;
+  const job = (ms) =>
+    m.createOnce(
+      dir,
+      async (stage) => {
+        runs++;
+        await new Promise((r) => setTimeout(r, ms));
+        writeConf(stage);
+      },
+      { staleMs: 400 },
+    );
+  const first = job(1500); // dura casi 4 veces lo que se considera abandonado
+  await new Promise((r) => setTimeout(r, 100));
+  const results = await Promise.all([first, job(0)]);
+  assert.equal(runs, 1, 'solo migra uno');
+  assert.deepEqual(results, ['done', 'ready']);
+});
+
 test('mientras otro editor vivo migra, no se le quita el candado', async () => {
   const dir = path.join(tmp(), 'hub');
   fs.writeFileSync(`${dir}.lock`, String(process.pid)); // vivo
@@ -166,12 +186,25 @@ test('ajustes comunes y comparación de versiones', () => {
   assert.equal(s.values.paused, true);
   assert.equal(s.by, 'Cursor');
   assert.ok(m.same([{ path: '/p' }], s.values.sharedProjects));
+  assert.deepEqual(s.removed, {}, 'sin claves restablecidas');
+  m.writeSettings(dir, { paused: true }, 'Code', { sharedProjects: '2026-01-01T00:00:00.000Z' });
+  assert.equal(m.readSettings(dir).removed.sharedProjects, '2026-01-01T00:00:00.000Z', 'se guardan las claves restablecidas');
   assert.ok(!m.same(undefined, false));
   assert.ok(m.SHARED_SETTINGS.includes('port') && !m.SHARED_SETTINGS.includes('language'), 'el idioma es de cada editor');
   assert.ok(m.compareVersions('0.9.3', '0.10.0') < 0);
   assert.ok(m.compareVersions('0.10.0', '0.9.3') > 0);
   assert.equal(m.compareVersions('0.10.0', '0.10.0'), 0);
   assert.ok(m.compareVersions('?', '0.10.0') < 0, 'un hub sin versión se considera viejo');
+});
+
+test('la carpeta de datos legible para otros se cierra', () => {
+  const dir = tmp();
+  fs.chmodSync(dir, 0o755);
+  m.sealDir(dir);
+  assert.equal(fs.statSync(dir).mode & 0o777, 0o700);
+  m.sealDir(dir);
+  assert.equal(fs.statSync(dir).mode & 0o777, 0o700, 'si ya está cerrada, se queda así');
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test('rutas de Windows: mismas carpetas aunque cambien las mayúsculas', { skip: process.platform !== 'win32' }, () => {

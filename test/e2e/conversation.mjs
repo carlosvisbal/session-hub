@@ -86,6 +86,9 @@ try {
   assert.match(a1.followup_message, /Conversación automática con Carlos · vuelta 1 de 3/);
   assert.match(a1.followup_message, /¿Cómo envía el formulario los adjuntos\?/);
   assert.match(a1.followup_message, /send_message/);
+  assert.match(a1.followup_message, /claude:c1/);
+  assert.match(a1.followup_message, /cursor:a1/);
+  assert.match(a1.followup_message, new RegExp(conv.id));
   assert.equal(a1.decision, 'block', 'también en el formato de Claude Code');
   step('hook de Cursor (stop) → followup_message con la pregunta de Carlos, enmarcada');
 
@@ -150,7 +153,7 @@ try {
   assert.match(viaAi.estado, /confirmarla/);
   await wait(1500);
   assert.ok(!(await call('ana', 'GET', '/api/conv')).some((c) => c.id === viaAi.id), 'sin confirmar, Ana no recibe nada');
-  await call('carlos', 'POST', '/api/conv/confirm', { id: viaAi.id });
+  await call('carlos', 'POST', '/api/conv/confirm', { id: viaAi.id, mine: 'claude:c9' });
   await until(async () => (await call('ana', 'GET', '/api/conv')).some((c) => c.id === viaAi.id), 10000, 'invitación confirmada');
   step('start_conversation por MCP: la invitación solo sale cuando la persona la confirma');
 

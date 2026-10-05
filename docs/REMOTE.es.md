@@ -37,6 +37,8 @@ flowchart LR
 
 El contenido va siempre cifrado de extremo a extremo. La red pública solo ve que tu IP participa en un "tema"; para no exponer ni eso, usa `private`.
 
+Si la conexión directa no sale (NAT estricto), **no hace falta configurar nada**: en modo `public` Session Hub reintenta solo por el relay ciego que trae. Una clave en `sessionHub.relay` la reemplaza. Ese relay no depende del editor: en el equipo que tiene `~/.session-hub/default-relay-key.json` se deja encendido con `npm run infra -- --public` (un servicio que sigue aunque cierres el editor). El relay no puede leer nada. Si ese equipo está apagado, no hay relay.
+
 ### Con servidor propio (`private`)
 En una máquina con IP pública o de VPN (un VPS pequeño basta), con el código de Session Hub:
 
@@ -74,7 +76,7 @@ Abre *Estado*. Cada problema aparece con su causa y qué hacer:
 | --- | --- | --- |
 | UDP bloqueado | El firewall no deja salir UDP | Pedir a TI que permita UDP saliente (o el puerto `49737`) |
 | No se alcanza el servidor de arranque | Modo `private` y el servidor está apagado, o su puerto está cerrado | Encender `npm run infra` y abrir sus puertos UDP |
-| NAT estricto / fallo de perforación | Los dos routers no permiten la conexión directa | Configurar un relay (`sessionHub.relay`) o usar VPN |
+| NAT estricto / fallo de perforación | Los dos routers no permiten la conexión directa | En modo `public` el relay incluido se usa solo. Si no responde, revisar que el equipo que lo hospeda esté encendido, o poner `sessionHub.relay` |
 | Relay inalcanzable | El relay está apagado o bloqueado | Revisar el servidor del relay y su puerto UDP |
 | Modo de red distinto | Uno usa `lan` y otro `public`, por ejemplo | Poner el mismo modo en todos |
 | Compañero no encontrado | Su editor está cerrado o su red lo bloquea | Que abra el editor y revise su *Estado* |

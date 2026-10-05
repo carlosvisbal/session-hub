@@ -59,12 +59,21 @@ try {
 
   // ---------- "Pasar a mi IA": qué chat ----------
   const send = async (extra = {}) => (await call('ana', 'POST', '/api/messages/send', { to: 'Carlos', text: 'hola ' + Math.random(), ...extra })).id;
-  const lastChat = () => S.executed.filter((e) => ['claude-vscode.editor.open', 'workbench.action.chat.open'].includes(e.id)).at(-1);
+  const lastChat = () => S.executed.filter((e) => ['claude-vscode.editor.open', 'workbench.action.chat.open', 'composer.openComposer'].includes(e.id)).at(-1);
   S.commands = ['workbench.action.chat.open', 'claude-vscode.editor.open'];
   S.tabs = [{ isActive: true, tabs: [{ isActive: true, input: { viewType: 'mainThreadWebview-claudeVSCodePanel' } }] }];
   await cmds['sessionHub.handoffMessage'](await send({ toSession: 'claude:s1' }));
   assert.equal(lastChat().id, 'claude-vscode.editor.open');
   assert.equal(lastChat().a[0], 's1');
+  S.commands = ['workbench.action.chat.open', 'claude-vscode.editor.open', 'composer.openComposer'];
+  await cmds['sessionHub.handoffMessage'](await send({ toSession: 'cursor:comp-1' }));
+  assert.equal(lastChat().id, 'composer.openComposer', 'un chat de Cursor se abre en esa sesión, no en un chat nuevo');
+  assert.equal(lastChat().a[0], 'comp-1');
+  S.commands = ['workbench.action.chat.open'];
+  const before = S.executed.length;
+  await cmds['sessionHub.handoffMessage'](await send({ toSession: 'cursor:comp-2' }));
+  assert.ok(!S.executed.slice(before).some((e) => e.id === 'workbench.action.chat.open'), 'en VS Code no se abre otro chat para una sesión de Cursor');
+  S.commands = ['workbench.action.chat.open', 'claude-vscode.editor.open'];
   S.tabs = [];
   let asked = 0;
   S.quickPick = (items) => (asked++, items.find((x) => x.k === 'editor'));

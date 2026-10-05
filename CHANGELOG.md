@@ -2,6 +2,87 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versiones con [SemVer](https://semver.org/lang/es/).
 
+## [0.12.0] — 2026-10-05
+
+### Añadido
+- **Continuar una sesión antigua sin gastar tokens.** Retomar una sesión que lleva más de una hora quieta obliga a la IA a reprocesar toda la conversación, porque su caché del prompt ya venció. Ahora, en *Mis sesiones*, el botón **⚡ Continuar sin gastar tokens** deja escrito en tu chat un pedido para que una conversación nueva lea solo un extracto corto de la sesión vieja: objetivo, últimas peticiones y respuestas, archivos cambiados y últimos comandos (unos 5.000 tokens en vez de cientos de miles). Incluye un **mapa de toda la sesión** (cada petición en una línea, con su número de mensaje): la IA lee con `get_session` solo el tramo que necesita y no pierde detalle. El panel avisa cuando una sesión lleva más de una hora sin actividad.
+- **Herramienta MCP `continue_session`** y atajo `/continue_session`: lo mismo desde la IA. Solo sesiones propias, con los secretos ocultos; si falta un detalle, la IA lo lee por partes con `get_session`.
+- **El respaldo dice de quién es cada sesión y de qué proyecto.** En la pestaña *Respaldo*, cada fila muestra el dueño, el proyecto y la rama, y marca si es del proyecto abierto («este proyecto») o de otro repositorio con el mismo nombre. Así no se confunde una copia de un compañero con una sesión propia.
+- **Borrar del respaldo, con confirmación, cualquier sesión.** Antes solo se podían borrar las que ya no existían en su herramienta. Ahora también las que siguen en Claude Code o Cursor: se borra solo el respaldo (el original no se toca) y no se vuelve a respaldar hasta pulsar **Volver a respaldar las borradas a mano**.
+- Manual, ayuda del panel y README explican qué es la caché del prompt y por qué conviene.
+
+### Corregido
+- **Al salir del equipo o ser expulsado, nadie conserva tus copias.** Al salir, tu hub envía un aviso firmado a los compañeros conectados (y ellos al resto) para que borren las copias de tus sesiones. Antes las conservaban hasta que vencía el plazo de retención. Quien expulsa a alguien borra en el acto sus copias y las de quienes esa persona invitó (antes solo las borraban los demás), y quien es expulsado borra las copias del equipo. También se terminan las conversaciones automáticas con esa persona, sus mensajes sin leer ya no llegan a tu IA y los tuyos en cola para ella vencen. Esa persona deja de aparecer como «desconectada» en *Personas*. Bloquear hace lo mismo, salvo borrar las copias.
+- **El expulsado se entera de su expulsión.** La conexión se cortaba antes de que le llegara el aviso; ahora se cierra en orden.
+- **La búsqueda podía conservar sesiones ya borradas.** La clave interna del índice llevaba un carácter que el SQLite de Node corta al leer, y quitar una sesión por su id no la encontraba. El índice se rehace solo al actualizar.
+- **Pausar o dejar de permitir copias se aplica en 15 s** en las copias de tus compañeros, no en su siguiente sincronización.
+- **Aceptar una conversación automática cuando el otro ya se desconectó** la deja pendiente para reintentarla, en vez de «en marcha» solo de tu lado.
+- **«Pasar a mi IA» con el mensaje de una conversación ya terminada** lo marca leído; antes quedaba sin leer para siempre.
+- El contexto al iniciar sesión ya no cuenta cambios de compañeros en pausa, bloqueados o que no permiten copias.
+- **Retomar una sesión ya no hace que Claude bloquee la conversación.** Session Hub nunca entrega el razonamiento interno del modelo, solo el texto visible y las acciones; ahora una prueba lo garantiza para Claude Code y Cursor. El bloqueo aparecía cuando la IA abría por su cuenta los archivos de historial (`~/.claude/projects/*.jsonl`), que sí lo guardan: las instrucciones del servidor MCP le piden usar `get_session` o `continue_session` en vez de leerlos.
+
+## [0.11.3] — 2026-10-04
+
+### Corregido
+- **Aceptar una conversación entre dos chats ya no se traga el primer mensaje.** *Pasar a mi IA* lo marcaba como leído y el hook no podía entregarlo, así que el otro chat no seguía. Ahora ese mensaje lo entrega solo el hook, al terminar el turno. Si ya se había marcado leído y la conversación sigue esperando a esa sesión, el hook lo vuelve a dejar listo. `check_inbox` no se lleva los mensajes de una conversación automática.
+
+## [0.11.2] — 2026-10-04
+
+### Corregido
+- **Pasar a mi IA abre el chat en el editor donde está.** Si el mensaje es para un chat de Cursor y pulsas el botón en VS Code, la ventana de Cursor abre esa sesión. El texto queda copiado para pegarlo ahí.
+
+## [0.11.1] — 2026-10-04
+
+### Añadido
+- **Conversación automática entre dos chats de esta computadora.** En *Conversar* se puede elegir *Mis dos chats en esta computadora*: dos sesiones distintas (dos de Claude Code en VS Code, dos de Cursor, o una de cada editor). Se confirma una vez y, desde ahí, siguen solas hasta el límite de vueltas. Si el otro chat está quieto, *Pasar a mi IA* una vez. Por MCP, `to` es `yo` y `to_session` es la otra sesión.
+
+### Corregido
+- **En modo local, el aviso de conexión ya no habla del relay de la red pública.** Si no se ve a alguien, dice que el modo local solo alcanza la misma red y que para alguien fuera hay que volver a public.
+
+## [0.11.0] — 2026-10-04
+
+### Añadido
+- **Subagentes visibles, en Claude Code y en Cursor.** Lo que hacen los subagentes ya no se pierde: cada sesión muestra sus subagentes (🤖), sus archivos y comandos cuentan en el resumen y en *qué cambió*, y se encuentran al buscar. Cada subagente se abre con un clic (o por MCP con el id `<sesión>/sub:<subagente>`) y respeta los permisos de su sesión. Se guardan en el respaldo junto con la sesión.
+  - Claude Code: se leen de la carpeta de subagentes de cada sesión.
+  - Cursor: se leen los subagentes que su base asocia a cada conversación; ya no aparecen como conversaciones sueltas.
+  - Cada subagente muestra sus pasos (cada texto con las acciones que le siguen), no una sola respuesta.
+- **Archivos cambiados por comandos de terminal.** Los cambios hechos con `sed -i`, redirecciones, `tee`, `cp`/`mv`/`rm` o scripts de Python y Node también cuentan en *archivos modificados* y en *qué cambió*, marcados *(por comando)*. Solo cuentan si el archivo está dentro del proyecto y cambió después del comando; nada se ejecuta para averiguarlo.
+- **Cursor sin depender de su base:** si una conversación no está en la base de Cursor (o no se puede abrir), se lee de las transcripciones que Cursor guarda en `~/.cursor/projects`.
+- **Contexto al abrir una sesión (Claude Code y Cursor):** con el hook instalado, la IA recibe al empezar un resumen corto: el proyecto actual, que pase `workspace` a las herramientas, y cuántos mensajes hay esperando. Solo cifras y datos locales, nunca texto de compañeros. Se apaga con el ajuste **Session Hub: Start Context** (`sessionHub.startContext`).
+  - En Cursor también llega si sigues escribiendo en un chat que ya existía (Cursor solo avisa el inicio en chats nuevos): se pide antes del primer mensaje, una sola vez por conversación, y nunca bloquea el mensaje.
+- **Cursor sabe solo en qué carpeta trabajas:** el MCP se registra con `${workspaceFolder}`, que Cursor reemplaza por la carpeta de cada ventana.
+- Si instalaste los hooks antes de esta versión, el panel (*Mensajes*) ofrece **Actualizar** para sumar el contexto al iniciar; si ya habías aceptado el de inicio, se renueva solo.
+- **Atajos MCP:** `catch_up` (ponerme al día), `search_team` (buscar en el equipo) y `check_messages` (revisar mensajes). En Cursor aparecen con `/`.
+- **Relay automático en modo public.** Si `sessionHub.relay` está vacío, los hubs usan el relay ciego que trae Session Hub cuando la conexión directa no sale. No hay que pegar ninguna clave. El relay no lo enciende el editor: queda encendido con `npm run infra -- --public` en el equipo que tiene `~/.session-hub/default-relay-key.json`. Solo reenvía bytes cifrados. Una clave propia en `sessionHub.relay` sigue mandando.
+- **Proyecto actual, para no mezclar proyectos por error.** Session Hub sabe en qué carpeta trabajas (la ventana del editor o la carpeta que la IA indica en `workspace`) y compara su clave de proyecto, siempre en tu máquina.
+  - Por MCP, `list_sessions`, `search_sessions` y `what_changed` se limitan al proyecto actual; lo de otros proyectos solo aparece si se pide `project: "todos"`. Cada resultado trae `relacion`: proyecto actual, otro proyecto u **OTRO proyecto con el mismo nombre**. `get_session` avisa si la sesión no es del proyecto actual.
+  - En el panel, el filtro *Este proyecto / Todos los proyectos*, el proyecto actual primero y las marcas 📍 *este proyecto* y ⚠ *mismo nombre, otro proyecto*.
+  - *Usar en mi IA* dice en el pedido de qué proyecto y rama es la sesión, y pregunta antes de pasar una de otro proyecto que se llama igual.
+  - Al compartir se avisa si la carpeta no tiene remoto git o si contiene varios repositorios.
+  - **Vincular proyecto:** un nombre de vínculo hace que dos carpetas sin git (o dos repos) cuenten como el mismo proyecto.
+  - Las carpetas de trabajo nunca viajan a los compañeros.
+
+### Corregido
+- **Las conversaciones automáticas empiezan con 100 vueltas.** Se cambia en `sessionHub.conversationTurns` (de 1 a 100).
+- **Las conversaciones automáticas ya no se cortan por tiempo.** Siguen hasta el límite de vueltas, hasta que alguien las detiene, o si se detecta un bucle. Se quitó el ajuste `sessionHub.conversationMinutes`.
+- **Conversaciones automáticas atadas a las dos sesiones**, igual entre VS Code y Cursor, Cursor y Cursor, o Cursor y VS Code. No empieza hasta que las dos sesiones (`claude:…` o `cursor:…`) están en el documento firmado, y el mensaje solo llega a esos dos chats. Ya no se engancha a la primera que termine un turno. Al abrir la sesión, la IA recibe su id para pasarlo en `mine`. "Pasar a mi IA" abre ese chat: la sesión de Claude Code, o la de Cursor (`composer.openComposer`), no un chat nuevo.
+- **La carpeta de datos y la clave del relay quedan solo para su dueño.** `~/.session-hub` se cierra (0700) si otros usuarios podían listarla, y el relay no arranca con una clave que otros puedan leer. El proceso del relay no ve el resto de la carpeta personal: ni las claves del equipo, ni las sesiones, ni SSH.
+- **Conectar Claude Code** funciona aunque no tengas el comando `claude` en la terminal: usa el ejecutable que trae la extensión de Claude Code en VS Code o Cursor.
+- **Seguridad de red:** un mensaje mal formado de un remoto (`null`, una cadena con eslabones vacíos o chismes con forma rara) ya no puede cerrar el hub. Antes de presentarse, un remoto solo puede enviar mensajes de hasta 8 MB.
+- **Expulsiones:** expulsar a alguien corta enseguida a quienes esa persona invitó, aunque ya estén conectados, y una expulsión que llega por chisme se aplica antes de aceptar a quien la trae.
+- **Búsqueda:** el índice guarda el texto ya redactado. Buscar ya no revela partes de una clave privada en el fragmento, ni sirve para adivinar un secreto oculto carácter a carácter. Los índices anteriores se borran y se rehacen.
+- **Búsqueda:** lo conversado en el último minuto (y todo, justo al arrancar el hub) ya se encuentra: antes de buscar se indexa lo que cambió.
+- **Búsqueda:** las sesiones que ya no existen no aparecen, lo oculto no ocupa el lugar de resultados visibles, y una copia de un compañero ya no pisa una sesión propia con el mismo id.
+- **Redacción:** se ocultan también claves de Stripe, AWS temporales (`ASIA…`), webhooks de Slack, tokens de npm, GitLab y Hugging Face, `Authorization: Basic`, bloques PGP y claves privadas cortadas, y contraseñas de URL con `@`.
+- **Permisos:** una lista `allow` vacía ya no comparte el proyecto con todo el equipo; las sesiones abiertas de una subcarpeta ya no aparecen bajo los permisos de la carpeta padre; rutas de archivos y ramas pasan por la redacción.
+- **Panel:** los textos que llegan de un compañero se escapan siempre, y el panel solo puede ejecutar los comandos que muestra, sobre elementos que muestra.
+- **Windows y rutas con espacios o tildes:** el hub ya arranca. Cursor se busca en la carpeta correcta de Windows y macOS.
+- **Hub compartido:** una ventana cuyo hub reemplazó un editor más nuevo vuelve a conectarse sola; un aviso sin cerrar ya no congela el panel; "Recuperar equipo anterior" restaura de verdad.
+- **Mensajes:** los mensajes en cola por encima del límite por minuto ya no se pierden: esperan y salen después.
+- **Conversaciones automáticas:** un compañero no puede llenar la lista con invitaciones ni desplazar las activas; una invitación vencida no se puede aceptar.
+- **Archivos:** `team.json`, la configuración y la auditoría se escriben de forma atómica; instalar los hooks conserva los permisos de `~/.claude/settings.json`; restablecer un ajuste común en un editor ya no lo deshace el otro.
+- Un registro dañado en el historial de Claude Code o Cursor ya no vacía el listado de todo el proyecto.
+
 ## [0.10.1] — 2026-09-30
 
 Sin cambios de funcionalidad. Solo el número de versión, para poder publicar en las tiendas.

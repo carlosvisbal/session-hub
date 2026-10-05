@@ -12,8 +12,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import DHT from 'hyperdht';
-import { Server as RelayServer } from 'blind-relay';
-import { generateKeyPair, keyPairBuffers } from './identity.js';
+import { generateKeyPair } from './identity.js';
+import { DEFAULT_PUBLIC_RELAY, DEFAULT_RELAY_KEY_FILE, listenRelay, secureKeyFile } from './default-relay.js';
 
 const arg = (name, dflt) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -43,26 +43,22 @@ export async function startInfra({ host = '127.0.0.1', port = 49737, nodes = 3, 
   if (relay) {
     // Clave estable: la configuración de los hubs no cambia al reiniciar el servidor.
     let kp = null;
-    if (keyFile && fs.existsSync(keyFile)) kp = JSON.parse(fs.readFileSync(keyFile, 'utf8'));
+    if (keyFile && fs.existsSync(keyFile)) kp = secureKeyFile(keyFile);
     if (!kp) {
       kp = generateKeyPair();
       if (keyFile) {
-        fs.mkdirSync(path.dirname(keyFile), { recursive: true });
+        fs.mkdirSync(path.dirname(keyFile), { recursive: true, mode: 0o700 });
         fs.writeFileSync(keyFile, JSON.stringify(kp), { mode: 0o600 });
+        secureKeyFile(keyFile);
       }
     }
     const node = new DHT(publicNet ? {} : { bootstrap, ephemeral: false, firewalled: false, host: '0.0.0.0', port: port + nodes });
     await node.fullyBootstrapped();
-    const relayServer = new RelayServer({ createStream: (opts) => node.createRawStream({ ...opts, framed: true }) });
-    const server = node.createServer((socket) => {
-      socket.on('error', () => {});
-      relayServer.accept(socket, { id: socket.remotePublicKey }).on('error', () => {});
-    });
-    await server.listen(keyPairBuffers(kp));
-    started.push({ destroy: async () => (await relayServer.close(), await server.close(), await node.destroy()) });
-    relayKey = kp.publicKey;
+    const relay = await listenRelay(node, kp);
+    started.push({ destroy: async () => (await relay.close(), await node.destroy()) });
+    relayKey = relay.relayKey;
     log(`✔ relay ciego activo${publicNet ? ' en la red pública' : ` en UDP ${port + nodes}`} · clave ${relayKey.slice(0, 12)}…`);
-    started.relayServer = relayServer;
+    started.relayServer = relay.relayServer;
   }
 
   const settings = {
@@ -93,8 +89,11 @@ if (import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith
     nodes: Number(arg('nodes', 3)),
     relay: arg('no-relay', false) !== true,
     publicNet,
-    keyFile: path.join(os.homedir(), '.session-hub', 'relay-key.json'),
+    keyFile: publicNet && fs.existsSync(DEFAULT_RELAY_KEY_FILE) ? DEFAULT_RELAY_KEY_FILE : path.join(os.homedir(), '.session-hub', 'relay-key.json'),
   });
+  if (publicNet && infra.relayKey !== DEFAULT_PUBLIC_RELAY) {
+    console.log(`\nEsta clave no es la que trae Session Hub (${DEFAULT_PUBLIC_RELAY.slice(0, 12)}…). Los hubs en modo public no la usarán solos: pégala en sessionHub.relay, o arranca aquí con la clave de ~/.session-hub/default-relay-key.json.`);
+  }
   console.log('\nConfiguración para cada persona del equipo (Ajustes → settings.json):\n');
   console.log(JSON.stringify(infra.settings, null, 2));
   console.log(`\nAbre en el firewall de este servidor: UDP ${publicNet ? '(salida)' : `${port}–${port + Number(arg('nodes', 3))}`}.\nCtrl+C para detener.`);

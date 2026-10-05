@@ -26,7 +26,7 @@ const CATALOG = {
     severity: 'error',
     title: 'Los routers no permiten la conexión directa',
     cause: 'Tu red y la de tu compañero bloquean que dos equipos se conecten directo (NAT estricto o "simétrico"). Pasa en redes corporativas, de datos móviles y en algunos routers domésticos.',
-    fix: 'Usa un relay: un nodo intermedio que solo reenvía datos cifrados, sin poder leerlos. Configúralo en sessionHub.relay (se levanta con npm run infra).',
+    fix: 'En modo public Session Hub reintenta solo por su relay ciego. Si también falla, la red bloquea el UDP: permite salida UDP o pon el tuyo en sessionHub.relay (npm run infra).',
     it: 'Alternativas: (1) permitir UDP saliente sin reescritura aleatoria de puertos (NAT "endpoint-independent"), o (2) permitir UDP hacia el relay de Session Hub indicado en los detalles.',
   },
   RELAY_UNREACHABLE: {
@@ -45,9 +45,9 @@ const CATALOG = {
   },
   LAN_UNREACHABLE: {
     severity: 'warn',
-    title: 'Conoces a compañeros, pero no se logra conectar en la red local',
-    cause: 'O el firewall de alguno bloquea el puerto UDP de Session Hub, o no están en la misma red (por ejemplo, una persona trabaja desde casa sin VPN).',
-    fix: 'Si alguien está fuera de la oficina, usen VPN o el modo "public"/"private". Si todos están en la oficina, revisen el firewall de cada equipo.',
+    title: 'El modo local no llega a quien está en otra red',
+    cause: 'En modo local Session Hub solo busca en tu misma red o VPN. Si tu compañero está en otra casa u otra red, el router no abre un camino directo.',
+    fix: 'Para hablar con alguien fuera, los dos vuelvan al modo public. El modo local déjalo cuando estén en la misma red. Si ya están en la misma red y aun así no se ven, revisen el firewall.',
     it: 'Permitir UDP entrante y saliente en el puerto indicado en los detalles entre los equipos de la red interna.',
   },
   PEER_NOT_FOUND: {
@@ -82,13 +82,13 @@ export function diagnoseNetwork(st, { now = Date.now() } = {}) {
 
   if (st.lastError && !/tardó en responder/.test(st.lastError)) add('START_FAILED', { detail: st.lastError });
   if (st.running && st.network !== 'lan' && st.bootstrapped && st.dhtNodes === 0) add(st.network === 'private' ? 'BOOTSTRAP_UNREACHABLE' : 'UDP_BLOCKED');
-  if ([...codes].some((c) => HOLEPUNCH.has(c))) {
-    const who = [...new Set(recent.filter((i) => HOLEPUNCH.has(i.code)).map((i) => i.peer))];
-    add('HOLEPUNCH_FAILED', { peers: who });
-  }
+  const holepunch = [...codes].some((c) => HOLEPUNCH.has(c));
+  const whoPunch = [...new Set(recent.filter((i) => HOLEPUNCH.has(i.code)).map((i) => i.peer))];
+  // En modo local no hay relay público: un fallo de conexión directa significa que el otro no está en esta red.
+  if (holepunch && st.network !== 'lan') add('HOLEPUNCH_FAILED', { peers: whoPunch });
   if (codes.has('RELAY_ABORTED')) add('RELAY_UNREACHABLE');
   if (st.nat?.randomized && !st.relay && st.network !== 'lan') add('STRICT_NAT');
-  if (st.network === 'lan' && st.knownMembers > 0 && st.connected === 0 && st.dialedWithAddrs > 0) add('LAN_UNREACHABLE');
+  if (st.network === 'lan' && st.knownMembers > 0 && st.connected === 0 && (st.dialedWithAddrs > 0 || holepunch)) add('LAN_UNREACHABLE', holepunch ? { peers: whoPunch } : {});
   if (codes.has('PEER_NOT_FOUND')) add('PEER_NOT_FOUND', { peers: [...new Set(recent.filter((i) => i.code === 'PEER_NOT_FOUND').map((i) => i.peer))] });
   if (st.teamNetwork && st.teamNetwork !== st.network) add('MODE_MISMATCH', { detail: `Equipo: "${st.teamNetwork}" · esta instalación: "${st.network}"` });
   return issues;
@@ -117,7 +117,7 @@ export function networkReport({ st, issues, me, team, version, when = new Date()
   if (st.network === 'private' || st.bootstrap?.length) lines.push(`- ${t('Nodos de arranque:')} ${st.bootstrap?.join(', ') || t('(ninguno configurado)')}`);
   lines.push(`- ${t('Nodos de la red alcanzados:')} ${st.dhtNodes ?? '?'}`);
   if (st.nat) lines.push(`- NAT: ${t(st.nat.firewalled ? 'detrás de firewall' : 'accesible')} · ${t('puertos aleatorios:')} ${st.nat.randomized ? t('sí (estricto)') : yes(false)}${st.nat.host ? ` · ${t('IP pública vista:')} ${st.nat.host}` : ''}`);
-  lines.push(`- Relay: ${st.relay ? t('configurado ({v1})', { v1: st.relay }) : t('no configurado')}`);
+  lines.push(`- Relay: ${st.relay ? t(st.relayDefault ? 'relay de Session Hub ({v1})' : 'configurado ({v1})', { v1: st.relay }) : t('no configurado')}`);
   lines.push(`- ${t('Direcciones locales:')} ${st.lanAddrs?.join(', ') || t('(ninguna)')} · VPN: ${st.vpnAddrs?.join(', ') || t('(ninguna)')}`);
   lines.push(`- ${t('Compañeros conocidos: {v1} · conectados: {v2}', { v1: st.knownMembers, v2: st.connected })}`);
   const recent = (st.connIssues || []).slice(0, 8);

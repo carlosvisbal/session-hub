@@ -113,6 +113,7 @@ export function createInbox({ file, teamState, policy = () => 'hold', now = Date
       if (!at || at > now() + CLOCK_SKEW_MS || at < now() - QUEUE_HOURS * 3600e3 - CLOCK_SKEW_MS) throw err('Mensaje fuera de plazo.', 'invalid');
       const text = cleanText(b.text);
       const dup = find(b.id);
+      if (dup && dup.from !== peer.id) throw err('Mensaje con formato desconocido.', 'invalid'); // id ajeno: no se mezcla con el de otra persona
       if (dup) return { status: dup.status }; // reintento del mismo mensaje
       const auto = !!b.conv && autoDeliver(b);
       const p = auto ? 'accept' : policy();
@@ -158,22 +159,74 @@ export function createInbox({ file, teamState, policy = () => 'hold', now = Date
       return m;
     },
 
+    // Alguien que ya no está (expulsado, salió) o que bloqueé: lo suyo sin leer no llega a mi IA
+    // (se descarta) y lo mío en cola para esa persona ya no se entregará (vence). Devuelve cuántos.
+    forget(pub) {
+      let n = 0;
+      const at = new Date(now()).toISOString();
+      for (const m of state.received) if (m.from === pub && (m.status === 'held' || m.status === 'delivered')) Object.assign(m, { status: 'dismissed', updatedAt: at }), n++;
+      for (const m of state.sent) if (m.to === pub && m.status === 'queued') (m.status = 'expired'), delete m.doc, n++;
+      if (n) save();
+      return n;
+    },
+
     markReplied(id) {
       const m = find(id);
       if (m) (m.repliedAt = new Date(now()).toISOString()), save();
     },
 
+    // Mensaje entre dos sesiones de esta computadora. No sale a la red ni pasa por la política de retención.
+    deliverLocal({ text, toSession, conv, fromName, fromRole }) {
+      const m = {
+        id: crypto.randomUUID(),
+        from: teamState.me(),
+        fromName: fromName || '',
+        fromRole: fromRole || '',
+        fingerprint: fingerprint(teamState.me()),
+        text: cleanText(text),
+        toSession: optId(toSession),
+        aboutSession: null,
+        replyTo: null,
+        conv: String(conv),
+        at: new Date(now()).toISOString(),
+        receivedAt: new Date(now()).toISOString(),
+        status: 'delivered',
+        local: true,
+      };
+      state.received.push(m);
+      save();
+      return m;
+    },
+
     // Mensajes de una conversación automática listos para pasarle al agente (se marcan como leídos).
-    takeConv(convId) {
-      const out = state.received.filter((m) => m.conv === convId && m.status === 'delivered');
+    // session: si viene, solo los dirigidos a esa sesión (conversación local entre dos chats).
+    takeConv(convId, session) {
+      const want = session ? String(session) : '';
+      const out = state.received.filter((m) => m.conv === convId && m.status === 'delivered' && (!want || m.toSession === want));
       for (const m of out) m.status = 'read';
       if (out.length) save();
       return out;
     },
 
+    // "Pasar a mi IA" pudo marcar leído un mensaje que el hook aún no entregó. Si no hay otro
+    // ya listo para esa sesión, este vuelve a delivered para que el hook lo recoja.
+    reviveConv(convId, session) {
+      const want = String(session || '');
+      if (!want) return null;
+      const mine = state.received.filter((m) => m.conv === convId && m.toSession === want);
+      if (mine.some((m) => m.status === 'delivered')) return null;
+      const stuck = [...mine].reverse().find((m) => m.status === 'read');
+      if (!stuck) return null;
+      stuck.status = 'delivered';
+      stuck.updatedAt = new Date(now()).toISOString();
+      save();
+      return stuck;
+    },
+
     // Para la IA: los mensajes aprobados que aún no leyó. Se marcan como leídos.
+    // Los de una conversación automática no: solo los entrega el hook, a la sesión que toca.
     takeForAi() {
-      const out = state.received.filter((m) => m.status === 'delivered');
+      const out = state.received.filter((m) => m.status === 'delivered' && !m.conv);
       for (const m of out) m.status = 'read';
       if (out.length) save();
       return { messages: out, held: state.received.filter((m) => m.status === 'held').length };

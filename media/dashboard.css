@@ -164,6 +164,8 @@ button.danger { color: var(--vscode-errorForeground) }
 .tag { font-size: 11px; padding: 0 5px; border-radius: 3px; border: 1px solid var(--vscode-panel-border) }
 .tag.copy { color: var(--vscode-textLink-foreground) }
 .tag.archived { color: var(--vscode-editorWarning-foreground, #cca700) }
+.tag.here { color: var(--vscode-testing-iconPassed, #3fb950); margin-left: 6px }
+.tag.warn-tag { color: var(--vscode-editorWarning-foreground, #cca700); border-color: var(--vscode-editorWarning-foreground, #cca700); margin-left: 6px; font-weight: 600 }
 .banner-inline { margin: 6px 0; padding: 6px 10px; border-radius: 4px; background: var(--vscode-textBlockQuote-background); font-size: 12px }
 .list-pane .lbox .lsearch { margin: 4px 12px 6px; width: calc(100% - 24px) }
 

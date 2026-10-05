@@ -24,13 +24,17 @@ try {
   const S = editor.shared;
   for (let i = 0; i < 3; i++) wins.push(await editor.openWindow());
   assert.equal(S.cursorRegistry.size, 1);
-  assert.match(S.cursorRegistry.get('session-hub'), /\/mcp\?token=t$/);
+  assert.match(S.cursorRegistry.get('session-hub'), /\/mcp\?token=t&ws=\$\{workspaceFolder\}$/, 'la carpeta actual la pone Cursor al resolver ${workspaceFolder}');
   assert.equal(S.cursorCalls.filter((c) => c === 'unregister').length, 1, 'solo se anula cuando la URL es nueva');
   ok(`3 ventanas de Cursor: un solo registro, con el token en la URL (${S.cursorCalls.join(', ')})`);
 
   const r = await fetch(S.cursorRegistry.get('session-hub'), { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'cursor', version: '3' } } }) });
   assert.equal(r.status, 200);
-  ok('la URL registrada conecta sin cabeceras (como la usa Cursor)');
+  // Con la variable ya resuelta por Cursor (una carpeta real) también conecta.
+  const resolved = S.cursorRegistry.get('session-hub').replace('${workspaceFolder}', encodeURIComponent(f.project));
+  const r2 = await fetch(resolved, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'cursor', version: '3' } } }) });
+  assert.equal(r2.status, 200);
+  ok('la URL registrada conecta sin cabeceras (como la usa Cursor), con ${workspaceFolder} literal o resuelto');
 
   wins.shift().close();
   assert.equal(S.cursorRegistry.size, 1);

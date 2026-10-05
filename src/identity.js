@@ -91,7 +91,7 @@ export const signAdmission = (issuerKp, inviteBody, member) =>
 // Verifica la cadena completa. Si solo falta la admisión del último eslabón, devuelve
 // { ok: false, pending: true } con quién debe confirmarla.
 export function verifyChain(teamId, chain) {
-  if (!Array.isArray(chain) || !chain.length || chain.length > MAX_CHAIN) return { ok: false, error: 'cadena de certificados con forma inválida' };
+  if (!Array.isArray(chain) || !chain.length || chain.length > MAX_CHAIN || chain.some((d) => !d || typeof d !== 'object')) return { ok: false, error: 'cadena de certificados con forma inválida' };
   const [root, ...rest] = chain;
   const r = root.body || {};
   if (r.type !== 'member' || r.team !== teamId || r.member !== teamId || r.via !== null || !verifyDoc(teamId, root)) return { ok: false, error: 'la cadena no empieza en el fundador de este equipo' };
@@ -137,6 +137,15 @@ export function verifyRevocation(teamId, doc, targetChain) {
   if (b.by === teamId && b.member !== teamId) return true;
   const v = verifyChain(teamId, targetChain);
   return v.ok && v.member === b.member && v.ancestors.includes(b.by);
+}
+
+// Aviso de salida: lo firma quien se va, para que los demás borren sus copias. No expulsa a nadie
+// ni cierra la puerta: solo dice "ya no estoy en este equipo".
+export const signDeparture = (kp, teamId) => signDoc(kp, { type: 'leave', team: teamId, member: kp.publicKey, at: now() });
+
+export function verifyDeparture(teamId, doc) {
+  const b = doc?.body || {};
+  return b.type === 'leave' && b.team === teamId && typeof b.member === 'string' && verifyDoc(b.member, doc);
 }
 
 // ---------- código de invitación ----------

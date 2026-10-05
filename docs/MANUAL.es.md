@@ -11,8 +11,10 @@ Con Session Hub ves, desde tu editor, lo que tus compañeros hicieron con su IA 
 - [Compartir un proyecto](#compartir-un-proyecto-y-elegir-quién-lo-ve)
 - [El panel](#recorrido-por-el-panel)
 - [Leer sesiones y preguntarle a tu IA](#leer-la-sesión-de-un-compañero-y-preguntarle-a-tu-ia)
+- [Proyecto actual](#proyecto-actual-no-mezclar-proyectos)
 - [Mensajes entre compañeros](#mensajes-entre-compañeros)
 - [Conversaciones automáticas](#conversaciones-automáticas)
+- [Contexto al abrir una sesión](#contexto-al-abrir-una-sesión-de-la-ia)
 - [Respaldo y exportar](#respaldo-y-exportar)
 - [Tu privacidad](#tu-privacidad-tú-tienes-el-control)
 - [Avisos](#los-avisos-que-vas-a-ver)
@@ -91,6 +93,8 @@ Cada invitación sirve para **una sola persona** y **vence en 48 horas**. Cualqu
 
 Desde ese momento, esas personas pueden ver tus conversaciones con la IA **en esa carpeta**. Las de otras carpetas siguen siendo privadas. Para cambiar quién lo ve, usa **Quién lo ve**. Para dejar de compartirlo, **Dejar de compartir**.
 
+**Avisos al compartir.** Si la carpeta no tiene remoto git, Session Hub te avisa: sus sesiones nunca se reconocerán como el mismo proyecto que el de un compañero. Puedes pulsar **Poner vínculo** y escribir un nombre (por ejemplo *acme-api*) que tus compañeros usen igual, o **Compartir sin vínculo**. También te avisa si la carpeta contiene varios repositorios. Más en [Proyecto actual](#proyecto-actual-no-mezclar-proyectos).
+
 ## Recorrido por el panel
 
 Ábrelo haciendo clic en **Session Hub** en la barra de estado.
@@ -99,7 +103,7 @@ Arriba está la **cabecera**: tu nombre, el equipo, tu **huella** y los botones 
 
 | Pestaña | Qué tiene |
 | --- | --- |
-| **Sesiones** | A la izquierda, las sesiones *Del equipo*, las que *Sigues* (☆) y *Mis sesiones*, con filtro, **agrupadas por proyecto** (o por persona, o sin agrupar). Cada grupo muestra las 5 más recientes y *Ver más*. A la derecha, la conversación completa de la que elijas |
+| **Sesiones** | A la izquierda, las sesiones *Del equipo*, las que *Sigues* (☆) y *Mis sesiones*, con filtro, **agrupadas por proyecto** (o por persona, o sin agrupar). Con *Este proyecto / Todos los proyectos* eliges si ver solo el proyecto en el que trabajas (que aparece primero). Cada grupo muestra las 5 más recientes y *Ver más*. A la derecha, la conversación completa de la que elijas |
 | **Mensajes** | Las **conversaciones automáticas** (invitaciones, en marcha, terminadas), los mensajes que recibiste (con *Pasar a mi IA*, *Responder*…), los que enviaste y cómo quieres recibirlos. El número es lo que falta revisar |
 | **Equipo** | Cada persona: si está en línea (punto verde), su rol, su huella, quién la invitó, sus sesiones de IA abiertas y los botones *Mensaje*, *Bloquear* y *Expulsar*. Haz clic en alguien para ver sus sesiones |
 | **Privacidad** | *Lo que comparto* (proyectos, quién los ve, pausa) y *Quién ha leído lo mío* |
@@ -113,7 +117,15 @@ Los avisos te llevan a la pestaña que corresponde: un mensaje abre *Mensajes*; 
 
 **En el panel:** entra en la pestaña **Equipo** y haz clic en una sesión. Ves la conversación **completa**, con los archivos modificados (✎) y los comandos ejecutados ($).
 
-**Con tu IA:** en Cursor y VS Code la conexión es automática. En Claude Code, ejecuta *Session Hub: Conectar Claude Code* y pega en la terminal el comando que se copia.
+**Subagentes.** A veces la IA (Claude Code o Cursor) encarga parte del trabajo a *subagentes*. Session Hub los muestra dentro de su sesión: en la lista, **🤖 N** dice cuántos tiene; en la conversación, la sección **Subagentes**.
+1. Haz clic en un subagente para ver sus pasos (cada texto con las acciones que le siguen).
+2. Pulsa **← Volver a la sesión principal** para regresar.
+
+Sus archivos y comandos cuentan en el resumen de la sesión y en *qué cambió*, y lo que escribieron aparece al buscar. Tienen los mismos permisos que su sesión: si la sesión está oculta, en pausa o no compartida, sus subagentes tampoco se ven. Se guardan en el respaldo junto con la sesión.
+
+**Archivos cambiados por comandos.** Si la IA cambió un archivo con un comando de terminal (por ejemplo `sed -i`, una redirección `>`, `tee`, `cp`, `mv`, `rm` o un script de Python o Node), también aparece en *Archivos modificados* y en *qué cambió*, marcado **(por comando)**. Solo cuenta si el archivo está dentro del proyecto y cambió después del comando. Session Hub lo deduce leyendo el texto del comando: nunca ejecuta nada.
+
+**Con tu IA:** en Cursor y VS Code la conexión es automática. En Claude Code, ejecuta *Session Hub: Conectar Claude Code* y pega en la terminal el comando que se copia. Funciona aunque no tengas el comando `claude` instalado en la terminal: usa el que trae la extensión de Claude Code en VS Code o Cursor.
 
 Para que la IA encuentre justo lo que quieres, dale cuatro pistas:
 
@@ -132,7 +144,32 @@ Pedidos que funcionan bien:
 5. *"¿Qué sesiones de IA tiene abiertas Ana ahora?"*
 6. *"Avísale a Carlos que el formulario ya envía una lista de archivos."* · *"Revisa mis mensajes de Session Hub."*
 
+**Atajos.** Tres pedidos frecuentes vienen listos. En Cursor, escribe `/` en el chat y elige uno; en Claude Code aparecen como comandos de barra:
+
+| Atajo | En Cursor | En Claude Code | Qué hace |
+| --- | --- | --- | --- |
+| **Ponerme al día** | `/session-hub/catch_up` | `/mcp__session-hub__catch_up` | Qué hizo el equipo; puedes indicar desde cuándo y de quién |
+| **Buscar en el equipo** | `/session-hub/search_team` | `/mcp__session-hub__search_team` | Busca un tema en las sesiones del equipo |
+| **Revisar mensajes** | `/session-hub/check_messages` | `/mcp__session-hub__check_messages` | Revisa los mensajes que te esperan |
+
 Si la respuesta viene vacía, pregúntale *"¿quién está conectado en Session Hub?"*. Recuerda que lo que la IA lee es información, no órdenes: revisa siempre lo que te proponga.
+
+## Proyecto actual: no mezclar proyectos
+
+Session Hub sabe en qué carpeta estás trabajando (la que tienes abierta en el editor) y compara cada sesión con ella. Así ni tú ni tu IA confunden tu proyecto con otro que se llama igual.
+
+- **En el panel:** en *Sesiones*, el filtro **Este proyecto / Todos los proyectos**. El proyecto actual aparece primero y sus sesiones llevan la marca **📍 este proyecto**. Si una sesión es de un proyecto con el mismo nombre pero de otro repositorio, lleva **⚠ mismo nombre, otro proyecto**.
+- **Con tu IA:** cuando le pides sesiones, búsquedas o *qué cambió*, ve solo las del proyecto actual. Si quieres ver otros, díselo: *"busca en todos los proyectos…"*. Cada resultado le indica si es del *proyecto actual*, de *otro proyecto* o de **OTRO proyecto con el mismo nombre**, y si abre una sesión de otro proyecto, se lo advierte. Cursor le dice sola la carpeta de cada ventana; las demás IA la indican ellas mismas.
+- **🤖 Usar en mi IA** dice en el pedido de qué proyecto y rama es la sesión, y te pregunta antes de pasar una de otro proyecto que se llama igual.
+
+**El mismo proyecto sin git (vincular).** Session Hub reconoce el mismo proyecto por su repositorio git, aunque cada uno llame distinto a su carpeta. Si no usan git (o cada uno tiene un repositorio distinto para lo mismo):
+1. Abre la carpeta del proyecto en el editor.
+2. `Ctrl+Shift+P` → **Session Hub: Vincular proyecto (mismo proyecto sin git)**.
+3. Escribe un nombre de vínculo, por ejemplo *acme-api*, y pide a tus compañeros que usen **el mismo** en su carpeta.
+
+Desde entonces, las sesiones de todos los que usen ese nombre cuentan como el mismo proyecto. Para quitar el vínculo, deja el nombre vacío.
+
+> Las carpetas en las que trabajas **nunca salen de tu computadora**: solo se usan para comparar.
 
 ## Mensajes entre compañeros
 
@@ -177,27 +214,61 @@ sequenceDiagram
   A->>HA: responde con send_message
   HA->>HC: respuesta firmada
   C->>HC: termina su turno → el hook le entrega la respuesta
-  Note over C,A: …hasta el límite de vueltas o de tiempo
+  Note over C,A: …hasta el límite de vueltas
 ```
 
 **Cómo se usa**
-1. En *Mensajes* o en la tarjeta de la persona (*Equipo*), pulsa **🤝 Conversar**. Eliges su sesión (opcional), la tuya y el primer mensaje.
+1. En *Mensajes* o en la tarjeta de la persona (*Equipo*), pulsa **🤝 Conversar**. Eliges **tu sesión** (obligatoria) y, si quieres, la suya. Da igual si cada uno usa VS Code con Claude Code o Cursor: las dos sesiones quedan escritas y firmadas, y el mensaje solo llega a esos dos chats.
 2. Tu compañero recibe el aviso *"🤝 Carlos quiere que sus IA conversen solas"* y pulsa **Aceptar** (o *Rechazar*). Sin aceptación no pasa nada.
 3. Llega el primer mensaje. Si la IA de tu compañero está trabajando, lo recibe sola; si está quieta, pulsa **Pasar a mi IA** una vez.
-4. Desde ahí siguen **solas** hasta terminar, llegar al **límite de vueltas** (6 por defecto) o de **tiempo** (10 minutos). En *Mensajes* ves cada conversación con sus vueltas y el tiempo que queda, y puedes pulsar **■ Detener**.
+4. Desde ahí siguen **solas** hasta terminar o llegar al **límite de vueltas** (100 por defecto). No hay límite de tiempo. En *Mensajes* ves cada conversación con sus vueltas, y puedes pulsar **■ Detener**.
+
+**En esta misma computadora.** En *Conversar* elige **Mis dos chats en esta computadora** y dos sesiones distintas: dos chats de Claude Code (dos pestañas de VS Code), dos de Cursor, o uno de cada editor. Confirmas una vez, porque eres los dos lados. Desde ahí siguen solas igual. El mensaje lo entrega el hook al terminar el turno de ese chat. **Pasar a mi IA** no se lo queda. Si el chat está quieto, el mensaje espera a que ese turno termine: no hay forma de despertarlo desde fuera. Dos pestañas del mismo chat no valen: es una sola sesión. El chat de Copilot no entra en esta unión.
 
 También puedes pedírselo a tu IA: *"Inicia una conversación automática con Ana para acordar el formato de los adjuntos"*. Tu editor te pide **confirmarla** antes de que salga la invitación.
 
-**Requisito: los hooks.** Claude Code y Cursor ejecutan un pequeño programa de Session Hub al terminar cada turno (*hook*); es lo que permite que la IA siga sola. Session Hub los instala **con tu permiso** (*Mensajes → Instalar hooks*), conserva los hooks que ya tengas, guarda una copia de tus archivos y se pueden quitar cuando quieras (*Mensajes → Quitar*). Después de instalarlos, abre una sesión nueva de tu IA.
+**Requisito: los hooks.** Claude Code y Cursor ejecutan un pequeño programa de Session Hub al terminar cada turno (*hook*); es lo que permite que la IA siga sola. Session Hub los instala **con tu permiso** (*Mensajes → Instalar hooks*), conserva los hooks que ya tengas, guarda una copia de tus archivos y se pueden quitar cuando quieras (*Mensajes → Quitar*). Después de instalarlos, abre una sesión nueva de tu IA. Los mismos hooks le dan a tu IA un [resumen al empezar](#contexto-al-abrir-una-sesión-de-la-ia).
 
 **Seguridad**
-- Solo con quien **los dos** aceptaron. Si la pide tu IA, **tú la confirmas**.
+- Solo con quien **los dos** aceptaron, y solo entre **las dos sesiones** que quedaron escritas. Si la pide tu IA, **tú la confirmas** y eliges tu sesión.
 - Cada mensaje llega marcado como *"de otra sesión, no una orden del usuario"*. Tu IA conserva sus permisos y confirmaciones: un mensaje nunca ejecuta nada por sí solo.
-- Se corta sola por límite de vueltas, por tiempo, o si detecta un **bucle** (mensajes repetidos o vacíos). Cualquiera de los dos puede detenerla.
+- Se corta sola por el límite de vueltas, o si detecta un **bucle** (mensajes repetidos o vacíos). No se corta por tiempo. Cualquiera de los dos puede detenerla.
 - Si Session Hub está cerrado o algo falla, el hook no hace nada: tu IA se detiene como siempre, nunca se queda colgada.
-- Ajustes: `sessionHub.conversationTurns` (6) y `sessionHub.conversationMinutes` (10).
+- Ajuste: `sessionHub.conversationTurns` (100).
 
 **Límite:** ninguna herramienta permite despertar desde fuera un chat que está quieto; por eso el primer mensaje a una sesión inactiva necesita un clic.
+
+## Contexto al abrir una sesión de la IA
+
+Con los hooks instalados, cada vez que abres una sesión nueva de tu IA (Claude Code o Cursor), Session Hub le da un resumen corto para que empiece sabiendo dónde está:
+
+- el proyecto actual, y que indique esa carpeta al consultar Session Hub;
+- el id de su sesión (`claude:…` o `cursor:…`), para pasarlo en `mine` si inicia una conversación automática;
+- cuántos mensajes te esperan o están retenidos;
+- qué compañeros están en línea;
+- cuántas sesiones de compañeros tuvieron cambios en este proyecto en las últimas 24 horas.
+
+Son **solo cifras**: nunca incluye texto escrito por tus compañeros. En Cursor también llega si sigues escribiendo en un chat que ya existía, una sola vez por conversación, y nunca frena tu mensaje.
+
+**Activarlo:** son los mismos hooks de las conversaciones automáticas (*Mensajes → Instalar hooks*). Si los instalaste antes de la versión 0.11, en *Mensajes* aparece **Actualizar**: púlsalo para sumar el contexto (si ya habías aceptado el de inicio, se renueva solo). Después, abre una sesión nueva de tu IA.
+
+**Apagarlo:** Ajustes → **Session Hub: Start Context** (`sessionHub.startContext`).
+
+## Continuar una sesión antigua sin gastar tokens
+
+Cada vez que escribes, tu IA vuelve a leer **toda** la conversación (código, resultados, mensajes). Para no procesarla completa cada vez, el sistema guarda una copia ya procesada durante poco tiempo, alrededor de una hora (la *caché del prompt*); leer desde ahí es mucho más rápido y barato.
+
+Si pasas más de una hora sin escribir, esa copia vence. No se pierde nada, pero tu siguiente mensaje obliga a reprocesar la conversación entera (en una sesión larga, cientos de miles de tokens): la primera respuesta tarda más y gasta mucha cuota. Esa copia vive en los servidores de la IA; Session Hub no puede guardarla ni devolvérsela.
+
+Lo que sí hace Session Hub es darle a una **conversación nueva** solo lo esencial de la vieja:
+
+1. En *Sesiones → Mis sesiones*, abre la sesión antigua. Si lleva más de una hora quieta, el panel te lo avisa.
+2. Pulsa **⚡ Continuar sin gastar tokens**. El pedido queda escrito en tu chat; úsalo en una conversación **nueva**.
+3. Tu IA lee un extracto de unos pocos miles de tokens: el objetivo original, un **mapa de toda la sesión** (cada petición tuya en una línea, con su número de mensaje), tus últimas peticiones, sus últimas respuestas, los archivos cambiados y los últimos comandos. Todo con los secretos ocultos.
+
+También puedes pedírselo directo: *"Continúa mi sesión claude:… con Session Hub"* (herramienta `continue_session`, o el atajo `/mcp__session-hub__continue_session` en Claude Code). Si le falta un detalle, usa el mapa para leer solo ese tramo con `get_session`, así que no pierdes nada: el original sigue intacto y solo se paga lo que se lee.
+
+**Qué esperar:** es un extracto, no la sesión completa, y la IA no carga el detalle hasta que lo necesita. A cambio, una sesión larga cuesta unos 5.000 tokens en lugar de cientos de miles. En una sesión corta o reciente no compensa: retómala normal. Solo funciona con **tus** sesiones.
 
 ## Respaldo y exportar
 
@@ -209,7 +280,7 @@ Claude Code borra el historial a los 30 días, y en Cursor un chat se puede borr
 | **Copias de tu equipo** | Copias de lo que tus compañeros comparten contigo, para leerlo aunque estén desconectados (**💾 copia de hace…**: puede no tener lo último). Se borran solas si la persona oculta la sesión, deja de compartirla o desactiva las copias. |
 
 - **Siempre al día:** mientras el original existe, el respaldo es igual al original; se actualiza cada 1–2 minutos o con **Actualizar ahora**.
-- **Borrar:** en la conversación, **Borrar del respaldo**; o en *Respaldo*, **Borrar lo que ya no existe**, **Borrar sus copias** o **Borrar todas las copias**. Si borras una copia a mano, no se vuelve a copiar.
+- **Borrar:** en la conversación, **Borrar del respaldo**; o en *Respaldo*, **Borrar lo que ya no existe**, **Borrar sus copias** o **Borrar todas las copias**. Siempre pide confirmación. Puedes borrar cualquier sesión respaldada: si su original ya no existe, se pierde para siempre; si el original sigue en Claude Code o Cursor, solo se borra el respaldo (el original no se toca) y no se vuelve a respaldar, hasta que pulses **Volver a respaldar las borradas a mano**. Si borras una copia de un compañero a mano, tampoco se vuelve a copiar.
 - **Exportar:** en la conversación, **⤓ Exportar** (Markdown o JSON); en *Respaldo*, **Exportar todo…** crea una carpeta con un archivo por sesión e `index.json`.
 - **Tu decisión:** si no quieres que tus compañeros guarden copias de lo tuyo, desactiva `sessionHub.allowTeamCopies`. En *Quién ha leído lo mío* verás "💾 Ana guardó una copia de…".
 - Ajustes: `sessionHub.backupOwnSessions`, `sessionHub.keepTeamCopies`, `sessionHub.backupRetentionDays` (365), `sessionHub.teamCopiesRetentionDays` (180) y `sessionHub.backupMaxMB` (2048).
@@ -257,6 +328,8 @@ Primer paso: `Ctrl+Shift+P` → **Session Hub: Diagnóstico**. Revisa todo y te 
 | Veo a la persona, pero no sus sesiones | Que revise *Quién lo ve* o si está en pausa |
 | La invitación venció o ya se usó | Pide una nueva |
 | Mi IA no encuentra Session Hub | Mira en *Estado* la línea *Tu IA puede consultar Session Hub (MCP)*. Si sale en rojo, pulsa **Reiniciar** o actualiza la extensión. En Claude Code, usa *Conectar Claude Code* |
+| No veo las sesiones de otro proyecto, o mi IA no las encuentra | En *Sesiones*, elige **Todos los proyectos**. A tu IA, dile *"busca en todos los proyectos"* |
+| Un compañero y yo trabajamos en el mismo proyecto, pero aparece separado | Si la carpeta no tiene git (o cada uno tiene otro repositorio), usen los dos **Session Hub: Vincular proyecto** con el mismo nombre |
 | La IA busca en otro lado (otros documentos, la web) | Nombra la herramienta: *"Busca en Session Hub la sesión de Carlos sobre firmas"* |
 | **Ubuntu:** *"no puede arrancar… módulos de cifrado"* o `GLIBC_2.33 not found` en la salida | Pasa con **VS Code instalado como Snap** (desde *Ubuntu Software*): trae librerías de Ubuntu 20.04. Session Hub intenta usar el Node del sistema; instala **Node.js 22.5 o superior** (por ejemplo desde [nodejs.org](https://nodejs.org) o con `nvm`), o instala VS Code desde el [paquete .deb de Microsoft](https://code.visualstudio.com/download), y vuelve a abrir el editor. En Linux hace falta glibc 2.33 o superior (Ubuntu 22.04+, Debian 12+, Fedora 34+) |
 
@@ -265,6 +338,8 @@ Cómo abrir el puerto: en **Windows**, cuando pregunte, permite el acceso en *Re
 ## Preguntas frecuentes
 
 **¿Puedo estar en varios equipos?** No a la vez. Puedes salir (*Session Hub: Salir del equipo*) y unirte a otro sin problemas: conservas tu huella, y lo del equipo anterior se borra. Para volver al anterior necesitas una invitación nueva.
+
+**¿Qué pasa con mis copias si alguien sale del equipo o lo expulsan?** Se borran. Al salir, tu hub avisa a los compañeros conectados, y ellos al resto, para que borren las copias de tus sesiones. Si nadie estaba conectado, esas copias vencen con el plazo de retención. Si expulsas a alguien, borras en el acto sus copias y las de quienes él invitó; quien es expulsado borra las copias del equipo en cuanto se entera. Además se terminan las conversaciones automáticas con esa persona, sus mensajes sin leer ya no llegan a tu IA y los tuyos en cola para ella vencen. Bloquear a alguien hace lo mismo, salvo borrar sus copias: solo las oculta, porque el bloqueo se puede deshacer.
 
 **¿Hay un servidor central?** No. Tus conversaciones siguen en tu computadora. Cuando alguien lee una, viaja cifrada directo a su editor.
 
@@ -275,6 +350,12 @@ Cómo abrir el puerto: en **Windows**, cuando pregunte, permite el acceso en *Re
 **¿Puedo cambiar el idioma?** Sí: la interfaz sigue el idioma del editor. Para fijarlo, en Ajustes busca `sessionHub.language` y elige español o inglés.
 
 **¿Puedo usarlo en Cursor y VS Code a la vez?** Sí, desde la 0.10. Hay un solo Session Hub por computadora: el primer editor que abres lo ejecuta y el otro se conecta a él, con la misma identidad y la misma configuración. Si cierras el que lo ejecuta, el otro toma el relevo. Si vienes de la 0.9 con una identidad distinta en cada editor, Session Hub te pregunta una vez con cuál seguir; la otra queda guardada en la carpeta de su editor. Instala **la misma versión** en los dos. Detalles: [Cursor y VS Code en la misma computadora](SAME-MACHINE.es.md).
+
+**¿Qué pasa si Cursor no guardó una conversación en su base de datos?** Session Hub la lee de las transcripciones que Cursor guarda en `~/.cursor/projects`. No tienes que hacer nada.
+
+**¿Por qué mi IA solo ve un proyecto?** Porque Session Hub la limita al proyecto en el que trabajas, para no mezclar proyectos. Si quieres otros, pídeselo: *"busca en todos los proyectos"*. Ver [Proyecto actual](#proyecto-actual-no-mezclar-proyectos).
+
+**Retomé una sesión vieja y Claude Code avisó que la caché venció. ¿Se perdió algo?** No, es un aviso de costo y velocidad, no un error. Mira [Continuar una sesión antigua sin gastar tokens](#continuar-una-sesión-antigua-sin-gastar-tokens): Session Hub te deja seguir ese trabajo en una conversación nueva sin reprocesar todo.
 
 **¿Es gratis?** Sí. Es software libre (AGPL-3.0) y no está afiliado a Cursor ni a Anthropic.
 
@@ -289,5 +370,8 @@ Cómo abrir el puerto: en **Windows**, cuando pregunte, permite el acceso en *Re
 | **Pendiente** | Ya te uniste, pero falta que quien te invitó lo confirme |
 | **Huella** | Código único que prueba quién es cada persona |
 | **Pausa / Ocultar / Bloquear / Expulsar** | Tus controles de privacidad (ver arriba) |
+| **Subagente** | Una IA ayudante a la que la IA principal encarga parte del trabajo; se ve dentro de su sesión |
+| **Proyecto actual** | La carpeta en la que trabajas en el editor; Session Hub y tu IA la usan para no mezclar proyectos |
+| **Vínculo** | Un nombre que hace que carpetas sin git cuenten como el mismo proyecto para quienes usen el mismo |
 | **MCP** | La conexión que permite a tu IA consultar Session Hub |
 | **Mensaje** | Texto firmado para un compañero; queda retenido hasta que lo apruebe o lo pase a su IA |

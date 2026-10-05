@@ -15,7 +15,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
-import { relPath } from './util.js';
+import { relPath, writeAtomic } from './util.js';
 
 const DAY = 86400e3;
 const LRU_SIZE = 20; // sesiones del respaldo con mensajes cargados en memoria
@@ -23,12 +23,6 @@ const LRU_SIZE = 20; // sesiones del respaldo con mensajes cargados en memoria
 const safeName = (id) => String(id).replace(/[^a-zA-Z0-9_.-]/g, '_').slice(0, 180);
 const hashOf = (v) => crypto.createHash('sha256').update(JSON.stringify(v)).digest('hex');
 
-function writeAtomic(file, data) {
-  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
-  const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
-  fs.writeFileSync(tmp, data, { mode: 0o600 });
-  fs.renameSync(tmp, file);
-}
 const writeGz = (file, obj) => {
   const buf = zlib.gzipSync(Buffer.from(JSON.stringify(obj)));
   writeAtomic(file, buf);
@@ -44,17 +38,22 @@ function readJson(file, dflt) {
 }
 const rm = (file) => fs.rmSync(file, { force: true });
 
-// Datos que el listado necesita sin abrir cada respaldo.
-function statsOf(messages, project) {
+// Datos que el listado necesita sin abrir cada respaldo. Archivos y comandos incluyen los de los
+// subagentes (lo hicieron dentro de la sesión); `count` es solo de la conversación principal.
+function statsOf(messages, project, subagents) {
   const edits = new Set();
   let commands = 0;
-  for (const m of messages)
+  for (const m of [...messages, ...(subagents || []).flatMap((x) => x.messages || [])])
     for (const a of m.actions || []) {
       if (a.kind === 'edit' && a.target) edits.add(relPath(a.target, project));
       if (a.kind === 'command') commands++;
     }
-  return { count: messages.length, edits: [...edits].sort(), commands };
+  const subs = (subagents || []).map((x) => ({ id: x.id, type: x.type ?? null, description: x.description ?? null, count: (x.messages || []).length }));
+  return { count: messages.length, edits: [...edits].sort(), commands, ...(subs.length ? { subagents: subs } : {}) };
 }
+
+// Lo que identifica el contenido: sin subagentes, igual que antes (no cambia la huella de lo ya respaldado).
+const contentOf = (s) => (s.subagents?.length ? [s.messages, s.subagents] : s.messages);
 
 function lru() {
   const map = new Map();
@@ -77,10 +76,17 @@ function lru() {
 
 // ======================= capa 1: mis sesiones =======================
 
-export function createOwnArchive({ dir, log = () => {}, searchIndex = null }) {
+// ownerId(): mi id (clave pública), para quitar del índice solo mis filas y no la copia de un compañero.
+export function createOwnArchive({ dir, log = () => {}, searchIndex = null, ownerId = () => null }) {
+  const unindex = (id) => searchIndex?.removeSession(id, ownerId() ? { scope: 'own', ownerId: ownerId() } : {});
   const base = path.join(dir, 'own');
   const indexFile = path.join(base, 'index.json');
   let index = readJson(indexFile, {}); // id -> meta
+  // Borradas a mano mientras su original sigue existiendo: no se vuelven a respaldar (si no, la próxima
+  // sincronización las traería de vuelta). Se vacía con unignoreAll().
+  const ignoredFile = path.join(base, 'ignored.json');
+  const ignored = new Set(readJson(ignoredFile, []));
+  const saveIgnored = () => writeAtomic(ignoredFile, JSON.stringify([...ignored]));
   const lastRef = new Map(); // id -> objeto de sesión ya respaldado (las fuentes lo reutilizan si no cambió)
   const cache = lru();
   let lastSync = null;
@@ -94,12 +100,16 @@ export function createOwnArchive({ dir, log = () => {}, searchIndex = null }) {
     if (hit) return hit;
     try {
       const data = readGz(path.join(base, m.file));
-      cache.set(id, data.messages);
-      return data.messages;
+      const entry = { messages: data.messages, subagents: data.subagents };
+      cache.set(id, entry);
+      return entry;
     } catch (err) {
       // Dañado o borrado a mano: se descarta; si el original sigue existiendo se vuelve a respaldar.
       log(`[respaldo] no pude leer ${id}: ${err.message}`);
       delete index[id];
+      cache.delete(id);
+      lastRef.delete(id);
+      unindex(id); // que una búsqueda tampoco la encuentre
       saveIndex();
       return null;
     }
@@ -119,7 +129,11 @@ export function createOwnArchive({ dir, log = () => {}, searchIndex = null }) {
       goneSince: m.goneSince,
       stats: m.stats,
       get messages() {
-        return load(m.id) || [];
+        return load(m.id)?.messages || [];
+      },
+      // Solo se abre el archivo si de verdad tiene subagentes (el listado usa stats.subagents).
+      get subagents() {
+        return m.stats?.subagents ? load(m.id)?.subagents || undefined : undefined;
       },
     };
   }
@@ -134,9 +148,10 @@ export function createOwnArchive({ dir, log = () => {}, searchIndex = null }) {
           const present = new Set();
           for (const s of sessions) {
             present.add(s.id);
+            if (ignored.has(s.id)) continue;
             const m = index[s.id];
             if (m && lastRef.get(s.id) === s && !m.goneSince) continue; // mismo objeto: nada cambió
-            const h = hashOf(s.messages);
+            const h = hashOf(contentOf(s));
             if (m && m.hash === h && m.project === p.path) {
               if (m.goneSince) (m.goneSince = null), (changed = true); // volvió a aparecer
               if (m.title !== s.title || m.updatedAt !== s.updatedAt) Object.assign(m, { title: s.title, updatedAt: s.updatedAt }), (changed = true);
@@ -148,7 +163,7 @@ export function createOwnArchive({ dir, log = () => {}, searchIndex = null }) {
             if (m && s.messages.length < m.stats.count && fs.existsSync(path.join(base, m.file))) {
               fs.copyFileSync(path.join(base, m.file), path.join(base, `${safeName(s.id)}.prev.json.gz`));
             }
-            const bytes = writeGz(path.join(base, file), { v: 1, id: s.id, messages: s.messages });
+            const bytes = writeGz(path.join(base, file), { v: 1, id: s.id, messages: s.messages, ...(s.subagents?.length ? { subagents: s.subagents } : {}) });
             index[s.id] = {
               id: s.id,
               source: s.source,
@@ -157,7 +172,7 @@ export function createOwnArchive({ dir, log = () => {}, searchIndex = null }) {
               branch: s.branch,
               createdAt: s.createdAt,
               updatedAt: s.updatedAt,
-              stats: statsOf(s.messages, p.path),
+              stats: statsOf(s.messages, p.path, s.subagents),
               hash: h,
               bytes,
               file,
@@ -203,15 +218,16 @@ export function createOwnArchive({ dir, log = () => {}, searchIndex = null }) {
     isGone: (id) => !!index[id]?.goneSince,
     meta: (id) => index[id] || null,
 
-    remove(id, { save = true } = {}) {
+    remove(id, { save = true, ignore = false } = {}) {
       const m = index[id];
       if (!m) return false;
+      if (ignore) (ignored.add(id), saveIgnored());
       rm(path.join(base, m.file));
       rm(path.join(base, `${safeName(id)}.prev.json.gz`));
       delete index[id];
       cache.delete(id);
       lastRef.delete(id);
-      searchIndex?.removeSession(id); // ya no está: que tampoco lo encuentre una búsqueda
+      unindex(id); // ya no está: que tampoco lo encuentre una búsqueda
       if (save) saveIndex();
       return true;
     },
@@ -240,9 +256,16 @@ export function createOwnArchive({ dir, log = () => {}, searchIndex = null }) {
       return n;
     },
 
+    // Vuelve a respaldar lo que se borró a mano (se trae en la próxima sincronización).
+    unignoreAll() {
+      const n = ignored.size;
+      ignored.clear();
+      if (n) saveIgnored();
+      return n;
+    },
     all: () => Object.values(index),
     bytes: () => Object.values(index).reduce((a, m) => a + (m.bytes || 0), 0),
-    status: () => ({ sessions: Object.keys(index).length, onlyInBackup: Object.values(index).filter((m) => m.goneSince).length, bytes: Object.values(index).reduce((a, m) => a + (m.bytes || 0), 0), lastSync, lastError, dir: base }),
+    status: () => ({ ignored: ignored.size, sessions: Object.keys(index).length, onlyInBackup: Object.values(index).filter((m) => m.goneSince).length, bytes: Object.values(index).reduce((a, m) => a + (m.bytes || 0), 0), lastSync, lastError, dir: base }),
   };
 }
 
@@ -269,6 +292,7 @@ export function createCopies({ dir, log = () => {}, searchIndex = null }) {
       return data;
     } catch {
       delete index.owners[ownerId]?.sessions[id];
+      searchIndex?.removeSession(id, { scope: 'copy', ownerId });
       saveIndex();
       return null;
     }
@@ -314,7 +338,7 @@ export function createCopies({ dir, log = () => {}, searchIndex = null }) {
       const had = !!o.sessions[id];
       delete o.sessions[id];
       cache.delete(`${ownerId}/${id}`);
-      searchIndex?.removeSession(id);
+      searchIndex?.removeSession(id, { scope: 'copy', ownerId });
       if (ignore && !o.ignored.includes(id)) o.ignored.push(id);
       if (save) saveIndex();
       return had;
@@ -327,18 +351,18 @@ export function createCopies({ dir, log = () => {}, searchIndex = null }) {
       fs.rmSync(path.join(base, safeName(ownerId).slice(0, 16)), { recursive: true, force: true });
       delete index.owners[ownerId];
       cache.clear();
-      for (const id of ids) searchIndex?.removeSession(id);
+      for (const id of ids) searchIndex?.removeSession(id, { scope: 'copy', ownerId });
       saveIndex();
       if (ids.length) log(`[copias] borradas ${ids.length} copia(s) de ${o.name || ownerId.slice(0, 12)}${reason ? ` (${reason})` : ''}`);
       return ids.length;
     },
 
     purgeAll() {
-      const ids = Object.values(index.owners).flatMap((o) => Object.keys(o.sessions));
+      const ids = Object.values(index.owners).flatMap((o) => Object.keys(o.sessions).map((id) => [o.id, id]));
       fs.rmSync(base, { recursive: true, force: true });
       index = { owners: {} };
       cache.clear();
-      for (const id of ids) searchIndex?.removeSession(id);
+      for (const [ownerId, id] of ids) searchIndex?.removeSession(id, { scope: 'copy', ownerId });
       saveIndex();
       return ids.length;
     },

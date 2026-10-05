@@ -159,3 +159,40 @@ test('copias con índice: mismo resultado que el barrido, sin mezclar compañero
   assert.deepEqual(c.search(LUIS, 'firma-de-contratos'), [], 'purgeOwner también limpia el índice');
   searchIndex.close();
 });
+
+test('respaldo dañado: también sale del índice de búsqueda (solo mi fila, no la copia de otro)', () => {
+  const dir = tmp();
+  const searchIndex = createSearchIndex({ file: path.join(tmp(), 'search.sqlite') });
+  const ME = 'c'.repeat(64);
+  const a = createOwnArchive({ dir, searchIndex, ownerId: () => ME });
+  const P = { path: '/p' };
+  const msgs = [{ role: 'user', at: 1, text: 'firma digital', actions: [] }];
+  a.sync([P], () => ({ ok: true, sessions: [{ id: 'claude:a', source: 'claude-code', project: '/p', title: 't', updatedAt: 1, messages: msgs }] }));
+  searchIndex.indexSession({ id: 'claude:a', scope: 'own', ownerId: ME, source: 'claude-code', project: '/p', title: 't', updatedAt: 1, messages: msgs });
+  searchIndex.indexSession({ id: 'claude:a', scope: 'copy', ownerId: 'ana', source: 'claude-code', project: '/p', title: 't', updatedAt: 1, messages: msgs });
+  fs.writeFileSync(path.join(dir, 'own', a.meta('claude:a').file), 'dañado');
+  const b = createOwnArchive({ dir, searchIndex, ownerId: () => ME });
+  assert.deepEqual(b.goneFor('/p', null, new Set())[0].messages, []);
+  assert.deepEqual(searchIndex.ids('own', ME), [], 'mi fila salió del índice');
+  assert.deepEqual(searchIndex.ids('copy', 'ana'), ['claude:a'], 'la copia de Ana sigue');
+  searchIndex.close();
+});
+
+test('borrar del respaldo una sesión cuyo original sigue: no se vuelve a respaldar hasta restaurar', () => {
+  const f = makeClaudeFixture();
+  const cfg = { ...f, id: 'c'.repeat(64), owner: { name: 'Carlos' }, projects: [{ path: f.project, name: 'demo-api', allow: ['*'] }], excludedSessions: [], paused: false, redactExtra: [], archiveDir: path.join(f.root, 'archive') };
+  const hub = createHub(cfg);
+  hub.syncArchive();
+  assert.equal(hub.archiveList().length, 1);
+  assert.equal(hub.archiveList()[0].goneSince, null, 'el original sigue');
+  hub.removeArchived('claude:s1');
+  assert.equal(hub.archiveList().length, 0, 'borrada del respaldo');
+  assert.equal(hub.archiveStatus().ignored, 1);
+  assert.equal(hub.listSessions().length, 1, 'el original no se toca');
+  hub.syncArchive();
+  assert.equal(hub.archiveList().length, 0, 'la sincronización no la trae de vuelta');
+  assert.equal(createHub(cfg).archiveStatus().ignored, 1, 'se recuerda al reiniciar');
+  assert.deepEqual(hub.restoreIgnored(), { restored: 1 });
+  hub.syncArchive();
+  assert.equal(hub.archiveList().length, 1, 'tras restaurar, vuelve a respaldarse');
+});

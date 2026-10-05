@@ -29,7 +29,8 @@ export function reachableAddresses() {
 // "host:puerto" → { host, port }
 export function parseAddr(a) {
   const m = /^([\w.-]+):(\d{1,5})$/.exec(String(a).trim());
-  return m ? { host: m[1], port: Number(m[2]) } : null;
+  const port = m && Number(m[2]);
+  return m && port >= 1 && port <= 65535 ? { host: m[1], port } : null;
 }
 
 // Promesa con tiempo límite: nada de esperas infinitas.

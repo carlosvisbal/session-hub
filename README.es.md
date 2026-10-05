@@ -48,14 +48,18 @@ Siempre bajo tu control: nada se comparte hasta que tú lo eliges, es de solo le
 | | |
 |---|---|
 | 🤝 **Vista de equipo** | Las sesiones de Claude Code y Cursor de todos en un panel: quién pidió qué, qué archivos cambiaron y en qué quedó. |
+| 🎯 **Proyecto actual** | Session Hub sabe en qué carpeta trabajas: tú y tu IA ven primero este proyecto, y un repo distinto con el mismo nombre queda marcado, nunca mezclado. **Vincular proyecto** une carpetas sin git. |
+| 🤖 **Subagentes incluidos** | Lo que hicieron los subagentes de Claude Code y Cursor aparece dentro de su sesión: sus pasos, archivos y comandos, con búsqueda y los mismos permisos. |
+| 🐚 **Archivos cambiados por comandos** | Los cambios hechos con `sed -i`, redirecciones, `tee`, `cp`/`mv`/`rm` o scripts cuentan en *Archivos modificados*, marcados *(por comando)*. Se leen del texto del comando; nada se ejecuta. |
 | 🧠 **MCP incluido** | Tu IA (Cursor, VS Code en modo agente, Claude Code) puede listar, buscar y leer sesiones **completas** de tus compañeros. |
 | 🔐 **Identidad firmada** | Cada instalación tiene una clave Ed25519. Nadie puede hacerse pasar por otro, ni con un certificado robado. |
+| 🚦 **Contexto al abrir una sesión** | Con los hooks instalados, cada sesión nueva de la IA recibe un resumen corto: proyecto actual, mensajes esperando, compañeros en línea y cambios recientes en este proyecto. Solo cifras, nunca texto de compañeros. |
 | 🛰️ **Sin servidor central** | Cada persona tiene su propio hub; los hubs hablan directo por Hyperswarm, cifrado con Noise. Funciona en la red local sin internet. |
 | 🎛️ **Control personal** | Eliges qué proyectos compartes y con quién, ocultas sesiones sueltas, pausas todo o bloqueas a alguien solo para ti. |
 | ✉️ **Mensajes entre personas** | Escríbele a un compañero, o a una de sus sesiones de IA abiertas, desde el panel o pidiéndoselo a tu IA. Van firmados, quedan retenidos hasta que los apruebe y con un clic los pasa a su IA. Nada se ejecuta solo. |
 | 🗄️ **Respaldo local** | Tus sesiones siguen disponibles aunque Claude Code (30 días) o Cursor las borren, y puedes guardar copias de las de tu equipo para leerlas sin conexión, solo mientras tengas acceso. Exporta a Markdown o JSON. |
 | 👁️ **Transparencia** | Te avisa cuando alguien lee tu sesión: quién, cuál, de qué proyecto y desde qué herramienta. Auditoría de 90 días. |
-| 🧹 **Oculta secretos** | Tokens, contraseñas, llaves y URLs con credenciales salen de tu máquina como `[REDACTED]`. |
+| 🧹 **Oculta secretos** | Tokens, contraseñas, llaves y URLs con credenciales salen de tu máquina como `[REDACTED]`, y la búsqueda tampoco los revela. |
 | 📜 **Software libre** | AGPL‑3.0‑or‑later. El hub en ejecución sirve su propio código en `/source`. |
 
 ## Empezar
@@ -103,7 +107,7 @@ flowchart LR
 |---|---|---|
 | `lan` *(por defecto)* | Red de la oficina; los propios hubs forman la red | UDP `49737` permitido |
 | `private` | Remoto o VPN con nodos de arranque propios | `sessionHub.bootstrap` |
-| `public` | Remoto sin montar nada | Salida UDP |
+| `public` | Remoto sin montar nada; si la conexión directa falla, se usa el relay ciego que trae | Salida UDP |
 
 **Remoto, paso a paso.** La infraestructura propia (nodos de arranque + un relay ciego que solo reenvía bytes cifrados) se levanta con un comando:
 
@@ -124,17 +128,28 @@ Guía completa: **[Trabajar desde redes distintas](docs/REMOTE.es.md)**. Las VPN
 | `what_changed` | Qué hizo cada compañero desde una fecha: peticiones, archivos, comandos y estado final |
 | `list_sessions` | Sesiones por persona, proyecto, fuente y fecha |
 | `get_session` | Una sesión **completa**: todos los mensajes, sin recortar |
+| `continue_session` | Un extracto corto de una sesión **tuya** (objetivo, últimas peticiones y respuestas, archivos cambiados) para seguirla en un chat nuevo sin reprocesar toda la conversación |
 | `search_sessions` | Búsqueda de texto en lo que tu equipo comparte contigo |
 | `list_agents` | Sesiones de IA que cada compañero tiene abiertas ahora (herramienta, proyecto, ocupada o libre) |
 | `send_message` | Un mensaje de texto firmado para un compañero (en cola hasta 24 h si está desconectado) |
 | `check_inbox` | Los mensajes que aprobaste para tu IA, marcados como de un compañero y no tuyos |
 | `start_conversation` / `end_conversation` | Proponer (tú confirmas, el otro acepta) y terminar una conversación automática |
 
-`list_sessions` acepta `origen: "respaldo"` para listar solo lo que viene del respaldo (el original ya se borró) o de copias locales. Cada resultado lleva `projectKey` (mismo repo = misma clave), `archived` y `copy`: la IA no mezcla proyectos y sabe cuándo lee una copia.
+| Prompt (atajo) | Qué hace |
+|---|---|
+| `catch_up` | Ponerme al día: qué hizo el equipo (opcional `since`, `peer`) |
+| `search_team` | Buscar un tema (`topic`) en las sesiones del equipo |
+| `check_messages` | Revisar los mensajes que te esperan |
+
+En Cursor, escribe `/` en el chat (`/session-hub/catch_up`); en Claude Code son comandos de barra MCP (`/mcp__session-hub__catch_up`).
+
+`list_sessions` acepta `origen: "respaldo"` para listar solo lo que viene del respaldo (el original ya se borró) o de copias locales. Cada resultado lleva `projectKey` (mismo repo = misma clave), `archived` y `copy`: la IA no mezcla proyectos y sabe cuándo lee una copia. Los subagentes se leen con `get_session` y el id `"<id de sesión>/sub:<id de subagente>"`.
 
 **Usar cualquier sesión en cualquier chat:** pulsa **🤖 Usar en mi IA** en una sesión (también en la pestaña *Respaldo*) y el pedido de leerla con `get_session` queda escrito en Claude Code, Copilot o Cursor; solo agregas tu pregunta. O pídeselo directo: *"Lee en Session Hub mi sesión respaldada sobre firmas y resume qué cambió."*
 
 Todas aceptan `peer` (nombre, huella, `"yo"` o `"todos"`). Si no hay resultados, explican *por qué* (nadie en línea o nada compartido).
+
+**Proyecto actual:** Session Hub sabe en qué carpeta trabajas (la ventana del editor, o el argumento `workspace` que pasa tu IA) y limita `list_sessions`, `search_sessions` y `what_changed` a ese proyecto. Cada resultado se marca como *proyecto actual*, *otro proyecto* u **OTRO proyecto con el mismo nombre**, para que un repo homónimo nunca se mezcle por error. Con `project: "todos"` se ve todo; `get_session` avisa si la sesión es de otro proyecto. Cursor pasa solo la carpeta de cada ventana (`${workspaceFolder}`); cualquier otra IA puede pasar `workspace`. Para carpetas sin git, **Vincular proyecto** da a tus compañeros una clave de proyecto común. Tus carpetas nunca salen de tu máquina.
 
 ## Línea de comandos (sin editor)
 

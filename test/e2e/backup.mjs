@@ -6,13 +6,17 @@
 import { spawn } from 'node:child_process';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import net from 'node:net';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { makeClaudeFixture } from '../fixtures.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const f = makeClaudeFixture();
-const base = 8000 + Math.floor(Math.random() * 100);
+// Puertos libres de verdad (en algunas máquinas hay servicios en 8080/8081): se prueba antes de usarlos.
+const isFree = (port) => new Promise((resolve) => { const s = net.createServer().once('error', () => resolve(false)).once('listening', () => s.close(() => resolve(true))).listen(port, '127.0.0.1'); });
+let base = 8000 + Math.floor(Math.random() * 100);
+while (!((await isFree(base)) && (await isFree(base + 100)))) base = 8000 + Math.floor(Math.random() * 100);
 const people = {
   carlos: { port: base, dhtPort: 50000 + (base % 100), owner: { name: 'Carlos', role: 'backend' }, projects: [{ path: f.project, name: 'demo-api' }] },
   ana: { port: base + 100, dhtPort: 50100 + (base % 100), owner: { name: 'Ana', role: 'frontend' }, projects: [] },
