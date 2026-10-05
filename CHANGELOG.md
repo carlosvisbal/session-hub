@@ -2,6 +2,24 @@
 
 Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); versiones con [SemVer](https://semver.org/lang/es/).
 
+## [0.11.3] — 2026-10-04
+
+### Corregido
+- **Aceptar una conversación entre dos chats ya no se traga el primer mensaje.** *Pasar a mi IA* lo marcaba como leído y el hook no podía entregarlo, así que el otro chat no seguía. Ahora ese mensaje lo entrega solo el hook, al terminar el turno. Si ya se había marcado leído y la conversación sigue esperando a esa sesión, el hook lo vuelve a dejar listo. `check_inbox` no se lleva los mensajes de una conversación automática.
+
+## [0.11.2] — 2026-10-04
+
+### Corregido
+- **Pasar a mi IA abre el chat en el editor donde está.** Si el mensaje es para un chat de Cursor y pulsas el botón en VS Code, la ventana de Cursor abre esa sesión. El texto queda copiado para pegarlo ahí.
+
+## [0.11.1] — 2026-10-04
+
+### Añadido
+- **Conversación automática entre dos chats de esta computadora.** En *Conversar* se puede elegir *Mis dos chats en esta computadora*: dos sesiones distintas (dos de Claude Code en VS Code, dos de Cursor, o una de cada editor). Se confirma una vez y, desde ahí, siguen solas hasta el límite de vueltas. Si el otro chat está quieto, *Pasar a mi IA* una vez. Por MCP, `to` es `yo` y `to_session` es la otra sesión.
+
+### Corregido
+- **En modo local, el aviso de conexión ya no habla del relay de la red pública.** Si no se ve a alguien, dice que el modo local solo alcanza la misma red y que para alguien fuera hay que volver a public.
+
 ## [0.11.0] — 2026-10-04
 
 ### Añadido
@@ -16,6 +34,7 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); v
 - **Cursor sabe solo en qué carpeta trabajas:** el MCP se registra con `${workspaceFolder}`, que Cursor reemplaza por la carpeta de cada ventana.
 - Si instalaste los hooks antes de esta versión, el panel (*Mensajes*) ofrece **Actualizar** para sumar el contexto al iniciar; si ya habías aceptado el de inicio, se renueva solo.
 - **Atajos MCP:** `catch_up` (ponerme al día), `search_team` (buscar en el equipo) y `check_messages` (revisar mensajes). En Cursor aparecen con `/`.
+- **Relay automático en modo public.** Si `sessionHub.relay` está vacío, los hubs usan el relay ciego que trae Session Hub cuando la conexión directa no sale. No hay que pegar ninguna clave. El relay no lo enciende el editor: queda encendido con `npm run infra -- --public` en el equipo que tiene `~/.session-hub/default-relay-key.json`. Solo reenvía bytes cifrados. Una clave propia en `sessionHub.relay` sigue mandando.
 - **Proyecto actual, para no mezclar proyectos por error.** Session Hub sabe en qué carpeta trabajas (la ventana del editor o la carpeta que la IA indica en `workspace`) y compara su clave de proyecto, siempre en tu máquina.
   - Por MCP, `list_sessions`, `search_sessions` y `what_changed` se limitan al proyecto actual; lo de otros proyectos solo aparece si se pide `project: "todos"`. Cada resultado trae `relacion`: proyecto actual, otro proyecto u **OTRO proyecto con el mismo nombre**. `get_session` avisa si la sesión no es del proyecto actual.
   - En el panel, el filtro *Este proyecto / Todos los proyectos*, el proyecto actual primero y las marcas 📍 *este proyecto* y ⚠ *mismo nombre, otro proyecto*.
@@ -25,6 +44,10 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/); v
   - Las carpetas de trabajo nunca viajan a los compañeros.
 
 ### Corregido
+- **Las conversaciones automáticas empiezan con 100 vueltas.** Se cambia en `sessionHub.conversationTurns` (de 1 a 100).
+- **Las conversaciones automáticas ya no se cortan por tiempo.** Siguen hasta el límite de vueltas, hasta que alguien las detiene, o si se detecta un bucle. Se quitó el ajuste `sessionHub.conversationMinutes`.
+- **Conversaciones automáticas atadas a las dos sesiones**, igual entre VS Code y Cursor, Cursor y Cursor, o Cursor y VS Code. No empieza hasta que las dos sesiones (`claude:…` o `cursor:…`) están en el documento firmado, y el mensaje solo llega a esos dos chats. Ya no se engancha a la primera que termine un turno. Al abrir la sesión, la IA recibe su id para pasarlo en `mine`. "Pasar a mi IA" abre ese chat: la sesión de Claude Code, o la de Cursor (`composer.openComposer`), no un chat nuevo.
+- **La carpeta de datos y la clave del relay quedan solo para su dueño.** `~/.session-hub` se cierra (0700) si otros usuarios podían listarla, y el relay no arranca con una clave que otros puedan leer. El proceso del relay no ve el resto de la carpeta personal: ni las claves del equipo, ni las sesiones, ni SSH.
 - **Conectar Claude Code** funciona aunque no tengas el comando `claude` en la terminal: usa el ejecutable que trae la extensión de Claude Code en VS Code o Cursor.
 - **Seguridad de red:** un mensaje mal formado de un remoto (`null`, una cadena con eslabones vacíos o chismes con forma rara) ya no puede cerrar el hub. Antes de presentarse, un remoto solo puede enviar mensajes de hasta 8 MB.
 - **Expulsiones:** expulsar a alguien corta enseguida a quienes esa persona invitó, aunque ya estén conectados, y una expulsión que llega por chisme se aplica antes de aceptar a quien la trae.

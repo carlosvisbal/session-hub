@@ -107,7 +107,7 @@ flowchart LR
 |---|---|---|
 | `lan` *(por defecto)* | Red de la oficina; los propios hubs forman la red | UDP `49737` permitido |
 | `private` | Remoto o VPN con nodos de arranque propios | `sessionHub.bootstrap` |
-| `public` | Remoto sin montar nada | Salida UDP |
+| `public` | Remoto sin montar nada; si la conexión directa falla, se usa el relay ciego que trae | Salida UDP |
 
 **Remoto, paso a paso.** La infraestructura propia (nodos de arranque + un relay ciego que solo reenvía bytes cifrados) se levanta con un comando:
 

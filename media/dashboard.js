@@ -266,7 +266,6 @@
       ? `<span class="ok-txt">✓ ${T('Hooks instalados en {v1}', { v1: [hk.claude && 'Claude Code', hk.cursor && 'Cursor'].filter(Boolean).join(T(' y ')) })}</span> ${hk.complete === false ? ` ${cmd('sessionHub.installHooks', T('Actualizar (nuevo: contexto al abrir una sesión)'), 'link small')}` : ''} ${cmd('sessionHub.removeHooks', T('Quitar'), 'link small')}`
       : `<span class="warn-txt">! ${T('Sin hooks: tu IA no continuará sola')}</span> ${cmd('sessionHub.installHooks', T('Instalar hooks'), 'link')}`;
     const row = (c) => {
-      const left = c.status === 'active' && c.expiresAt ? Math.max(0, Math.round((Date.parse(c.expiresAt) - Date.now()) / 60000)) : null;
       const acts = {
         confirm: cmd('sessionHub.confirmConversation', T('Confirmar'), 'primary small-btn', [c.id]) + cmd('sessionHub.endConversation', T('Cancelar'), 'link small', [c.id]),
         invited: cmd('sessionHub.acceptConversation', T('Aceptar'), 'primary small-btn', [c.id]) + cmd('sessionHub.declineConversation', T('Rechazar'), 'link small', [c.id]),
@@ -275,17 +274,17 @@
       }[c.status] || '';
       return `<div class="brow conv ${esc(c.status)}">
         <div class="bmain">
-          <div class="btitle">🤝 ${esc(c.peerName || '')} <span class="tag ${c.status === 'active' ? 'ok' : c.status === 'ended' ? '' : 'copy'}">${esc(T(CONV_STATUS[c.status] || c.status))}</span></div>
-          <div class="muted small">${T('vueltas: {v1} enviadas · {v2} recibidas · máximo {v3}', { v1: num(c.sent), v2: num(c.received), v3: num(c.turns) })}${left != null ? ` · ${T('quedan {v1} min', { v1: left })}` : ''}${c.status === 'ended' && c.endReason ? ` · ${esc(T(CONV_END[c.endReason] || c.endReason))}` : ''}</div>
+          <div class="btitle">🤝 ${esc(c.local ? T('Tus dos chats') : c.peerName || '')} <span class="tag ${c.status === 'active' ? 'ok' : c.status === 'ended' ? '' : 'copy'}">${esc(T(CONV_STATUS[c.status] || c.status))}</span></div>
+          <div class="muted small">${T('vueltas: {v1} enviadas · {v2} recibidas · máximo {v3}', { v1: num(c.sent), v2: num(c.received), v3: num(c.turns) })}${c.status === 'ended' && c.endReason ? ` · ${esc(T(CONV_END[c.endReason] || c.endReason))}` : ''}</div>
           ${c.text ? `<div class="small ellipsis" title="${esc(c.text)}">“${esc(clip(c.text, 140))}”</div>` : ''}
         </div>
         <div class="bacts">${acts}</div>
       </div>`;
     };
     return `<h3>${T('Conversaciones automáticas')}</h3>
-      <p class="hint">${T('Tu IA y la de un compañero conversan solas, hasta un límite de vueltas y minutos, solo si los dos lo aceptan.')} <button class="link" data-view="help" data-helpsec="conv">${T('¿Cómo funciona?')}</button></p>
+      <p class="hint">${T('Tu IA y la de un compañero conversan solas, hasta un límite de vueltas, solo si los dos lo aceptan. También entre dos chats de esta computadora. No se corta por tiempo.')} <button class="link" data-view="help" data-helpsec="conv">${T('¿Cómo funciona?')}</button></p>
       <div class="actions">${cmd('sessionHub.startConversation', `🤝 ${T('Iniciar una conversación')}`, 'primary')} <span class="small">${hookLine}</span></div>
-      ${listBox('convs', list, { render: row, text: (c) => `${c.peerName} ${c.text || ''}`, empty: `<p class="empty small">${T('Todavía no hay conversaciones automáticas.')}</p>`, placeholder: T('Buscar conversación…') })}`;
+      ${listBox('convs', list, { render: row, text: (c) => `${c.local ? T('Tus dos chats') : c.peerName} ${c.text || ''}`, empty: `<p class="empty small">${T('Todavía no hay conversaciones automáticas.')}</p>`, placeholder: T('Buscar conversación…') })}`;
   }
 
   // ---------- Ayuda: instrucciones y explicaciones ----------

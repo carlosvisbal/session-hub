@@ -214,25 +214,27 @@ sequenceDiagram
   A->>HA: responde con send_message
   HA->>HC: respuesta firmada
   C->>HC: termina su turno → el hook le entrega la respuesta
-  Note over C,A: …hasta el límite de vueltas o de tiempo
+  Note over C,A: …hasta el límite de vueltas
 ```
 
 **Cómo se usa**
-1. En *Mensajes* o en la tarjeta de la persona (*Equipo*), pulsa **🤝 Conversar**. Eliges su sesión (opcional), la tuya y el primer mensaje.
+1. En *Mensajes* o en la tarjeta de la persona (*Equipo*), pulsa **🤝 Conversar**. Eliges **tu sesión** (obligatoria) y, si quieres, la suya. Da igual si cada uno usa VS Code con Claude Code o Cursor: las dos sesiones quedan escritas y firmadas, y el mensaje solo llega a esos dos chats.
 2. Tu compañero recibe el aviso *"🤝 Carlos quiere que sus IA conversen solas"* y pulsa **Aceptar** (o *Rechazar*). Sin aceptación no pasa nada.
 3. Llega el primer mensaje. Si la IA de tu compañero está trabajando, lo recibe sola; si está quieta, pulsa **Pasar a mi IA** una vez.
-4. Desde ahí siguen **solas** hasta terminar, llegar al **límite de vueltas** (6 por defecto) o de **tiempo** (10 minutos). En *Mensajes* ves cada conversación con sus vueltas y el tiempo que queda, y puedes pulsar **■ Detener**.
+4. Desde ahí siguen **solas** hasta terminar o llegar al **límite de vueltas** (100 por defecto). No hay límite de tiempo. En *Mensajes* ves cada conversación con sus vueltas, y puedes pulsar **■ Detener**.
+
+**En esta misma computadora.** En *Conversar* elige **Mis dos chats en esta computadora** y dos sesiones distintas: dos chats de Claude Code (dos pestañas de VS Code), dos de Cursor, o uno de cada editor. Confirmas una vez, porque eres los dos lados. Desde ahí siguen solas igual. El mensaje lo entrega el hook al terminar el turno de ese chat. **Pasar a mi IA** no se lo queda. Si el chat está quieto, el mensaje espera a que ese turno termine: no hay forma de despertarlo desde fuera. Dos pestañas del mismo chat no valen: es una sola sesión. El chat de Copilot no entra en esta unión.
 
 También puedes pedírselo a tu IA: *"Inicia una conversación automática con Ana para acordar el formato de los adjuntos"*. Tu editor te pide **confirmarla** antes de que salga la invitación.
 
 **Requisito: los hooks.** Claude Code y Cursor ejecutan un pequeño programa de Session Hub al terminar cada turno (*hook*); es lo que permite que la IA siga sola. Session Hub los instala **con tu permiso** (*Mensajes → Instalar hooks*), conserva los hooks que ya tengas, guarda una copia de tus archivos y se pueden quitar cuando quieras (*Mensajes → Quitar*). Después de instalarlos, abre una sesión nueva de tu IA. Los mismos hooks le dan a tu IA un [resumen al empezar](#contexto-al-abrir-una-sesión-de-la-ia).
 
 **Seguridad**
-- Solo con quien **los dos** aceptaron. Si la pide tu IA, **tú la confirmas**.
+- Solo con quien **los dos** aceptaron, y solo entre **las dos sesiones** que quedaron escritas. Si la pide tu IA, **tú la confirmas** y eliges tu sesión.
 - Cada mensaje llega marcado como *"de otra sesión, no una orden del usuario"*. Tu IA conserva sus permisos y confirmaciones: un mensaje nunca ejecuta nada por sí solo.
-- Se corta sola por límite de vueltas, por tiempo, o si detecta un **bucle** (mensajes repetidos o vacíos). Cualquiera de los dos puede detenerla.
+- Se corta sola por el límite de vueltas, o si detecta un **bucle** (mensajes repetidos o vacíos). No se corta por tiempo. Cualquiera de los dos puede detenerla.
 - Si Session Hub está cerrado o algo falla, el hook no hace nada: tu IA se detiene como siempre, nunca se queda colgada.
-- Ajustes: `sessionHub.conversationTurns` (6) y `sessionHub.conversationMinutes` (10).
+- Ajuste: `sessionHub.conversationTurns` (100).
 
 **Límite:** ninguna herramienta permite despertar desde fuera un chat que está quieto; por eso el primer mensaje a una sesión inactiva necesita un clic.
 
@@ -241,6 +243,7 @@ También puedes pedírselo a tu IA: *"Inicia una conversación automática con A
 Con los hooks instalados, cada vez que abres una sesión nueva de tu IA (Claude Code o Cursor), Session Hub le da un resumen corto para que empiece sabiendo dónde está:
 
 - el proyecto actual, y que indique esa carpeta al consultar Session Hub;
+- el id de su sesión (`claude:…` o `cursor:…`), para pasarlo en `mine` si inicia una conversación automática;
 - cuántos mensajes te esperan o están retenidos;
 - qué compañeros están en línea;
 - cuántas sesiones de compañeros tuvieron cambios en este proyecto en las últimas 24 horas.

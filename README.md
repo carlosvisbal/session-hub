@@ -107,7 +107,7 @@ flowchart LR
 |---|---|---|
 | `lan` *(default)* | Office network; the hubs themselves form the network | UDP `49737` allowed |
 | `private` | Remote/VPN with your own bootstrap nodes | `sessionHub.bootstrap` |
-| `public` | Remote with zero setup | Outbound UDP |
+| `public` | Remote with zero setup; if a direct connection fails, the built-in blind relay is used | Outbound UDP |
 
 **Remote, step by step.** Your own infrastructure (bootstrap nodes + a blind relay that only forwards encrypted bytes) starts with one command:
 

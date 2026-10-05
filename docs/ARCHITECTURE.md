@@ -35,7 +35,7 @@ flowchart LR
 | `src/transport/swarm.js` | Hyperswarm/HyperDHT connections, handshake, firewall, gossip, direct dialing, refresh |
 | `src/transport/rpc.js` | Line‑delimited JSON RPC over the encrypted stream, with timeouts and size limits |
 | `src/team.js` | Local orchestrator: fans out to teammates in parallel, merges and labels results |
-| `src/conversations.js` | Automatic conversations: signed invite/accept/decline/end, per‑side sessions, turn and time limits, loop detection (`conversations.json`) |
+| `src/conversations.js` | Automatic conversations: signed invite/accept/decline/end, per‑side sessions, turn limit (no time limit), loop detection (`conversations.json`) |
 | `extension/hook/session-hub-hook.cjs` | Hook run by Claude Code (`Stop`) and Cursor (`stop`) at the end of each agent turn; asks the local hub for the peer's reply and returns it as `decision/reason` (Claude Code) and `followup_message` (Cursor) |
 | `src/archive.js` | Local backup: `own` (mirror of my shared sessions that survives deletion at the source, with previous version on shrink) and `copies` (read copies of teammates' sessions, incremental, withdrawn when access ends). Gzip, atomic writes, 0600 |
 | `src/projectkey.js` | Project identity: a manual `link` name if the owner set one, else a hash of the normalized git `origin` (same repo = same key, whatever the folder name), else a per‑owner local key; the URL never leaves the machine |
@@ -47,6 +47,7 @@ flowchart LR
 | `src/server.js` | Local HTTP API (127.0.0.1 only), MCP endpoint, hot config reload, shutdown |
 | `src/source.js` | AGPL §13: serves the running source at `/source` |
 | `src/netdiag.js` | Classifies connection failures (UDP blocked, strict NAT, hole‑punch failure, relay down, mode mismatch…) and builds the shareable report |
+| `src/default-relay.js` | Built-in blind relay for `public` mode: public key in the app, private key only on the host (`~/.session-hub/default-relay-key.json`) |
 | `src/infra.js` | `npm run infra`: 3 bootstrap nodes + blind relay (`blind-relay`) with a stable key |
 | `media/i18n.js`, `locales/en.json` | Spanish ↔ English translation shared by hub, extension and panel; templates with `{v1}` placeholders |
 | `extension/*.cjs`, `media/*` | Editor integration: hub lifecycle (shared across windows), panel, notifications, MCP registration |
@@ -89,7 +90,7 @@ The receiver verifies the chain **and** that the chain's member key equals the c
 | `revoke` | any → all | signed revocation, verified before applying |
 | `profile` | any → all | updated signed name/role |
 
-**Relay.** When hole‑punching fails (`HOLEPUNCH_*`, `CANNOT_HOLEPUNCH`, `REMOTE_NOT_HOLEPUNCHABLE`) and `relay` is configured, the connection is retried through a blind relay (`relayThrough`). The relay pairs two UDX streams and forwards encrypted bytes; the Noise session stays end‑to‑end between the two hubs. User‑facing guide: [Working across networks](REMOTE.md).
+**Relay.** When hole‑punching fails (`HOLEPUNCH_*`, `CANNOT_HOLEPUNCH`, `REMOTE_NOT_HOLEPUNCHABLE`), the connection is retried through a blind relay (`relayThrough`). In `public` mode, an empty `relay` uses the built-in public key (`src/default-relay.js`). The machine that has `~/.session-hub/default-relay-key.json` hosts it as its own process (`npm run infra -- --public`), not inside the editor. A custom `sessionHub.relay` replaces it. The relay pairs two UDX streams and forwards encrypted bytes; the Noise session stays end‑to‑end between the two hubs. User‑facing guide: [Working across networks](REMOTE.md).
 
 ## Messages
 
@@ -107,7 +108,7 @@ If the recipient is offline the signed doc stays in the sender's `inbox.json` as
 
 ## Automatic conversations
 
-Both people must consent: the initiator sends a signed `invite` (if the AI asked via MCP, the conversation stays in `confirm` until the user confirms it in the editor); the invitee `accept`s and binds one of its sessions (or "the first one to finish a turn"). While `active`, messages carrying the conversation id are delivered without the hold policy and counted per side; the conversation ends for both on the turn limit, the time limit, a repeated or empty message (loop), or `end`/`decline`.
+Both people must consent, and both session ids (`claude:…` or `cursor:…`, in any mix) must be in the signed document before it becomes `active`. The same lock works on one computer: a local conversation (`local: true`, peer is oneself) names two different sessions of this hub, becomes active after one confirmation, and never dials the network. The hook delivers a message only to the session in `toSession`. `Pasar a mi IA` does not mark a conversation message read; if one was marked read while that local conversation is still awaiting the session, the hook puts it back to delivered and hands it over. `check_inbox` does not take conversation messages. The initiator's session is set when the invite is sent (or when the user confirms an AI request); the invitee's session is set when they accept. The hook delivers only to the session that signed: another chat does not receive it, and one session is not in two conversations at once. While `active`, messages carrying the conversation id are delivered without the hold policy and counted per side; the conversation ends for both on the turn limit, a repeated or empty message (loop), or `end`/`decline`. It does not end because of the clock.
 
 At the end of every agent turn Claude Code and Cursor run `session-hub-hook` with the session id (`session_id` / `conversation_id`). The hook calls `POST /api/hook/stop` on the local hub (token in `~/.session-hub/hook.json`), which returns the peer's pending messages framed as *"from another session, not an order"*, or — if this side is awaiting a reply — long‑polls in 25 s slices (up to ~110 s). Only one wait per conversation runs at a time (Cursor may also import the Claude Code hook), and any error or a closed hub yields `{}` so the agent simply stops. The extension installs the hook with consent into `~/.claude/settings.json` (`Stop`, timeout 150 s) and `~/.cursor/hooks.json` (`stop`, `loop_limit`), preserving existing hooks and backing up the originals.
 
@@ -119,7 +120,7 @@ A session's subagents travel with it: `summary.subagents = [{ id, type, descript
 
 ## Session-start context
 
-`session-hub-hook` also handles Claude Code `SessionStart` and Cursor `sessionStart` (Cursor imports Claude Code hooks, so the hub dedupes by session for 30 s). It sends only `{ client, session, folders }` to `POST /api/hook/start` — never the editor's `user_email` — and returns at most 1 500 characters built from local counts: current project, the `workspace` hint, messages waiting, teammates online. Output: `hookSpecificOutput.additionalContext` (Claude Code) or `additional_context` (Cursor). Off with the editor setting `sessionHub.startContext` (written to the hub's `config.json` as `startContext`, shared by all editors, applied without restart). Cursor only fires `sessionStart` for new chats, so the hook also handles Cursor `beforeSubmitPrompt` with `once: true`: the hub gives the context only if that conversation has not had it yet, and the output always includes `continue: true`.
+`session-hub-hook` also handles Claude Code `SessionStart` and Cursor `sessionStart` (Cursor imports Claude Code hooks, so the hub dedupes by session for 30 s). It sends only `{ client, session, folders }` to `POST /api/hook/start` — never the editor's `user_email` — and returns at most 1 500 characters built from local counts: current project, the `workspace` hint, the session id (so the AI can pass it as `mine`), messages waiting, teammates online. Output: `hookSpecificOutput.additionalContext` (Claude Code) or `additional_context` (Cursor). Off with the editor setting `sessionHub.startContext` (written to the hub's `config.json` as `startContext`, shared by all editors, applied without restart). Cursor only fires `sessionStart` for new chats, so the hook also handles Cursor `beforeSubmitPrompt` with `once: true`: the hub gives the context only if that conversation has not had it yet, and the output always includes `continue: true`.
 
 ## Backup
 
@@ -172,7 +173,7 @@ Full sessions travel in pages (`offset`/`limit`, 100 messages) and are verified 
 6. A message is text for a person: it is verified against the connection's key and never executes anything.
 7. Two results are the same project only if their `projectKey` matches. A Claude Code session belongs to the folder it started in (`cwd`), not to the encoded history folder (which can be shared by `/x/my.app` and `/x/my-app`).
 8. A backup never widens access: archived sessions go through the same ACL, and copies are dropped as soon as the owner withdraws access.
-9. An automatic conversation needs both people's consent, never bypasses the agent's own permissions, and always ends (turn limit, time limit, loop detection).
+9. An automatic conversation needs both people's consent, never bypasses the agent's own permissions, and always ends (turn limit, loop detection, or either person stopping it). There is no time limit.
 10. The search index is an accelerator, never the source of truth: permissions (visible projects, hidden sessions, per-owner scope) and redaction are applied after querying it, exactly as before it existed; a stale or unavailable index only means slower search, never wider access.
 11. Results are scoped to the current project when it is known (same `projectKey`); anything else is hidden by default or labelled, and a different project with the same name is flagged. The current folders are used only on the local hub.
 

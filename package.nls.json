@@ -25,7 +25,7 @@
   "cfg.peers": "Extra \"host:port\" (UDP) addresses of teammates, in case the network doesn't find them.",
   "cfg.port": "HTTP port of the local API (extension, MCP, viewer).",
   "cfg.redactExtra": "Extra regular expressions to hide (client names, etc.).",
-  "cfg.relay": "Public key of a blind relay (printed by npm run infra). Used only when a direct connection isn't possible; it can't read anything.",
+  "cfg.relay": "Public key of your own blind relay (printed by npm run infra). Empty in public mode: Session Hub's built-in relay is used, only when a direct connection isn't possible. It can't read anything.",
   "cfg.role": "Your role: backend, frontend, QA…",
   "cfg.sharedProjects": "Projects whose sessions you share. Use the 'Share this project' command.",
   "cfg.sharedProjects.allow": "Who sees it: [\"*\"] = whole team, or people's public keys.",
@@ -95,7 +95,6 @@
   "cmd.installHooks": "Install hooks for automatic conversations",
   "cmd.removeHooks": "Remove automatic-conversation hooks",
   "cfg.conversationTurns": "Automatic conversations: maximum messages from each side.",
-  "cfg.conversationMinutes": "Automatic conversations: maximum minutes.",
   "cmd.linkProject": "Link project (same project without git)",
   "cfg.sharedProjects.link": "Optional link name: teammates who use the same link see these sessions as the same project, even without a git remote.",
   "cfg.startContext": "When a new AI session opens (Claude Code or Cursor, with the hooks installed), give it a short summary from Session Hub: the current project and how many messages are waiting. Counts only, never text written by teammates."

@@ -37,6 +37,8 @@ flowchart LR
 
 Content is always end‑to‑end encrypted. The public network only sees that your IP takes part in a "topic"; to avoid even that, use `private`.
 
+If a direct connection can't be made (strict NAT), **nothing has to be configured**: in `public` mode Session Hub retries on its own through the blind relay it ships with. A key in `sessionHub.relay` replaces it. That relay does not depend on the editor: on the computer that has `~/.session-hub/default-relay-key.json` it stays up with `npm run infra -- --public` (a service that keeps running after the editor is closed). The relay can't read anything. If that computer is off, there is no relay.
+
 ### With your own server (`private`)
 On a machine with a public or VPN IP (a small VPS is enough), with Session Hub's code:
 
@@ -74,7 +76,7 @@ Open *Status*. Each problem shows its cause and what to do:
 | --- | --- | --- |
 | UDP blocked | The firewall blocks outbound UDP | Ask IT to allow outbound UDP (or port `49737`) |
 | Bootstrap server unreachable | `private` mode and the server is off or its port is closed | Start `npm run infra` and open its UDP ports |
-| Strict NAT / hole punching failed | Both routers prevent a direct connection | Configure a relay (`sessionHub.relay`) or use a VPN |
+| Strict NAT / hole punching failed | Both routers prevent a direct connection | In `public` mode the built-in relay is used on its own. If it doesn't respond, check that the computer hosting it is on, or set `sessionHub.relay` |
 | Relay unreachable | The relay is off or blocked | Check the relay server and its UDP port |
 | Different network mode | One uses `lan`, another `public`, for example | Use the same mode everywhere |
 | Teammate not found | Their editor is closed or their network blocks it | Ask them to open the editor and check their *Status* |

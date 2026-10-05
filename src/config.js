@@ -29,7 +29,7 @@ const defaults = {
   dhtPort: 49737, // UDP; en modo lan cada hub es un nodo de la red del equipo
   bootstrap: [], // modo private: ["host:puerto", …]
   peers: [], // direcciones extra "host:puerto" de compañeros, por si la red no los encuentra sola
-  relay: '', // clave pública (hex) de un relay ciego, para cuando la conexión directa no es posible
+  relay: '', // clave pública (hex) de un relay ciego propio. Vacío en modo public: se usa el relay que trae Session Hub
   forceRelay: false, // usar siempre el relay (pruebas o redes muy restrictivas)
   // Proyectos que se comparten: { path, name, allow }. Nada fuera de esta lista se expone.
   // allow: ["*"] = todo el equipo, o claves públicas de personas concretas.

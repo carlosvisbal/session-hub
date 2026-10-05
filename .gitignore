@@ -1,5 +1,6 @@
 node_modules/
 config.json
+default-relay-key.json
 team.json
 inbox.json
 archive/

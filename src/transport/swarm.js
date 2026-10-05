@@ -12,6 +12,7 @@
 import crypto from 'node:crypto';
 import Hyperswarm from 'hyperswarm';
 import DHT from 'hyperdht';
+import { effectiveRelay } from '../default-relay.js';
 import { fingerprint, keyPairBuffers, signProfile, toHex, verifyProfile } from '../identity.js';
 import { lanAddresses, parseAddr, reachableAddresses, vpnAddresses, withTimeout } from '../net.js';
 import { createRpc, MAX_FRAME } from './rpc.js';
@@ -38,9 +39,13 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
   const connIssues = []; // errores de conexión recientes, con su código, para explicar por qué falla
   let dialedWithAddrs = 0;
 
-  // Relay ciego (sessionHub.relay): reenvía bytes cifrados cuando la conexión directa no es posible.
-  const relayKey = () => (/^[0-9a-f]{64}$/.test(cfg.relay || '') ? Buffer.from(cfg.relay, 'hex') : null);
-  // Con forceRelay se usa siempre (pruebas); si no, solo cuando hace falta (lo decide Hyperswarm).
+  // Relay ciego: el de sessionHub.relay, o en modo public el que trae Session Hub si no hay uno.
+  // Reenvía bytes cifrados cuando la conexión directa no es posible. Con forceRelay, siempre.
+  const chosenRelay = () => effectiveRelay(cfg);
+  const relayKey = () => {
+    const key = chosenRelay().key;
+    return key ? Buffer.from(key, 'hex') : null;
+  };
   const relayThrough = () => {
     const key = relayKey();
     if (!key) return undefined;
@@ -252,7 +257,8 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
         discovery = swarm.join(topic(), { server: true, client: true });
         startedAt = new Date().toISOString();
         await withTimeout(discovery.flushed(), START_TIMEOUT_MS, 'La red tardó en responder; sigo intentando en segundo plano');
-        log(`[red] modo ${cfg.network} · puerto UDP ${cfg.network === 'lan' ? cfg.dhtPort : t('automático')} · equipo ${teamState.team().name}`);
+        const relayNote = chosenRelay().builtin ? ` · ${t('relay de respaldo automático')}` : '';
+        log(`[red] modo ${cfg.network} · puerto UDP ${cfg.network === 'lan' ? cfg.dhtPort : t('automático')} · equipo ${teamState.team().name}${relayNote}`);
       } catch (err) {
         lastError = err.message;
         log(`[red] ${t(err.message)}`);
@@ -334,7 +340,8 @@ export function createSwarmTransport({ cfg, teamState, onRequest, onEvent = () =
         bootstrapped: !!dht?.bootstrapped,
         dhtNodes: dht ? dht.table.size : null,
         nat: dht ? { firewalled: !!dht.firewalled, randomized: !!dht.randomized, host: dht.host || null } : null,
-        relay: relayKey() ? fingerprint(cfg.relay) : null,
+        relay: chosenRelay().key ? fingerprint(chosenRelay().key) : null,
+        relayDefault: chosenRelay().builtin,
         teamNetwork: teamState.team()?.network || null,
         connIssues: connIssues.slice(0, 20),
         rejections: rejections.slice(0, 10),

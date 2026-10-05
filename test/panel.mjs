@@ -147,13 +147,14 @@ assert.equal(convRows.length, 4);
 assert.ok(p.d.querySelector('.brow.conv.invited [data-cmd="sessionHub.acceptConversation"]'), 'invitación: Aceptar');
 assert.ok(p.d.querySelector('.brow.conv.confirm [data-cmd="sessionHub.confirmConversation"]'), 'pedida por la IA: Confirmar');
 assert.ok(p.d.querySelector('.brow.conv.active [data-cmd="sessionHub.endConversation"]'), 'en marcha: Detener');
-assert.match(convRows.find((r) => r.includes('Persona 3')), /2 enviadas · 1 recibidas · máximo 6.*quedan \d+ min/);
+assert.match(convRows.find((r) => r.includes('Persona 3')), /2 enviadas · 1 recibidas · máximo 6/);
+assert.doesNotMatch(convRows.find((r) => r.includes('Persona 3')), /quedan \d+ min/);
 assert.match(convRows.find((r) => r.includes('Persona 9')), /llegó al límite de vueltas/);
 assert.match(p.d.getElementById('tab-messages').textContent, /4/, 'el contador suma invitaciones y confirmaciones pendientes');
 assert.match(p.text(), /Hooks instalados en Claude Code/);
 p.view('team');
 assert.ok(p.d.querySelector('.pcard [data-cmd="sessionHub.startConversation"]'), '🤝 Conversar en la tarjeta de quien está en línea');
-ok('conversaciones: invitación, confirmación, en marcha (vueltas y minutos) y terminada; Conversar en Equipo; estado de los hooks');
+ok('conversaciones: invitación, confirmación, en marcha (vueltas, sin reloj) y terminada; Conversar en Equipo; estado de los hooks');
 
 // ---------- Ayuda ----------
 p.view('messages');

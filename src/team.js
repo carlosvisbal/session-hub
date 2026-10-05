@@ -236,6 +236,46 @@ export function createTeam(cfg, hub, transport, teamState, t = (s) => s, inbox =
     return syncing;
   }
 
+  // Primer mensaje de una conversación local: cuenta como enviado por la primera sesión y queda para la otra.
+  function depositLocal(c, text, toSession) {
+    const me = self();
+    return inbox.deliverLocal({ text, toSession, conv: c.id, fromName: me.name, fromRole: me.role || '' });
+  }
+
+  async function openLocal(c) {
+    if (!inbox) throw new Error('Mensajes no disponibles.');
+    const r = convs.countSent(c.id, c.text);
+    if (!r.ok) {
+      await api.endConversation(c.id, r.reason);
+      return c;
+    }
+    depositLocal(c, c.text, c.theirs);
+    convs.noteAwaiting(c.id, c.theirs);
+    return c;
+  }
+
+  // La sesión que acaba de recibir es la que responde. Su texto se deposita en la otra.
+  async function replyLocal({ text, conversation }) {
+    if (!inbox) throw new Error('Mensajes no disponibles.');
+    const c = convs.get(conversation);
+    if (!c || !c.local || c.status !== 'active') throw new Error('No hay una conversación automática entre tus dos sesiones.');
+    const plain = String(text || '').replace(/\s+/g, ' ').trim();
+    if (plain.length < 2) {
+      await api.endConversation(c.id, 'empty');
+      return { id: null, to: self().name, status: 'ended', conversation: { id: c.id, ended: 'empty' } };
+    }
+    const from = c.awaitingSession === c.mine || c.awaitingSession === c.theirs ? c.awaitingSession : c.theirs;
+    const count = from === c.mine ? convs.countSent(c.id, text) : convs.countReceived(c.id, text);
+    if (!count.ok) {
+      await api.endConversation(c.id, count.reason);
+      return { id: null, to: self().name, status: 'ended', conversation: { id: c.id, ended: count.reason } };
+    }
+    const target = from === c.mine ? c.theirs : c.mine;
+    const msg = depositLocal(c, text, target);
+    convs.noteAwaiting(c.id, target);
+    return { id: msg.id, to: self().name, status: 'delivered', conversation: { id: c.id, turn: count.turn, of: count.of } };
+  }
+
   const api = {
     members,
     syncCopies,
@@ -347,6 +387,22 @@ export function createTeam(cfg, hub, transport, teamState, t = (s) => s, inbox =
     // Si hay una conversación automática activa con esa persona, el mensaje se enlaza a ella y cuenta una vuelta.
     async sendMessage({ to, text, toSession, aboutSession, replyTo, conversation }, origin = {}) {
       if (!inbox) throw new Error('Mensajes no disponibles.');
+      // Conversación entre dos chats de esta computadora: se deposita en la otra sesión, sin red.
+      if (conversation && convs?.get(conversation)?.local) return replyLocal({ text, conversation });
+      if (to && !replyTo && !conversation && convs) {
+        let selves = [];
+        try {
+          selves = resolve(to).filter((m) => m.self);
+        } catch {
+          selves = [];
+        }
+        if (selves.length === 1 && resolve(to).every((m) => m.self)) {
+          const locals = convs.list().filter((c) => c.local && c.status === 'active');
+          const one = locals.length === 1 ? locals[0] : null;
+          if (!one) throw new Error('No hay una conversación automática entre tus dos sesiones.');
+          return replyLocal({ text, conversation: one.id });
+        }
+      }
       const original = replyTo ? inbox.get(replyTo) : null;
       if (replyTo && !original) throw new Error(t('No encuentro el mensaje {v1} en tu bandeja.', { v1: replyTo }));
       if (!to && !original) throw new Error(t('Indica a quién va el mensaje ("to"): nombre, huella o id. Equipo: {v1}', { v1: members().filter((m) => !m.self).map(label).join(', ') || '—' }));
@@ -374,7 +430,14 @@ export function createTeam(cfg, hub, transport, teamState, t = (s) => s, inbox =
     // confirm=true (la pidió la IA por MCP): la invitación no sale hasta que yo la confirme en el editor.
     async startConversation({ to, text, mine, theirs, turns, minutes, confirm = false }) {
       if (!convs) throw new Error('Conversaciones no disponibles.');
-      const targets = resolve(to).filter((m) => !m.self);
+      const wanted = resolve(to);
+      if (wanted.length === 1 && wanted[0].self) {
+        const me = wanted[0];
+        const c = convs.create({ peer: me.id, peerName: me.name, mine, theirs, text, turns, minutes, confirm, local: true });
+        if (!confirm) await openLocal(c);
+        return c;
+      }
+      const targets = wanted.filter((m) => !m.self);
       if (targets.length !== 1) throw new Error(t('La conversación es con una sola persona. Equipo: {v1}', { v1: members().filter((m) => !m.self).map(label).join(', ') || '—' }));
       const m = targets[0];
       if (teamState.isBlocked(m.id)) throw new Error('Esa persona está bloqueada.');
@@ -384,8 +447,12 @@ export function createTeam(cfg, hub, transport, teamState, t = (s) => s, inbox =
       return c;
     },
 
-    async confirmConversation(id) {
-      const c = convs.confirmLocal(id);
+    async confirmConversation(id, mine, theirs) {
+      const c = convs.confirmLocal(id, mine, theirs);
+      if (c.local) {
+        await openLocal(c);
+        return c;
+      }
       await api.sendConv(c, 'invite');
       return c;
     },
@@ -410,6 +477,7 @@ export function createTeam(cfg, hub, transport, teamState, t = (s) => s, inbox =
 
     // Orden firmada al otro hub (invitar, aceptar, rechazar, terminar).
     async sendConv(c, action, extra = {}) {
+      if (c.local || c.peer === teamState.me()) return { status: 'local' };
       const doc = action === 'invite' ? convs.inviteDoc(c) : convs.controlDoc(c, action, extra);
       return transport.request(c.peer, 'conv', { doc });
     },
@@ -431,7 +499,7 @@ export function createTeam(cfg, hub, transport, teamState, t = (s) => s, inbox =
 
     // Aviso al remitente de qué pasó con su mensaje (retenido, entregado, leído, descartado).
     notifySender(m) {
-      if (m) transport.send(m.from, { t: 'receipt', id: m.id, status: m.status });
+      if (m && !m.local) transport.send(m.from, { t: 'receipt', id: m.id, status: m.status });
     },
 
     // Para el panel: una operación contra una persona concreta.

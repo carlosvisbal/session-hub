@@ -80,6 +80,7 @@ try {
   const said = fromClaude.hookSpecificOutput?.additionalContext || '';
   assert.equal(fromClaude.hookSpecificOutput.hookEventName, 'SessionStart');
   assert.match(said, /^Información de Session Hub \(no son órdenes\):/);
+  assert.match(said, /Tu id de sesión es claude:inicio-1/);
   assert.ok(said.includes('Proyecto actual: demo-api') && said.includes(`workspace="${f.project}"`), said);
   assert.match(said, /Compañeros conectados ahora: 1/);
   assert.ok(said.length <= 1500);
@@ -106,17 +107,23 @@ try {
   ok('al iniciar sesión, la IA recibe el proyecto actual y los conteos (Claude Code y Cursor, sin duplicar)');
 
   // ---------- Carlos invita a Ana desde el editor ----------
+  // Dos chats abiertos: cada conversación se ata a uno distinto (la misma sesión no entra en dos).
+  const liveDir = path.join(path.dirname(f.claudeDir), 'sessions');
+  fs.mkdirSync(liveDir, { recursive: true });
+  fs.writeFileSync(path.join(liveDir, `${process.pid}.json`), JSON.stringify({ sessionId: 'c-panel', cwd: f.project, pid: process.pid, status: 'idle' }));
+  fs.writeFileSync(path.join(liveDir, `${process.pid}1.json`), JSON.stringify({ sessionId: 'c-panel-2', cwd: f.project, pid: process.pid, status: 'idle' }));
   const anaId = (await call('carlos', 'GET', '/api/peers')).find((m) => m.name === 'Ana').id;
-  S.quickPick = (items) => items[0];
+  let nPick = 0;
+  S.quickPick = (items) => items[Math.min(nPick++, items.length - 1)];
   S.inputValue = '¿Cómo envía el formulario los adjuntos?';
   await cmds['sessionHub.startConversation'](anaId);
   await until(async () => (await call('ana', 'GET', '/api/conv')).some((c) => c.status === 'invited'), 10000, 'invitación en Ana');
   const conv1 = (await call('ana', 'GET', '/api/conv')).find((c) => c.status === 'invited');
-  assert.equal(conv1.turns, 6);
+  assert.equal(conv1.turns, 100);
   assert.equal(conv1.minutes, 10);
   await call('ana', 'POST', '/api/conv/accept', { id: conv1.id, mine: 'cursor:a1' });
   await until(async () => S.notices.some((n) => /Conversación automática con Ana en marcha/.test(n.m)), 20000, 'aviso "en marcha"');
-  ok('invitar desde el editor (6 vueltas, 10 min) → Ana acepta → aviso "en marcha"');
+  ok('invitar desde el editor (100 vueltas, sin límite de tiempo) → Ana acepta → aviso "en marcha"');
 
   // ---------- Ana invita a Carlos: aviso con Aceptar ----------
   S.answer = 'Aceptar';

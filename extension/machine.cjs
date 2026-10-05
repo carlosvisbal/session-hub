@@ -37,12 +37,21 @@ const SHARED_SETTINGS = [
   'allowTeamCopies',
   'backupMaxMB',
   'conversationTurns',
-  'conversationMinutes',
   'startContext',
 ];
 
 // SESSION_HUB_DATA_DIR permite otra carpeta (pruebas, o varias personas en una misma cuenta).
 const dataDir = (env = process.env) => env.SESSION_HUB_DATA_DIR || path.join(os.homedir(), '.session-hub', 'hub');
+
+// La carpeta de datos solo la puede abrir su dueño. Si quedó legible para otros (0755), se cierra.
+function sealDir(dir) {
+  try {
+    if (!fs.statSync(dir).isDirectory()) return;
+    if (fs.statSync(dir).mode & 0o077) fs.chmodSync(dir, 0o700);
+  } catch {
+    // si no se puede cerrar, el hub sigue; los archivos de dentro ya son 0600
+  }
+}
 
 const readJson = (file) => {
   try {
@@ -236,4 +245,4 @@ function compareVersions(a, b) {
   return 0;
 }
 
-module.exports = { EXT_ID, SHARED_SETTINGS, dataDir, samePath, editorBases, settingsFile, readJson, writeJsonAtomic, candidateDirs, describe, plan, copyData, catchUp, createOnce, readSettings, writeSettings, same, compareVersions, editorOf };
+module.exports = { EXT_ID, SHARED_SETTINGS, dataDir, sealDir, samePath, editorBases, settingsFile, readJson, writeJsonAtomic, candidateDirs, describe, plan, copyData, catchUp, createOnce, readSettings, writeSettings, same, compareVersions, editorOf };

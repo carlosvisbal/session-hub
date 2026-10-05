@@ -1,7 +1,7 @@
 {
   "name": "session-hub",
   "displayName": "Session Hub",
-  "version": "0.11.0",
+  "version": "0.11.3",
   "description": "%ext.description%",
   "publisher": "carlosvisbal",
   "author": {
@@ -738,17 +738,10 @@
         },
         "sessionHub.conversationTurns": {
           "type": "number",
-          "default": 6,
+          "default": 100,
           "minimum": 1,
-          "maximum": 20,
+          "maximum": 100,
           "description": "%cfg.conversationTurns%"
-        },
-        "sessionHub.conversationMinutes": {
-          "type": "number",
-          "default": 10,
-          "minimum": 1,
-          "maximum": 60,
-          "description": "%cfg.conversationMinutes%"
         }
       }
     }

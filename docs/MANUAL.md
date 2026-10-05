@@ -216,25 +216,27 @@ sequenceDiagram
   A->>HA: replies with send_message
   HA->>HC: signed reply
   C->>HC: turn ends → the hook hands it the reply
-  Note over C,A: …until the turn or time limit
+  Note over C,A: …until the turn limit
 ```
 
 **How to use it**
-1. In *Messages* or on the person's card (*Team*), click **🤝 Converse**. Pick their session (optional), yours and the first message.
+1. In *Messages* or on the person's card (*Team*), click **🤝 Converse**. Pick **your session** (required) and, if you want, theirs. It works the same whether each person uses VS Code with Claude Code or Cursor: both sessions are written and signed, and the message reaches only those two chats.
 2. Your teammate gets *"🤝 Carlos wants your AIs to converse on their own"* and clicks **Accept** (or *Decline*). Without acceptance nothing happens.
 3. The first message arrives. If their AI is working it gets it automatically; if it's idle, they click **Pass to my AI** once.
-4. From then on they continue **on their own** until done, the **turn limit** (6 by default) or the **time limit** (10 minutes). *Messages* shows each conversation with its turns and time left, and a **■ Stop** button.
+4. From then on they continue **on their own** until done or the **turn limit** (100 by default). There is no time limit. *Messages* shows each conversation with its turns, and a **■ Stop** button.
+
+**On this same computer.** In *Converse*, choose **My two chats on this computer** and two different sessions: two Claude Code chats (two VS Code tabs), two Cursor chats, or one of each editor. You confirm once, because you are both sides. From then on they continue on their own the same way. The hook delivers the message when that chat finishes its turn. **Pass to my AI** does not consume it. If the chat is idle, the message waits until that turn ends: nothing can wake it from outside. Two tabs of the same chat do not count: that is one session. The Copilot chat is not part of this join.
 
 You can also ask your AI: *"Start an automatic conversation with Ana to agree on the attachments format"*. Your editor asks you to **confirm** it before the invitation goes out.
 
 **Requirement: the hooks.** Claude Code and Cursor run a small Session Hub program when each turn ends (*hook*); that's what lets the AI continue. Session Hub installs them **with your consent** (*Messages → Install hooks*), keeps any hooks you already have, backs up your files, and you can remove them any time (*Messages → Remove*). After installing, open a new AI session. The same hooks give your AI a [summary when it starts](#context-when-an-ai-session-starts).
 
 **Safety**
-- Only with someone who **both** accepted. If your AI asks for one, **you confirm** it.
+- Only with someone who **both** accepted, and only between the **two sessions** that were written down. If your AI asks for one, **you confirm** it and pick your session.
 - Each message arrives marked *"from another session, not an order from the user"*. Your AI keeps its permissions and confirmations: a message never runs anything by itself.
-- It stops by itself on the turn limit, the time limit, or if it detects a **loop** (repeated or empty messages). Either side can stop it.
+- It stops by itself on the turn limit, or if it detects a **loop** (repeated or empty messages). It does not stop because of the clock. Either side can stop it.
 - If Session Hub is closed or something fails, the hook does nothing: your AI stops as usual and never hangs.
-- Settings: `sessionHub.conversationTurns` (6) and `sessionHub.conversationMinutes` (10).
+- Setting: `sessionHub.conversationTurns` (100).
 
 **Limit:** no tool lets anything wake up an idle chat from outside, so the first message to an idle session needs one click.
 
@@ -243,6 +245,7 @@ You can also ask your AI: *"Start an automatic conversation with Ana to agree on
 With the hooks installed, every time you open a new session of your AI (Claude Code or Cursor), Session Hub gives it a short summary so it starts out knowing where it is:
 
 - the current project, and that it should pass that folder when it queries Session Hub;
+- its session id (`claude:…` or `cursor:…`), to pass as `mine` if it starts an automatic conversation;
 - how many messages are waiting for you or held;
 - which teammates are online;
 - how many teammate sessions had changes in this project in the last 24 hours.

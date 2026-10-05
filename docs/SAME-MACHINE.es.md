@@ -61,7 +61,7 @@ Ni Cursor ni Claude Code permiten que una extensión **envíe** un mensaje a su 
 **Salvaguardas obligatorias:**
 - **Apagado por defecto**, y se activa por sesión (*"conversar con…"*), nunca para todo.
 - Solo entre **tus propias sesiones de esta computadora** al principio; con compañeros, solo si ambos lo activan.
-- **Tope de turnos automáticos** (por ejemplo 6 por conversación) y de tiempo; al llegar, se detiene y te avisa.
+- **Tope de turnos automáticos** (100 por defecto); al llegar, se detiene y te avisa. No hay tope de tiempo.
 - Detector de bucles (mensajes repetidos o vacíos), y una palabra para cortar.
 - Nada de ejecutar acciones por un mensaje: el agente conserva sus permisos y confirmaciones normales.
 - Todo queda visible en *Mensajes* y en la auditoría.

@@ -197,6 +197,16 @@ test('ajustes comunes y comparación de versiones', () => {
   assert.ok(m.compareVersions('?', '0.10.0') < 0, 'un hub sin versión se considera viejo');
 });
 
+test('la carpeta de datos legible para otros se cierra', () => {
+  const dir = tmp();
+  fs.chmodSync(dir, 0o755);
+  m.sealDir(dir);
+  assert.equal(fs.statSync(dir).mode & 0o777, 0o700);
+  m.sealDir(dir);
+  assert.equal(fs.statSync(dir).mode & 0o777, 0o700, 'si ya está cerrada, se queda así');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
 test('rutas de Windows: mismas carpetas aunque cambien las mayúsculas', { skip: process.platform !== 'win32' }, () => {
   assert.ok(m.samePath('C:\\Users\\Ana\\x', 'c:\\users\\ana\\X'));
 });

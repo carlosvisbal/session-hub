@@ -16,8 +16,15 @@ test('NAT estricto sin relay', () => assert.deepEqual(codes({ nat: { randomized:
 test('con relay configurado no se advierte el NAT estricto', () => assert.deepEqual(codes({ nat: { randomized: true }, relay: 'ABCD' }), []));
 test('relay caído', () => assert.ok(codes({ connIssues: [{ at: now, peer: 'Ana', code: 'RELAY_ABORTED' }] }).includes('RELAY_UNREACHABLE')));
 test('red local sin conexión con quien se conoce', () => assert.deepEqual(codes({ network: 'lan', connected: 0, dialedWithAddrs: 1 }), ['LAN_UNREACHABLE']));
+test('en modo local un fallo de conexión directa no habla del relay público', () => assert.deepEqual(codes({ network: 'lan', connected: 0, connIssues: [{ at: now, peer: 'Ana', code: 'HOLEPUNCH_ABORTED' }] }), ['LAN_UNREACHABLE']));
 test('modo de red distinto al del equipo', () => assert.deepEqual(codes({ teamNetwork: 'lan' }), ['MODE_MISMATCH']));
 test('errores viejos no cuentan', () => assert.deepEqual(codes({ connIssues: [{ at: '2020-01-01T00:00:00Z', peer: 'Ana', code: 'CANNOT_HOLEPUNCH' }] }), []));
+
+test('el informe distingue el relay incluido', () => {
+  const st = { ...base, relay: '592F-0BB6-696D', relayDefault: true };
+  const text = networkReport({ st, issues: [], me: { name: 'Ana', fingerprint: 'AAAA-BBBB-CCCC' }, team: 'dev', version: '0.11.0' });
+  assert.match(text, /relay de Session Hub \(592F-0BB6-696D\)/);
+});
 
 test('el informe explica qué, por qué y qué pedir a TI', () => {
   const st = { ...base, dhtNodes: 0 };
